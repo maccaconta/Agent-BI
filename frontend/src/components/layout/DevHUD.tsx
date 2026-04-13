@@ -17,6 +17,7 @@ import {
   BarChart3,
   X
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 interface TraceStep {
   id: number;
@@ -51,12 +52,15 @@ export default function DevHUD() {
     return () => window.removeEventListener('agent-bi-trace', handleTraceEvent);
   }, []);
 
+  const [isPaused, setIsPaused] = useState(false);
+
   // Polling dos logs quando houver um trace ativo
   useEffect(() => {
     if (!activeTraceId) return;
 
     // Limpar traces anteriores ao iniciar um novo monitoramento
     setTraces([]);
+    setIsPaused(false); // Resetar pausa ao iniciar novo trace
     console.log(`[DevHUD] Novo Monitoramento: ${activeTraceId}`);
 
     const fetchTraces = async () => {
@@ -67,7 +71,6 @@ export default function DevHUD() {
         });
         if (response.ok) {
           const data = await response.json();
-          console.log(`[DevHUD] Traces Recebidos (${activeTraceId}):`, data.length);
           // Só atualizar se o ID ainda for o ativo (evitar race conditions)
           setTraces(data || []);
         }
@@ -76,18 +79,28 @@ export default function DevHUD() {
       }
     };
 
-    const interval = setInterval(fetchTraces, 2000);
+    const interval = setInterval(fetchTraces, 1000);
     fetchTraces(); // Carga inicial
 
     return () => clearInterval(interval);
   }, [activeTraceId]);
 
-  // Auto-scroll para o TOPO (onde a novidade agora estabiliza)
+  // Auto-scroll Inteligente: foca sempre no evento mais recente se não estiver pausado
   useEffect(() => {
-    if (scrollRef.current) {
+    if (scrollRef.current && !isPaused) {
       scrollRef.current.scrollTop = 0;
     }
-  }, [traces]);
+  }, [traces, isPaused]);
+
+  // Detectar se o usuário está lendo o histórico para pausar o autoscroll
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const currentScroll = e.currentTarget.scrollTop;
+    if (currentScroll > 50) {
+      if (!isPaused) setIsPaused(true);
+    } else {
+      if (isPaused) setIsPaused(false);
+    }
+  };
 
   if (!activeTraceId && traces.length === 0) return null;
 
@@ -144,7 +157,7 @@ export default function DevHUD() {
             {traces.length === 0 && (
               <div className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col items-center justify-center text-lux-muted italic opacity-50">
                 <div className="w-10 h-10 rounded-full border-2 border-lux-accent/30 border-t-lux-accent animate-spin mb-4" />
-                <span className="tracking-widest uppercase text-[9px] font-bold">Iniciando Telemetria...</span>
+                <span className="tracking-widest uppercase text-[9px] font-bold">Aguardando Início da Telemetria...</span>
               </div>
             )}
             
@@ -197,8 +210,24 @@ export default function DevHUD() {
             {/* HISTÓRICO (SCROLL INDEPENDENTE) */}
             <div 
               ref={scrollRef}
-              className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar scroll-smooth"
+              onScroll={handleScroll}
+              className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar scroll-smooth relative"
             >
+              {isPaused && (
+                <div className="sticky top-0 z-20 flex justify-center mb-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <button 
+                    onClick={() => {
+                        if (scrollRef.current) scrollRef.current.scrollTop = 0;
+                        setIsPaused(false);
+                    }}
+                    className="bg-lux-accent text-lux-bg px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest shadow-lg flex items-center gap-2 hover:scale-105 transition-all"
+                  >
+                    <Clock className="w-3 h-3" />
+                    Autoscroll Pausado • Ver Recentes
+                  </button>
+                </div>
+              )}
+
               {historySteps.length > 0 && (
                 <div className="flex items-center gap-3 mb-4 opacity-50">
                   <div className="h-px flex-1 bg-lux-border/20" />
@@ -207,9 +236,12 @@ export default function DevHUD() {
                 </div>
               )}
 
-              {historySteps.map((step) => (
-                <div 
+              {historySteps.map((step, idx) => (
+                <motion.div 
                   key={step.id} 
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.05 }}
                   className="bg-white/5 border border-lux-border/10 rounded-xl p-3.5 space-y-2.5 hover:border-lux-accent/20 transition-all hover:bg-white/10 group opacity-50 hover:opacity-100"
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -239,7 +271,7 @@ export default function DevHUD() {
                       <span>Inspecionar Contexto</span>
                     </button>
                   )}
-                </div>
+                </motion.div>
               ))}
             </div>
           </div>

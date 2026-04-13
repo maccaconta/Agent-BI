@@ -11,6 +11,7 @@ class DatasetSerializer(serializers.ModelSerializer):
     """Serializer completo para exibição e diagnóstico."""
     created_by_name = serializers.ReadOnlyField(source="created_by.first_name")
     is_ready = serializers.ReadOnlyField()
+    sqlite_table = serializers.SerializerMethodField()
 
     class Meta:
         model = Dataset
@@ -19,11 +20,18 @@ class DatasetSerializer(serializers.ModelSerializer):
             "status", "s3_raw_path", "s3_parquet_path", 
             "s3_original_filename", "s3_original_size_bytes",
             "glue_table", "glue_database", "schema_json", "sample_json",
-            "row_count", "column_count", "parquet_size_bytes",
+            "sqlite_table", "row_count", "column_count", "parquet_size_bytes",
             "processing_error", "processing_started_at", "processing_finished_at",
             "created_by_name", "is_ready", "created_at", "updated_at"
         ]
-        read_only_fields = ["status", "s3_parquet_path", "glue_table", "sample_json"]
+        read_only_fields = ["status", "s3_parquet_path", "glue_table", "sample_json", "sqlite_table"]
+
+    def get_sqlite_table(self, obj) -> str:
+        from apps.datasets.services.sqlite_analytics_store import LocalSQLiteAnalyticsStoreService
+        return LocalSQLiteAnalyticsStoreService().resolve_table_name(
+            dataset_id=str(obj.id),
+            dataset_name=obj.name
+        )
 
 
 class DatasetCreateSerializer(serializers.ModelSerializer):

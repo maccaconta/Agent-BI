@@ -1,25 +1,26 @@
 @import "tailwindcss";
 
 :root {
-  /* Paleta Clean Luxury - Nudes/Bege */
-  --lux-bg: #Fef4e6;
-  --lux-card: #D9cbc0;
-  --lux-border: #Ad9c92;
-  --lux-muted: #7A645b;
-  --lux-text: #513830;
+  /* Paleta Modern Light - Alabaster / Snow */
+  --lux-bg: #f8f9fa;
+  --lux-card: #ffffff;
+  --lux-border: #e5e7eb;
+  --lux-muted: #6b7280;
+  --lux-text: #111827;
+  --lux-accent: #b48a31;
   
   --background: var(--lux-bg);
   --foreground: var(--lux-text);
 }
 
 .dark {
-  /* Paleta Onyx Profundo - Luxo Absoluto */
-  --lux-bg: #080707;
-  --lux-card: #171311;
-  --lux-border: #5c514b;
-  --lux-muted: #cabdb5;
-  --lux-text: #f6f1ed;
-  --lux-accent: #e0be7d; /* Metallic Antique Gold */
+  /* Paleta Luxury Midnight - Deep Zinc / Gold */
+  --lux-bg: #09090b;
+  --lux-card: #18181b;
+  --lux-border: #27272a;
+  --lux-muted: #71717a;
+  --lux-text: #fafafa;
+  --lux-accent: #d4af37; /* NTT Data Gold */
 
   --background: var(--lux-bg);
   --foreground: var(--lux-text);

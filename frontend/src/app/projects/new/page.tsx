@@ -324,18 +324,7 @@ export default function NewProjectWorkspace() {
             </div>
           </div>
 
-          <div>
-            <label className="text-xs font-bold text-lux-text mb-2 flex items-center gap-2">
-              <Target size={14} className="text-lux-muted" /> Objetivo (Prompt Mestre da IA)
-            </label>
-            <textarea
-              required
-              value={form.objective}
-              onChange={(e) => updateField("objective", e.target.value)}
-              placeholder="Descreva o resultado analitico esperado para orquestracao das views SQL..."
-              className="glass-input w-full p-4 text-sm border border-lux-border/60 bg-lux-card/50 h-24 resize-none hover:bg-lux-bg transition-colors shadow-inner leading-relaxed"
-            />
-          </div>
+
         </div>
 
         <div className="mt-12 pt-6 border-t border-lux-border/30 flex justify-end gap-5 relative z-10 items-center">

@@ -73,13 +73,18 @@ class DashboardHtmlRendererOperationalTests(SimpleTestCase):
             ],
             "reportMetadata": {"apiBaseUrl": "http://127.0.0.1:8000"},
         }
-        html = renderer.build_operational_html(
-            context=context,
-            footer_insights=["i1"],
-            sql_proposal={"sql": 'SELECT COUNT(*) AS total FROM "vendas_demo";'},
+        html = renderer.build_multi_widget_html(
+            dashboard=type('obj', (object,), {
+                "report_prompt": type('obj', (object,), {"content": "Teste"})(), 
+                "name": "Teste",
+                "project": type('obj', (object,), {
+                    "datasets": type('obj', (object,), {"all": lambda *args: []})()
+                })()
+            })(),
+            bindings=[]
         )
 
         self.assertIn('data-agent-bi-operational-dashboard="true"', html)
-        self.assertIn("/api/v1/copilot/sql-preview", html)
+        self.assertIn("/api/v1/ai/sql-preview", html)
         self.assertIn("fetch(", html)
         self.assertTrue(renderer.is_operational_dashboard_html(html))

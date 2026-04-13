@@ -42,7 +42,7 @@ export function Navbar() {
           <Link href="/projects" className="flex items-center gap-4 min-w-0">
             <div className="flex flex-col min-w-0">
               <span className="font-serif font-black text-xl text-lux-text tracking-tighter leading-none truncate">
-                Agent-BI Enterprise
+                Agent-BI Protótipo
               </span>
               <span className="text-[10px] font-bold text-lux-accent uppercase tracking-widest mt-1 opacity-80 truncate">
                 Plataforma de dados e dashboards com IA

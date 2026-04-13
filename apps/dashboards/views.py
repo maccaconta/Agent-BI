@@ -251,3 +251,25 @@ class DashboardViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_202_ACCEPTED,
         )
+
+    @action(detail=True, methods=["post"], url_path="promote")
+    def promote(self, request, pk=None):
+        """Eleva um dashboard rascunho (DRAFT) para o status de Blueprint (PUBLISHED)."""
+        dashboard = self.get_object()
+        dashboard.status = "PUBLISHED"
+        dashboard.save()
+        
+        audit_event.send(
+            sender=self.__class__,
+            action="dashboard.promoted",
+            user=request.user,
+            tenant=request.tenant,
+            resource_type="Dashboard",
+            resource_id=dashboard.id,
+        )
+        
+        return Response({
+            "status": "success",
+            "dashboard_id": dashboard.id,
+            "new_status": dashboard.status
+        })

@@ -26,6 +26,7 @@ interface ProjectHeaderStandardProps {
   onNext?: () => void;
   onPrev?: () => void;
   nextDisabled?: boolean;
+  isCompact?: boolean;
 }
 
 /**
@@ -45,7 +46,8 @@ export function ProjectHeaderStandard({
   prevLabel = "Voltar",
   onNext,
   onPrev,
-  nextDisabled
+  nextDisabled,
+  isCompact = false
 }: ProjectHeaderStandardProps) {
   const router = useRouter();
   const currentDate = "06/04/2026";
@@ -78,9 +80,13 @@ export function ProjectHeaderStandard({
   };
 
   return (
-    <header className="w-full -mt-2 pb-6 px-10 flex flex-col items-center">
+    <header className={`w-full flex flex-col items-center ${isCompact ? "-mt-1" : "-mt-2 pb-6 px-10"}`}>
       {/* Main Nav Cluster (Centralized) */}
-      <div className="w-full max-w-5xl flex items-center justify-between gap-8 py-4 px-8 bg-white/40 dark:bg-lux-card/40 border border-lux-border/20 backdrop-blur-3xl rounded-[2.5rem] shadow-sm relative group overflow-hidden">
+      <div className={`w-full max-w-5xl flex items-center justify-between gap-8 py-2 px-6 rounded-[2rem] relative group overflow-hidden transition-all ${
+        isCompact 
+          ? "bg-transparent border-none shadow-none" 
+          : "bg-white/40 dark:bg-lux-card/40 border border-lux-border/20 backdrop-blur-3xl shadow-sm"
+      }`}>
         <div className="absolute inset-0 bg-gradient-to-r from-lux-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
 
         {/* Action: Back */}
@@ -88,26 +94,32 @@ export function ProjectHeaderStandard({
           {prevHref || onPrev ? (
             <button
               onClick={handlePrev}
-              className="flex items-center gap-3 px-6 py-3 rounded-2xl text-[11px] font-black text-lux-muted uppercase tracking-widest hover:text-lux-text hover:bg-lux-border/10 transition-all active:scale-95"
+              className={`flex items-center gap-3 rounded-2xl font-black text-lux-muted uppercase tracking-widest hover:text-lux-text hover:bg-lux-border/10 transition-all active:scale-95 ${
+                isCompact ? "text-[9px] px-4 py-2" : "text-[11px] px-6 py-3"
+              }`}
             >
-              <ChevronLeft size={16} /> {prevLabel}
+              <ChevronLeft size={isCompact ? 12 : 16} /> {prevLabel}
             </button>
           ) : (
-            <div className="px-10" /> // Placeholder to keep symmetry
+            <div className={isCompact ? "px-4" : "px-10"} /> 
           )}
         </div>
 
         {/* Center Cluster: Step & Title */}
-        <div className="flex flex-col items-center text-center gap-2">
-           <div className="flex items-center gap-3 px-4 py-1.5 bg-lux-text dark:bg-lux-accent text-white dark:text-black rounded-full shadow-lg scale-110">
-              <span className="text-[9px] font-black uppercase tracking-[0.25em]">Etapa {step} de {totalSteps}</span>
-              <div className="w-1 h-3 bg-white/20 dark:bg-black/20 rounded-full" />
+        <div className="flex flex-col items-center text-center">
+           <div className={`flex items-center gap-2 bg-lux-text dark:bg-lux-accent text-white dark:text-black rounded-full shadow-lg transition-all ${
+             isCompact ? "px-3 py-1 scale-90" : "px-4 py-1.5 scale-110"
+           }`}>
+              <span className="text-[8px] font-black uppercase tracking-[0.25em]">Etapa {step}</span>
+              <div className="w-1 h-2 bg-white/20 dark:bg-black/20 rounded-full" />
               {getStepIcon(step)}
            </div>
            
-           <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-lux-text/60 dark:text-lux-accent/60 mt-2">
-             {title}
-           </h2>
+           {!isCompact && (
+             <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-lux-text/60 dark:text-lux-accent/60 mt-2">
+               {title}
+             </h2>
+           )}
         </div>
 
         {/* Action: Next */}
@@ -116,32 +128,36 @@ export function ProjectHeaderStandard({
             <button
               onClick={handleNext}
               disabled={nextDisabled}
-              className={`flex items-center gap-3 px-8 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl transition-all ${
+              className={`flex items-center gap-3 rounded-2xl font-black uppercase tracking-widest shadow-xl transition-all ${
+                isCompact ? "text-[9px] px-6 py-2" : "text-[11px] px-8 py-3"
+              } ${
                 nextDisabled 
                   ? "bg-lux-border/20 text-lux-muted/40 cursor-not-allowed" 
                   : "bg-lux-text dark:bg-lux-accent text-white dark:text-black shadow-lux-text/10 hover:scale-105 active:scale-95"
               }`}
             >
-              {nextLabel} <ChevronRight size={16} />
+              {nextLabel} <ChevronRight size={isCompact ? 12 : 16} />
             </button>
           ) : (
-            <div className="px-10" /> // Placeholder
+            <div className={isCompact ? "px-4" : "px-10"} />
           )}
         </div>
       </div>
       
       {/* Decorative Phase Indicator */}
-      <div className="mt-6 flex gap-4">
-         {[1,2,3,4,5].map(s => (
-           <div 
-             key={s} 
-             className={`h-1.5 rounded-full transition-all duration-700 ${
-               s === step ? 'w-12 bg-lux-accent shadow-[0_0_10px_rgba(212,175,55,0.4)]' : 
-               s < step ? 'w-3 bg-lux-text opacity-40' : 'w-3 bg-lux-border/30'
-             }`}
-           />
-         ))}
-      </div>
+      {!isCompact && (
+        <div className="mt-6 flex gap-4">
+           {[1,2,3,4,5].map(s => (
+             <div 
+               key={s} 
+               className={`h-1.5 rounded-full transition-all duration-700 ${
+                 s === step ? 'w-12 bg-lux-accent shadow-[0_0_10px_rgba(212,175,55,0.4)]' : 
+                 s < step ? 'w-3 bg-lux-text opacity-40' : 'w-3 bg-lux-border/30'
+               }`}
+             />
+           ))}
+        </div>
+      )}
     </header>
   );
 }

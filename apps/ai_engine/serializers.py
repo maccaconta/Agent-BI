@@ -48,6 +48,19 @@ class CopilotGenerateSerializer(serializers.Serializer):
 
 
 class CopilotSQLPreviewSerializer(serializers.Serializer):
-    sql = serializers.CharField(required=True, allow_blank=False)
-    datasets = serializers.ListField(required=True, allow_empty=False)
+    sql = serializers.CharField(required=False, allow_blank=True, default="")
+    datasets = serializers.ListField(required=False, allow_empty=True, default=list)
     limit = serializers.IntegerField(required=False, min_value=1, max_value=1000, default=200)
+
+class ReportPromptPlanSerializer(serializers.Serializer):
+    project_id = serializers.CharField(required=True)
+    global_prompt = serializers.CharField(required=True)
+
+class ReportPromptMaterializeSerializer(serializers.Serializer):
+    dashboard_id = serializers.CharField(required=False, allow_null=True)
+    project_id = serializers.CharField(required=False, allow_null=True)
+    widget_prompts = serializers.ListField(
+        child=serializers.DictField(),
+        required=True
+    )
+    trace_id = serializers.CharField(required=False, allow_null=True)

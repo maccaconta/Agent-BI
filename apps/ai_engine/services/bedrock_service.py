@@ -32,7 +32,7 @@ class BedrockService:
     MODEL_ID = "anthropic.claude-3-5-sonnet-20241022-v2:0"
     MAX_RETRIES = 3
     RETRY_DELAY = 5  # segundos
-    READ_TIMEOUT = 120  # Aumentado para lidar com inferências complexas do Nova
+    READ_TIMEOUT = 300  # Aumentado para 5 min para evitar hangs em modelos Nova complexos
 
     def __init__(self):
         region = getattr(settings, "BEDROCK_REGION", "") or getattr(settings, "AWS_REGION", "us-east-1")
@@ -45,12 +45,41 @@ class BedrockService:
             retries={'max_attempts': self.MAX_RETRIES}
         )
         
-        self.client = boto3.client("bedrock-runtime", region_name=region, config=config)
-        self.model_id = settings.BEDROCK_MODEL_ID or self.MODEL_ID
-        self.max_tokens = settings.BEDROCK_MAX_TOKENS
+        # Só passamos as chaves se elas estiverem preenchidas no settings.
+        # Se passarmos como "" (string vazia), o boto3 para a busca e ignora o arquivo local.
+        access_key = getattr(settings, "AWS_ACCESS_KEY_ID", None)
+        secret_key = getattr(settings, "AWS_SECRET_ACCESS_KEY", None)
+        
+        kwargs = {
+            "region_name": region,
+            "config": config
+        }
+        
+        if access_key and access_key.strip():
+            kwargs["aws_access_key_id"] = access_key
+        if secret_key and secret_key.strip():
+            kwargs["aws_secret_access_key"] = secret_key
+            
+        self.client = boto3.client("bedrock-runtime", **kwargs)
+        
+        self.model_id = getattr(settings, "BEDROCK_MODEL_ID", "") or self.MODEL_ID
+        self.max_tokens = getattr(settings, "BEDROCK_MAX_TOKENS", 4000)
         self._agent_runtime_client = None
         self._kb_client = None
         self.last_invoke_metadata = {}
+
+    def is_operational(self) -> bool:
+        """Verifica se há credenciais configuradas (via settings ou ambiente/config AWS)."""
+        # 1. Checa explicitamente o settings
+        if getattr(settings, "AWS_ACCESS_KEY_ID", "") and getattr(settings, "AWS_SECRET_ACCESS_KEY", ""):
+            return True
+        
+        # 2. Checa o chain do boto3 (env vars, ~/.aws/credentials, roles)
+        try:
+            session = boto3.Session()
+            return session.get_credentials() is not None
+        except:
+            return False
 
     def invoke(
         self,
@@ -71,9 +100,18 @@ class BedrockService:
         if not messages:
             messages = [{"role": "user", "content": user_message}]
 
+        # Se for modelo Nova, redireciona para a API Converse que é a compatível
+        if self._should_use_converse_api():
+            return self.invoke_converse(
+                system_prompt=system_prompt,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+
         body = {
             "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": max_tokens,
+            "max_tokens": max_tokens or self.max_tokens,
             "temperature": temperature,
             "system": system_prompt,
             "messages": messages,
@@ -191,11 +229,18 @@ class BedrockService:
         if system_prompt:
             request_kwargs["system"] = [{"text": system_prompt}]
 
+        print(f"[BedrockService] 🚀 Iniciando invocação do modelo: {self.model_id} (Região: {self.region})...")
         for attempt in range(self.MAX_RETRIES):
             try:
                 start_time = time.time()
+                print(f"[BedrockService] 📡 Enviando request ao endpoint Bedrock (Tentativa {attempt + 1})...")
+                print(f"[BedrockService] 📦 ModelID: {self.model_id} | Payload size: approx {len(json.dumps(request_kwargs))} chars")
+                
+                # Chamada bloqueante ao Boto3
                 response = self.client.converse(**request_kwargs)
+                
                 elapsed = time.time() - start_time
+                print(f"[BedrockService] ✅ Resposta recebida em {elapsed:.2f}s.")
 
                 content = (((response.get("output") or {}).get("message") or {}).get("content") or [])
                 if not content:
@@ -334,9 +379,10 @@ class BedrockService:
         }
         # Extrai a última mensagem para o Agent Runtime (que espera string única)
         user_message_with_json = current_messages[-1]["content"] if current_messages else ""
-
         used_agent_runtime = False
+
         if self._should_use_agent_runtime():
+            print(f"[BedrockService] 🤖 Requisitando via Agent Runtime (Agent ID: {getattr(settings, 'BEDROCK_AGENT_ID', '???')})")
             used_agent_runtime = True
             metadata["used_agent_runtime"] = True
             payload = self._build_agent_input_message(system_prompt, user_message_with_json)
@@ -346,6 +392,7 @@ class BedrockService:
                 logger.warning(f"Falha ao invocar Agent Runtime ({e}). Tentando fallback para Model Runtime.")
                 response_text = "" # Força falha no parse inicial para disparar o fallback abaixo
         else:
+            print(f"[BedrockService] 🚀 Requisitando via Model Runtime (Model ID: {self.model_id})")
             metadata["used_model_runtime"] = True
             runtime_api, response_text = self._invoke_model_runtime(
                 system_prompt=system_prompt,
@@ -591,23 +638,3 @@ class BedrockService:
             return document_uri
 
         return ""
-
-    def generate_text(
-        self,
-        system_prompt: str,
-        user_message: str,
-        temperature: float = 0.3,
-        max_tokens: Optional[int] = None,
-    ) -> str:
-        """
-        Método wrapper para gerar texto. Usado pelos agentes Supervisor e Pandas.
-        Decide automaticamente entre invoke ou invoke_converse baseado no modelo.
-        """
-        _, response_text = self._invoke_model_runtime(
-            system_prompt=system_prompt,
-            user_message=user_message,
-            messages=None,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        return response_text

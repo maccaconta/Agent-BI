@@ -19,9 +19,22 @@ class TraceService:
         self._start_times = {}
 
     def start_step(self, step_name: str):
-        """Inicia a cronometragem de um passo."""
+        """Inicia a cronometragem de um passo e persiste imediatamente para o HUD."""
         self._start_times[step_name] = time.perf_counter()
         logger.debug(f"[Tracer] Inciando: {step_name} (Trace: {self.trace_id})")
+        
+        # Persistência imediata do início da etapa para feedback no HUD
+        try:
+            ExecutionTrace.objects.create(
+                trace_id=self.trace_id,
+                job_type=self.job_type,
+                step_name=step_name,
+                message="Iniciando processamento analítico...",
+                status="IN_PROGRESS",
+                duration_ms=0
+            )
+        except Exception as e:
+            logger.error(f"[Tracer] Erro ao persistir início de step: {e}")
 
     def end_step(
         self, 

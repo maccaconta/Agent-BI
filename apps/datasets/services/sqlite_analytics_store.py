@@ -82,10 +82,8 @@ class LocalSQLiteAnalyticsStoreService:
         table_names = []
         for dataset in datasets or []:
             dataset_id = str(dataset.get("id") or "")
-            dataset_name = str(dataset.get("name") or "")
-            table_name = str(dataset.get("sqlite_table") or "").strip()
-            if not table_name:
-                table_name = self.resolve_table_name(dataset_id=dataset_id, dataset_name=dataset_name)
+            # IMPORTANTE: Sempre resolver o nome físico REAL mapeado no registro
+            table_name = self.resolve_table_name(dataset_id=dataset_id)
             if table_name:
                 table_names.append(table_name)
 
@@ -100,6 +98,7 @@ class LocalSQLiteAnalyticsStoreService:
                     "SELECT name FROM sqlite_master WHERE type='table'"
                 ).fetchall()
             }
+            # Se todas as tabelas físicas resolvidas existirem no disco, retornamos True
             return all(table_name in existing for table_name in table_names)
         finally:
             connection.close()

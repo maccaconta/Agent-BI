@@ -23,6 +23,7 @@ import * as XLSX from "xlsx";
 import { readProjectSources, writeProjectSources, type StoredProjectSource } from "@/lib/projectSources";
 import { getBackendAuthHeaders } from "@/lib/backendAuth";
 import { ProjectHeaderStandard } from "@/components/project/ProjectHeaderStandard";
+import { AWSPipelineMap } from "@/components/project/AWSPipelineMap";
 
 /**
  * SourcesPage
@@ -211,25 +212,7 @@ export default function SourcesPage() {
             </button>
           </div>
 
-          <div className="bg-white/40 dark:bg-white/5 border border-lux-border/20 dark:border-lux-border/40 p-8 rounded-[3rem] shadow-sm">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-[10px] uppercase font-black text-lux-muted tracking-[0.3em] flex items-center gap-3">
-                <Server size={14} className="text-lux-accent" /> Matriz de Conectividade NTT DATA
-              </h3>
-              <div className="flex items-center gap-2 bg-lux-accent/10 border border-lux-accent/20 px-3 py-1 rounded-full">
-                 <ShieldCheck size={12} className="text-lux-accent" />
-                 <span className="text-[9px] font-black text-lux-accent uppercase tracking-widest">AWS VPC Ready</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 opacity-50 grayscale pointer-events-none">
-              {["SQL Server", "Oracle", "S3 Bucket", "Redshift"].map((db) => (
-                <div key={db} className="p-4 bg-white/50 dark:bg-black/20 border border-lux-border/20 rounded-2xl flex flex-col items-center gap-3 transition-all">
-                  <Database size={20} />
-                  <span className="text-[10px] font-black uppercase tracking-tighter">{db}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <AWSPipelineMap />
         </div>
 
         {/* Painel de Inventário (Dir) */}

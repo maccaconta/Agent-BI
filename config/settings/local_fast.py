@@ -20,10 +20,11 @@ DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
 # Banco local rápido para desenvolvimento
+from decouple import config
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "NAME": BASE_DIR / config("DATABASE_NAME", default="dev.sqlite3"),
     }
 }
 

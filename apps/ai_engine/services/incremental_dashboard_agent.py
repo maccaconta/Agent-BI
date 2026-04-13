@@ -1,15 +1,10 @@
-"""
-apps.ai_engine.services.incremental_dashboard_agent
-Agente incremental de dashboards corporativos.
-"""
-from __future__ import annotations
-
+from apps.audit.services.trace_service import TraceService
 import json
 import logging
 import os
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 from django.conf import settings
 
@@ -52,10 +47,16 @@ class IncrementalDashboardAgentService:
         self.renderer = DashboardHtmlRendererService()
 
     def generate(self, request_data: dict, request_user=None, save_version: bool = True) -> dict:
-        from apps.audit.services.trace_service import TraceService
-        import uuid
         from apps.datasets.models import DatasetStatus
-        trace_id = request_data.get("trace_id") or uuid.uuid4()
+        raw_trace_id = request_data.get("trace_id")
+        if raw_trace_id:
+            try:
+                trace_id = uuid.UUID(str(raw_trace_id))
+            except ValueError:
+                trace_id = uuid.uuid4()
+        else:
+            trace_id = uuid.uuid4()
+            
         trace = TraceService(trace_id=trace_id, job_type="AI_GENERATION")
 
         # Verificação de Prontidão de Dados (Data Readiness)
@@ -133,7 +134,7 @@ class IncrementalDashboardAgentService:
         trace.end_step("Data Interpreter: Análise Semântica", message=f"Mapeamento semântico e DNA de Risco ({len(risk_dna_context)} marcadores) gerados.")
 
         # --- SPECIALIST & COMPLIANCE PROMPTS ---
-        trace.start_step("Prompt Library: Carregando Especialistas")
+        trace.start_step("Compliance & Normas: Auditoria")
         from apps.shared_models import PromptTemplate
         specialist_prompt_obj = PromptTemplate.objects.filter(
             name__icontains=domain_name,
@@ -143,7 +144,7 @@ class IncrementalDashboardAgentService:
         specialist_prompt = specialist_prompt_obj.content if specialist_prompt_obj else ""
         compliance_prompt = PromptTemplate.objects.filter(category="COMPLIANCE").first()
         
-        trace.end_step("Prompt Library: Carregando Especialistas", message=f"Persona '{domain_name}' e Compliance carregados.")
+        trace.end_step("Compliance & Normas: Auditoria", message=f"Diretrizes de '{domain_name}' e Compliance global injetadas no mandato.")
 
         # --- MULTI-AGENT ROUTING (DIRETRIZES DA KB / RAG) ---
         # Sempre consulta as regras de negócio da Base de Conhecimento se snippets estiverem presentes,
@@ -171,7 +172,8 @@ class IncrementalDashboardAgentService:
         
         routing_decision = supervisor.determine_route(
             user_prompt=supervisor_context + context.get("currentUserPrompt", ""),
-            datasets_metadata=ds_stats
+            datasets_metadata=ds_stats,
+            trace=trace
         )
         route_selected = routing_decision.get("route", "ROUTE_NL2SQL")
         trace.end_step("Supervisor: Escaneamento", message=f"Intenção detectada. Delegando para {route_selected}.", metadata={"routing_decision": routing_decision})
@@ -179,91 +181,8 @@ class IncrementalDashboardAgentService:
         context["routing_decision"] = routing_decision
         context["audit_trail"]["orchestrator_thought"] = routing_decision.get("reasoning", "")
         
-        if route_selected == "ROUTE_PANDAS":
-            pandas_assistant = PandasAnalyticsAgent()
-            critic = CriticAgent()
-            max_rows = context.get("analysis_max_rows", 5000)
-            
-            # --- LOOP DE CRÍTICA E REFINAÇÃO (Máximo 2 tentativas) ---
-            p_result = None
-            feedback = ""
-            for attempt in range(1, 3):
-                trace.start_step(f"Assistente Pandas: Geração (Tentativa {attempt})")
-                p_result = pandas_assistant.analyze(
-                    user_prompt=context.get("currentUserPrompt", ""), 
-                    datasets_metadata=context.get("datasets", []), 
-                    max_rows=max_rows, 
-                    specialist_context=str(context.get("specialist_insights", "")),
-                    risk_dna_context=context.get("risk_dna_context"),
-                    feedback=feedback,
-                    trace=trace
-                )
-                trace.end_step(f"Assistente Pandas: Geração (Tentativa {attempt})")
-
-                # Avaliação Rigorosa do Critic
-                trace.start_step(f"Critic: Auditoria de Governança (Tentativa {attempt})")
-                critic_eval = critic.evaluate(
-                    original_instruction=context.get("currentUserPrompt", ""),
-                    generated_html="", # Dashboard ainda não montado
-                    sql_queries=[], 
-                    query_results=[],
-                    schema={"columns": context.get("datasets", [{}])[0].get("schema_json", {}).get("columns", [])},
-                    dataset=None,
-                    iteration=attempt,
-                    python_code=p_result.get("python_code", ""),
-                    pandas_thought=p_result.get("thought", "")
-                )
-                trace.end_step(f"Critic: Auditoria de Governança (Tentativa {attempt})", 
-                              message=f"Score: {critic_eval.score:.2f} | Governança: {critic_eval.governance_score:.2f}",
-                              metadata=critic_eval.to_dict())
-
-                if critic_eval.approved or attempt == 2:
-                    break
-                
-                # Prepara feedback para a próxima rodada
-                feedback = f"Sua tentativa anterior foi REPROVADA. Problemas: {', '.join(critic_eval.issues)}. Sugestões: {', '.join(critic_eval.suggestions)}"
-                logger.warning(f"[Orquestrador] Código Pandas reprovado pelo Critic. Tentando refinação. Motivo: {feedback}")
-
-            # Prossegue com o resultado final (aprovado ou última tentativa)
-            current_insights = str(context.get("specialist_insights", ""))
-            new_analysis = str(p_result.get("analysis", ""))
-            context["specialist_insights"] = f"{current_insights}\n\n{new_analysis}".strip()
-            
-            # --- CAPTURA AUDITORIA PANDAS ---
-            context["audit_trail"]["pandas_code"] = p_result.get("python_code", "")
-            context["audit_trail"]["pandas_thought"] = p_result.get("thought", "")
-            
-            # --- NOVO: Materialização de Resultados Enriquecidos ---
-            calculation_data = p_result.get("calculation_data", {})
-            df_enriched = None
-            statistical_analysis = None
-            if isinstance(calculation_data, dict):
-                df_enriched = calculation_data.get("dataframe_processed")
-                statistical_analysis = calculation_data.get("statistical_analysis")
-            
-            if statistical_analysis:
-                context["statistical_analysis"] = statistical_analysis
-                context["analytical_memory"]["statistical_analysis"] = statistical_analysis
-            
-            if df_enriched is not None:
-                from apps.datasets.services.sqlite_analytics_store import build_sqlite_table_name
-                # Gera um nome de tabela único para esta sessão analítica
-                enriched_table_name = f"tmp_enriched_{uuid.uuid4().hex[:8]}"
-                if self.pandas_executor.materialize_dataframe(df_enriched, enriched_table_name):
-                    context["materialized_table"] = enriched_table_name
-                    # Expõe o novo schema para que o Gerador de UI saiba o que existe
-                    context["materialized_schema"] = list(df_enriched.columns)
-                    
-                    # Persistência Analítica (Memória): Guardamos o mapa de colunas e uma amostra para a LLM
-                    context["analytical_memory"]["enriched_metadata"] = {
-                        "table_name": enriched_table_name,
-                        "columns": context["materialized_schema"],
-                        "timestamp": datetime.now().isoformat()
-                    }
-                    
-                    logger.info(f"[Orquestrador] Dataset enriquecido materializado: {enriched_table_name}")
-                    if trace:
-                        trace.log_thought("Orquestrador", f"Cálculos de risco materializados na tabela '{enriched_table_name}'.")
+        if route_selected == "ROUTE_PANDAS_DISABLED": # Desativado conforme solicitado
+            pass
             
         elif route_selected == "ROUTE_KB_RAG" and not context.get("specialist_insights"):
             # Caso a rota seja KB_RAG e já não tenhamos consultado acima (redundância de segurança)
@@ -271,8 +190,8 @@ class IncrementalDashboardAgentService:
             r_result = rag_assistant.query_knowledge(context.get("currentUserPrompt", ""), "\n".join(rag_snippets), trace=trace)
             context["specialist_insights"] = r_result.get("answer", "")
             
-        else:
             # ROUTE_NL2SQL - Assistente Especialista com reforço de fórmulas do RAG
+            trace.start_step("NL2SQL Specialist: Gerando Query")
             n_result = self.nl2sql_agent.generate_sql(
                 user_prompt=context.get("currentUserPrompt", ""),
                 datasets=context.get("datasets", []),
@@ -280,11 +199,15 @@ class IncrementalDashboardAgentService:
                 specialist_context=context.get("specialist_insights", ""), # Injeção de fórmulas de Risco
                 trace=trace
             )
+            trace.end_step("NL2SQL Specialist: Gerando Query", message="SQL analítico gerado com sucesso.")
             context["specialist_sql"] = n_result.get("sql", "")
             # --- CAPTURA AUDITORIA NL2SQL ---
             context["audit_trail"]["nl2sql_sql"] = n_result.get("sql", "")
             context["audit_trail"]["nl2sql_thought"] = n_result.get("description", "")
             context["specialist_insights"] = (context.get("specialist_insights", "") + "\n\n" + n_result.get("description", "")).strip()
+            
+            if trace:
+                trace.log_thought("NL2SQL Specialist", f"SQL construído para atender: {context.get('currentUserPrompt')}\nLogica: {n_result.get('description')}")
 
         # --- NOVO: Ajuste de Rota do SQL Final ---
         if context.get("materialized_table"):
@@ -342,7 +265,8 @@ class IncrementalDashboardAgentService:
             
             if should_try_bedrock:
                 try:
-                    step_name = f"Invocação LLM (Bedrock) - Tentaiva {current_attempt}"
+                    step_name = f"Gerador de UI: Construindo Dashboard (T{current_attempt})"
+                    trace.start_step(step_name)
                     # Monta o histórico de mensagens incluindo o novo prompt do usuário
                     messages = list(context.get("chat_history", []))
                     messages.append({"role": "user", "content": current_user_message})
@@ -396,6 +320,29 @@ class IncrementalDashboardAgentService:
             candidate_result = self._normalize_response(response, context)
             self._validate_sql_proposal(candidate_result, context)
             self._ensure_operational_output(candidate_result, context)
+
+            # ETAPA FINAL: Montagem da UI
+            supervisor = SupervisorAgent()
+            
+            # Converte as queries do sqlProposal em um formato que o SupervisorAgent entende
+            # (lista de dicionários com title, sql, type)
+            sql_p = candidate_result.get("sqlProposal", {})
+            raw_widgets = sql_p.get("queries", []) if isinstance(sql_p, dict) else []
+            
+            # Fallback se não vier em 'queries'
+            if not raw_widgets and isinstance(sql_p, list):
+                raw_widgets = sql_p
+            
+            dashboard_html = supervisor.assemble_dashboard_html(
+                dashboard=context.get("dashboard"),
+                widget_results=raw_widgets,
+                dataset_ids=[str(ds.get("id")) for ds in context.get("datasets", [])],
+                specialist_context=candidate_result.get("analyticalThoughtProcess", ""),
+                trace=trace
+            )
+            
+            # --- CONSOLIDAÇÃO DO RESULTADO ---
+            candidate_result["htmlDashboard"] = dashboard_html
 
             # --- AVALIAÇÃO DO CRITIC ---
             # Status padrão para casos onde o Critic não é acionado (Local/Fallback)
@@ -482,7 +429,11 @@ class IncrementalDashboardAgentService:
         
         # --- EXPOSIÇÃO DA AUDITORIA PARA O FRONTEND ---
         final_result["auditTrail"] = context.get("audit_trail", {})
+        final_result["trace_id"] = str(trace.trace_id) if trace else None
         
+        if trace:
+            trace.end_step("Finalização", message="Dashboard montado e validado com sucesso.", status="SUCCESS")
+            
         return final_result
 
     def _build_context(self, request_data: dict, request_user=None, trace=None) -> dict:
@@ -498,7 +449,6 @@ class IncrementalDashboardAgentService:
 
         if dashboard_id:
             from apps.dashboards.models import Dashboard
-
             dashboard = Dashboard.objects.select_related(
                 "project",
                 "project__domain",
@@ -673,25 +623,7 @@ class IncrementalDashboardAgentService:
                     + "\n===== FIM DAS DIRETRIZES - REGRAS ABSOLUTAS, NAO SUGESTOES =====\n"
                 )
 
-        # 2. Shadowing de Datasets: Se houver materialização, "mascaramos" a tabela bruta para forçar a versão inteligente
-        datasets_shadowed = []
-        materialized_table = context.get("materialized_table")
-        materialized_schema = context.get("materialized_schema") or []
-
-        for ds in context.get("datasets") or []:
-            ds_copy = ds.copy()
-            if materialized_table:
-                # [DRACONIAN SHADOWING]
-                # Ocultamos a tabela física original e a substituímos pela versão enriquecida (inteligente)
-                logger.debug(f"[Shadowing] Mascarando dataset {ds_copy.get('name')} com tabela inteligente {materialized_table}")
-                ds_copy["sqlite_table"] = materialized_table
-                
-                # Injetamos as novas colunas no schema para visibilidade da LLM
-                if materialized_schema and ds_copy.get("schema_json"):
-                    # Aqui apenas listamos os nomes das colunas novas no schema simplificado
-                    ds_copy["schema_json"]["columns"] = materialized_schema
-            
-            datasets_shadowed.append(ds_copy)
+        datasets_clean = context.get("datasets") or []
 
         # 2. Payload de contexto analitico (Reduzido para evitar saturação)
         payload = {
@@ -701,7 +633,7 @@ class IncrementalDashboardAgentService:
             "specialist_sql": context.get("specialist_sql"), # INJETADO: Sugestão mestre para a LLM
             "materialized_table": materialized_table,
             "materialized_schema": materialized_schema,
-            "datasets": datasets_shadowed, # SHADOWED: A IA verá apenas a fonte inteligente
+            "datasets": datasets_clean,
             "semantic_mapping": context.get("semantic_mapping") if not materialized_table else None,
             "previousBusinessLogic": context.get("previousBusinessLogic"),
             "analytical_memory": context.get("analytical_memory"),

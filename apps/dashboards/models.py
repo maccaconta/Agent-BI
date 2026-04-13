@@ -33,7 +33,17 @@ class Dashboard(TimeStampedModel):
         default=DashboardStatus.DRAFT,
     )
 
-    # Instrução original que gerou o dashboard
+    # Prompt de Relatório vinculado (Nova Arquitetura)
+    report_prompt = models.ForeignKey(
+        "governance.ReportPrompt",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dashboards",
+        verbose_name="Prompt de Relatório"
+    )
+
+    # Instrução original (Legado - a ser removido)
     instruction = models.ForeignKey(
         "instructions.Instruction",
         on_delete=models.SET_NULL,

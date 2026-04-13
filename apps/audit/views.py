@@ -12,7 +12,7 @@ class ExecutionTraceSerializer(serializers.ModelSerializer):
 class ExecutionTraceViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = ExecutionTrace.objects.all()
     serializer_class = ExecutionTraceSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
 
     @action(detail=False, methods=['get'], url_path='by-trace/(?P<trace_id>[^/.]+)')
     def by_trace(self, request, trace_id=None):

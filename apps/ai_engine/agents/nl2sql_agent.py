@@ -19,9 +19,27 @@ Sua missão é converter perguntas de usuários em consultas SQL estratégicas q
 2. **GRANULARIDADE**: Ao gerar JOINs, garanta que a granularidade das tabelas (`granularity`) seja compatível.
 3. **Fórmulas de Risco**: Priorize as **REGRAS DE NEGÓCIO ESPECIALIZADAS** fornecidas no contexto. Elas têm prioridade total.
 
+## DIRETRIZES TÉCNICAS (DIALÉTICA SQLITE - LOCAL):
+- O banco local é **SQLite**. NUNCA utilize funções que não existam nativamente como `STDDEV`, `MEDIAN`, `PERCENTILE`, `APPROX_DISTINCT`.
+- **Desvio Padrão**: Se solicitado no SQLite, simplifique para a MÉDIA (`AVG`) e informe na descrição que o Desvio Padrão não é suportado no modo local.
+- **Datas**: Utilize `date('now', '-N days/months/years')` ou `strftime('%Y-%m', coluna)`.
+- **Nomes de Tabela**: Utilize sempre o campo `sqlite_table` fornecido no contexto dos datasets.
+
+## CONTRATO DE DADOS VISUAIS (ESTRITAMENTE OBRIGATÓRIO):
+O usuário escolheu um tipo de gráfico. Você DEVE garantir que o SQL retorne a estrutura esperada:
+1. **BIGNUMBER**: 
+    - ESTRUTURA: Retorne SEMPRE exatamente 1 linha e 1 coluna (Ex: `SELECT SUM(valor) FROM ...`).
+    - PROIBIDO: Nunca use `GROUP BY` para BigNumbers.
+    - PROIBIDO: Nunca retorne mais de uma coluna.
+2. **PIE (Pizza)**: Retorne exatamente 2 colunas: [Categoria, Valor]. Evite muitas categorias.
+3. **BAR / LINE (Barra/Linha)**: 
+    - PADRÃO: 2 colunas [Eixo X, Valor].
+    - MULTI-SERIES: 3 colunas [Nome da Série, Eixo X, Valor]. O motor fará o pivot automático.
+4. **SCATTER (Dispersão)**: Retorne 2 ou 3 colunas numéricas [X, Y, (opcional) Tamanho].
+
 ## Saída Exigida (JSON):
 {
-  "sql": "A consulta SQL gerada",
+  "sql": "A consulta SQL gerada que se encaixa no contrato acima",
   "description": "Explicação concisa voltada para o negócio",
   "complexity": "LOW" | "MEDIUM" | "HIGH"
 }
@@ -42,70 +60,64 @@ class NL2SQLAgent:
         
         # Carrega o system prompt dinâmico do banco
         base_system_prompt = PromptService.get_system_prompt("NL2SQLAgent", NL2SQL_AGENT_SYSTEM_PROMPT)
+        
+        # Injeta contexto especializado se houver
+        if specialist_context:
+            base_system_prompt += f"\n\n### DIRETRIZES DO ESPECIALISTA DE DOMÍNIO (PRIORITY):\n{specialist_context}"
 
-        if trace:
-            trace.log_thought("Assistente NL2SQL", "Combinando esquema com as regras de granularidade e instruções de uso.")
+        if trace and hasattr(trace, "log_thought"):
+            trace.log_thought("Assistente NL2SQL", "Combinando esquema com as regras de granularidade e diretrizes do especialista.")
 
         # Constrói o contexto tabular detalhado
-        schema_context = []
+        datasets_context = []
         for ds in datasets:
             table_info = {
                 "sqlite_table": ds.get("sqlite_table"),
                 "name": ds.get("name"),
                 "granularity": ds.get("data_profile", {}).get("granularity_level", "UNKNOWN"),
-                "columns": []
+                "columns": [],
+                "schema": ds.get("schema_json"),
+                "profile_summary": ds.get("data_profile", {}).get("summary", "Não disponível")
             }
-            # Inclui instruções de uso analítico para guiar o SQL
-            for col in ds.get("schema_json", {}).get("columns", []):
-                table_info["columns"].append({
-                    "name": col.get("name"),
-                    "role": col.get("role"),
-                    "can_group": col.get("grouping_suitability") == "HIGH",
-                    "instruction": col.get("usage_instructions")
-                })
-            schema_context.append(table_info)
+            datasets_context.append(table_info)
 
-        prompt = f"""
-Pergunta do Usuário: "{user_prompt}"
+        user_message = f"""
+PERGUNTA: {user_prompt}
 
-=== REGRAS DE NEGÓCIO ESPECIALIZADAS (Fórmulas do RAG/KB) ===
-{specialist_context if specialist_context else "Nenhuma regra específica."}
+CONTEXTO DOS DATASETS:
+{json.dumps(datasets_context, indent=2, ensure_ascii=False)}
 
-=== SCHEMA DAS TABELAS E REGRAS DE USO ===
-{json.dumps(schema_context, indent=2, ensure_ascii=False)}
-
-=== RELACIONAMENTOS SEMÂNTICOS (DICAS DE JOIN) ===
-{json.dumps(relationships, indent=2, ensure_ascii=False) if relationships else "Nenhum relacionamento formal."}
-
-Gere o SQL respeitando as regras de granularidade e instruções acima.
-        """
+Gere o SQL e a descrição técnica.
+"""
         
         try:
-            # Tenta obter a resposta estruturada do Bedrock
             result = self.bedrock_service.invoke_with_json_output(
                 system_prompt=base_system_prompt,
-                user_message=prompt,
+                user_message=user_message,
                 temperature=0.1
             )
             
             if not result or not isinstance(result, dict):
                 raise ValueError("Resposta do Bedrock não é um objeto JSON válido.")
             
-            if trace:
-                trace.log_thought("Assistente NL2SQL", f"Query estruturada com complexidade {result.get('complexity')}.")
-                
+            if trace and hasattr(trace, "log_thought"):
+                 trace.log_thought("Assistente NL2SQL", f"Query estruturada com complexidade {result.get('complexity', 'Média')}.")
+            
             return {
                 "specialist": "ASSISTENTE_NL2SQL",
-                **result
+                "sql": result.get("sql", ""),
+                "description": result.get("description", ""),
+                "complexity": result.get("complexity", "Média")
             }
             
         except Exception as e:
-            logger.error(f"[Assistente_NL2SQL] Falha na geração SQL: {e}")
-            if trace:
-                 trace.quick_log(trace.trace_id, trace.job_type, "Assistente NL2SQL: Erro", str(e), status="ERROR")
+            logger.error(f"[NL2SQL] Falha ao gerar SQL: {e}")
+            if trace and hasattr(trace, "quick_log"):
+                 trace.quick_log("Assistente NL2SQL: Erro", str(e), status="ERROR")
+            
             return {
                 "specialist": "ASSISTENTE_NL2SQL",
-                "error": str(e),
-                "sql": f"-- Erro na geração: {str(e)}",
-                "description": "Falha crítica na orquestração LLM do assistente SQL."
+                "sql": "",
+                "description": f"Erro na geração: {str(e)}",
+                "error": True
             }

@@ -178,7 +178,20 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
             # Busca domínio do projeto para carregar especialista
             domain_name = dataset.project.domain.name if dataset.project.domain else ""
             
-            ai_analysis = interpreter.interpret_schema(columns, sample, domain_name=domain_name)
+            # Recupera Especialista de Domínio do Projeto (Persona Ativa)
+            specialist_context = ""
+            project = dataset.project
+            if project and project.specialist_prompt:
+                specialist_context = project.specialist_prompt.content
+                print(f"[AI_ENGINE] 🚀 Ativando Persona Especialista: {project.specialist_prompt.name}")
+                logger.info(f"[IngestionTask] Aplicando diretrizes do especialista: {project.specialist_prompt.name}")
+
+            ai_analysis = interpreter.interpret_schema(
+                columns, 
+                sample, 
+                domain_name=domain_name,
+                specialist_context=specialist_context
+            )
             
             # 1. Atualiza Descrição do Dataset (Resumo Executivo)
             if ai_analysis.get("dataset_summary") and not dataset.description:
@@ -230,6 +243,26 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
                     col["reasoning"] = mapping.get("reasoning") or col.get("reasoning")
 
             dataset.schema_json["columns"] = columns
+            
+            # --- SALVAR PLANO ESTRATÉGICO NO PROJETO ---
+            if ai_analysis.get("suggested_widgets"):
+                project = dataset.project
+                if not project.intake_metadata:
+                    project.intake_metadata = {}
+                
+                # Normalização de Widgets: Garantir que todos tenham um ID válido para evitar erros de Integridade
+                widgets = []
+                for idx, w in enumerate(ai_analysis.get("suggested_widgets", [])):
+                    w_id = w.get("id") or f"suggested_{w.get('type','widget').lower()}_{idx}"
+                    # Sanitização básica de ID
+                    clean_id = w_id.lower().replace(" ", "_").replace("-", "_")
+                    w["id"] = clean_id
+                    widgets.append(w)
+
+                project.intake_metadata["initial_strategic_plan"] = widgets
+                project.save(update_fields=["intake_metadata", "updated_at"])
+                print(f"[AI_ENGINE] 🎯 Plano estratégico ({len(widgets)} widgets) normalizado e salvo no projeto {project.name}.")
+
             dataset.save(update_fields=["description", "data_profile_json", "schema_json", "updated_at"])
             print(f"[AI_ENGINE] ✅ Interpretação concluída com sucesso para {dataset.name}.\n")
             trace.end_step("Enriquecimento com IA (Bedrock)", message="Resumo e metadados gerados com sucesso.")

@@ -1,15 +1,13 @@
-"""
-apps.datasets.services.sqlite_query_service
-Executor SQLite somente leitura para o prototipo local.
-"""
 from __future__ import annotations
-
+import logging
 import re
 import sqlite3
 from decimal import Decimal
 from typing import Any
 
 from apps.datasets.services.sqlite_analytics_store import LocalSQLiteAnalyticsStoreService
+
+logger = logging.getLogger(__name__)
 
 
 class SQLiteQueryValidationError(Exception):
@@ -61,26 +59,43 @@ class LocalSQLiteQueryService:
         return compact
 
     def execute_sql_for_datasets(self, datasets: list[dict], sql: str, limit: int | None = None) -> dict:
+        if not sql:
+            return {"columns": [], "rows": [], "row_count": 0, "engine": "empty-sql"}
+            
         validated_sql = self.validate_read_only_sql(sql)
+        
         if not datasets:
-            raise SQLiteQueryValidationError("Nenhum dataset foi fornecido para validacao local.")
+            logger.info("[SQLite] Executando query sem contexto de datasets (Modo Direto).")
 
+        # 1. Tentar execução no banco ANALITICO real (Disco)
         if self.analytics_store.has_all_tables(datasets):
             connection = sqlite3.connect(self.analytics_store.db_path)
             try:
                 connection.row_factory = sqlite3.Row
+                
+                # Injeção de ALIASES: Cria views temporárias para que o usuário possa usar o nome original
+                # sem se preocupar com sufixos técnicos.
                 table_map = self._build_persisted_table_map(datasets)
+                for logical_name, physical_table in table_map.items():
+                    if logical_name != physical_table:
+                        try:
+                            connection.execute(f'CREATE TEMP VIEW IF NOT EXISTS "{logical_name}" AS SELECT * FROM "{physical_table}"')
+                        except sqlite3.Error as e:
+                            logger.warning(f"[SQLite] Falha ao criar alias para {logical_name}: {e}")
+
                 result = self._execute_sql(connection, validated_sql, limit)
                 result["table_map"] = table_map
                 result["engine"] = "sqlite-analytics-local"
                 return result
             except sqlite3.Error as exc:
-                raise SQLiteQueryValidationError(
-                    f"Falha ao executar SQL no SQLite analitico local: {exc}"
-                ) from exc
+                logger.error(f"[SQLite] Erro na base de disco: {exc}")
+                if "no such table" not in str(exc).lower():
+                    raise SQLiteQueryValidationError(f"Erro SQL na base total: {exc}")
             finally:
                 connection.close()
 
+        # 2. Fallback para EM MEMORIA (Amostra)
+        logger.warning("[SQLite] Base total nao encontrada ou incompleta. Usando Fallback de MEMORIA (Amostra).")
         connection = sqlite3.connect(":memory:")
         try:
             connection.row_factory = sqlite3.Row
@@ -90,9 +105,10 @@ class LocalSQLiteQueryService:
             result["engine"] = "sqlite-local-inmemory-fallback"
             return result
         except sqlite3.Error as exc:
-            raise SQLiteQueryValidationError(f"Falha ao executar SQL no SQLite local: {exc}") from exc
+            raise SQLiteQueryValidationError(f"Falha ao executar SQL na amostra local: {exc}")
         finally:
             connection.close()
+
 
     def _execute_sql(self, connection: sqlite3.Connection, sql: str, limit: int | None) -> dict:
         cursor = connection.execute(sql)
@@ -115,10 +131,21 @@ class LocalSQLiteQueryService:
                 dataset_id=dataset_id,
                 dataset_name=dataset_name,
             )
+            
+            # 1. Mapeamento por ID (uuid)
             if dataset_id:
                 table_map[dataset_id] = table_name
+            
+            # 2. Mapeamento pelo nome Original (ex: "Fato Vendas")
             if dataset_name:
                 table_map[str(dataset_name)] = table_name
+                
+                # 3. Mapeamento por nome SANITIZADO (ex: "fato_vendas")
+                # Isso permite que a IA faça "SELECT * FROM fato_vendas" sem aspas
+                sanitized = self.analytics_store._sanitize_identifier(dataset_name)
+                if sanitized and sanitized != dataset_name:
+                    table_map[sanitized] = table_name
+                    
         return table_map
 
     def _register_datasets(self, connection: sqlite3.Connection, datasets: list[dict]) -> dict[str, str]:

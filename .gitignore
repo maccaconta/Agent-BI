@@ -58,3 +58,16 @@ logs/
 tmp/
 scripts/aws/
 *.ps1
+
+# Agent & Scratch Files
+brain/
+scratch/
+frontend/scratch/
+update_db*.py
+update_specialist*.py
+seed_all.bat
+final_update.py
+ensure_admin.py
+fix_ui_button.py
+selective_cleanup.py
+test_bedrock.py

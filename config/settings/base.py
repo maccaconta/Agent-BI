@@ -93,7 +93,7 @@ ASGI_APPLICATION = "config.asgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / config("DATABASE_NAME", default="db.sqlite3"),
+        "NAME": BASE_DIR / config("DATABASE_NAME", default="dev.sqlite3"),
     }
 }
 
@@ -292,7 +292,7 @@ else:
     CELERY_BROKER_URL = "memory://"
     CELERY_RESULT_BACKEND = "cache+memory://"
     CELERY_TASK_ALWAYS_EAGER = True  # Executa tasks sincronamente para não travar
-    print("⚠️  AVISO: Redis não detectado. Iniciando em modo Zero-Infra (Cache em Memória e Tasks Síncronas).")
+    print("AVISO: Redis nao detectado. Iniciando em modo Zero-Infra (Cache em Memoria e Tasks Sincronas).")
 
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
