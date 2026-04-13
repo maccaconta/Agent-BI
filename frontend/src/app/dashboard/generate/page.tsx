@@ -1,31 +1,42 @@
 "use client";
 import React, { useEffect, useState, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, Reorder } from "framer-motion";
 import {
-  Send,
-  Terminal,
   Loader2,
   CloudUpload,
-  Eye,
-  Code,
+  Eye as EyeIcon,
+  Code as CodeIcon,
   Trash,
   Star,
-  History,
   Sparkles,
   ChevronLeft,
   LayoutDashboard,
   CheckCircle2,
-  AlertCircle,
-  Clock as ClockIcon,
-  RefreshCw,
-  Zap,
-  Database,
   Server,
   Download,
   FileJson,
+  PieChart as PieChartIcon,
+  BarChart,
+  BarChart3,
+  LineChart as LineChartIcon,
+  ChevronDown,
+  Activity,
+  Zap,
   ShieldCheck,
-  Plus
+  Layers,
+  Table,
+  Clock as ClockIcon,
+  RefreshCw,
+  Plus,
+  Database,
+  Search,
+  AlertCircle,
+  History,
+  Edit2,
+  Check,
+  GripVertical
 } from "lucide-react";
+import DevHUD from '@/components/layout/DevHUD';
 import { useRouter } from "next/navigation";
 import { getProjectRelationshipsKey, readProjectSources, writeProjectSources } from "@/lib/projectSources";
 import { getBackendJsonHeaders } from "@/lib/backendAuth";
@@ -49,130 +60,44 @@ interface DashboardTab {
   followUpSuggestions?: { label: string; prompt: string }[];
 }
 
-type CopilotGeneratePayload = {
-  project_id: string | null;
-  dashboardName: string;
-  reportTitle: string;
-  reportDescription: string;
-  dataDomain: string;
-  domainDataOwner: string;
-  dataConfidentiality: string;
-  crawlerFrequency: string;
-  sessionAuthor: string;
-  currentVersion: string;
-  currentDashboardState: string;
-  previousUserPrompts: string[];
-  currentUserPrompt: string;
-  templatePrompt: string;
-  masterPrompt: string;
-  reportMetadata: Record<string, unknown>;
-  datasets: Record<string, unknown>[];
-  semanticRelationships: Record<string, unknown>[];
-  knowledgeBasePromptHints: string[];
-  existingDashboardHtml: string;
-  frontendComponentContract: Record<string, unknown>;
-  visualLayoutRules: Record<string, unknown>;
-  outputFormatRules: Record<string, unknown>;
-  query: string;
-  ai_temperature?: number;
-  trace_id?: string;
-};
-
-function isValidUuid(value: string | null | undefined): value is string {
-  if (!value) return false;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-}
-
 export default function EngineRoom() {
   const router = useRouter();
   const [projectId, setProjectId] = useState<string | null>(null);
   const [projectDraft, setProjectDraft] = useState<Record<string, string> | null>(null);
-  const [messages, setMessages] = useState<{ role: "user" | "agent"; content: string }[]>([
-    {
-      role: "agent",
-      content:
-        "Olá! Processei com sucesso a unificação das suas fontes na Tabela Ouro. Qual visão estratégica deseja construir primeiro para este projeto?",
-    },
-  ]);
-  const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
-  const [viewCode, setViewCode] = useState(false);
-  const [tabs, setTabs] = useState<DashboardTab[]>([
-    {
-      id: "v1.0",
-      name: "v1.0 (Rascunho)",
-      prompt: "Cruze os setores mapeados na aba prevendo tendências.",
-      isBlueprint: false,
-      content:
-        '<div style="display:flex; height:100%; align-items:center; justify-content:center; color:#513830; font-family:serif;"><h1>(Mock) Painel inicial gerado</h1></div>',
-    },
-  ]);
-  const [activeTabId, setActiveTabId] = useState<string>("v1.0");
+  const [globalPrompt, setGlobalPrompt] = useState("");
+  const [plannedWidgets, setPlannedWidgets] = useState<any[]>([]);
+  const [activeDashboardId, setActiveDashboardId] = useState<number | null>(null);
+  const [isPlanning, setIsPlanning] = useState(false);
+  const [isMaterializing, setIsMaterializing] = useState(false);
+  const [tabs, setTabs] = useState<DashboardTab[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [editingTabId, setEditingTabId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
   const [dataReady, setDataReady] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
-  const [rightTab, setRightTab] = useState<'chat' | 'ingest'>('chat');
+  const [projectMetadata, setProjectMetadata] = useState<any>(null);
+
+  // Controle de Visualização por Widget (Prompt vs SQL)
+  const [widgetViewMode, setWidgetViewMode] = useState<Record<string, 'PROMPT' | 'SQL'>>({});
+
   const [loadingAgent, setLoadingAgent] = useState("Orquestrador de IA");
   const [loadingAction, setLoadingAction] = useState("Preparando analistas virtuais...");
   const [aiTemperature, setAiTemperature] = useState(0.3);
-  const [showAISettings, setShowAISettings] = useState(false);
   const [showAuditModal, setShowAuditModal] = useState(false);
   
-  // Ref para o container de mensagens e estado para controle de scroll inteligente
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
-  const [hasNewMessages, setHasNewMessages] = useState(false);
-
-  // Monitora o scroll do usuário para desabilitar auto-scroll se ele subir
-  const handleScroll = () => {
-    if (!scrollRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
-    
-    // Margem de segurança de 150px do fundo para considerar "sticky"
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 150;
-    
-    // Se o usuário subiu propositalmente, pausamos o auto-scroll
-    if (!isAtBottom && shouldAutoScroll) {
-      setShouldAutoScroll(false);
-    }
-    
-    // Se ele voltou pro fundo manualmente, reativamos
-    if (isAtBottom && !shouldAutoScroll) {
-      setShouldAutoScroll(true);
-      setHasNewMessages(false);
-    }
-  };
-
-  // Efeito de scroll automático para mensagens cronológicas (Novas na BASE)
-  useEffect(() => {
-    if (shouldAutoScroll && scrollRef.current) {
-      const scrollElement = scrollRef.current;
-      // Pequeno delay para garantir que o DOM atualizou
-      const timer = setTimeout(() => {
-        scrollElement.scrollTo({
-          top: scrollElement.scrollHeight,
-          behavior: "smooth"
-        });
-      }, 50);
-      return () => clearTimeout(timer);
-    } else if (messages.length > 1) {
-      // Se não estamos no fundo, avisamos que há novidades
-      setHasNewMessages(true);
-    }
-  }, [messages, shouldAutoScroll]);
-
-  // Efeito para manter o scroll no fundo durante a digitação, se o usuário estiver lá
-  useEffect(() => {
-    if (isTyping && shouldAutoScroll && scrollRef.current) {
-      scrollRef.current.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        behavior: "auto" // 'auto' é menos agressivo durante atualizações rápidas
-      });
-    }
-  }, [isTyping, shouldAutoScroll]);
+  const [plannerWidth, setPlannerWidth] = useState(450);
+  const [isResizing, setIsResizing] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [projectSources, setProjectSources] = useState<any[]>([]);
+  const [sampleData, setSampleData] = useState<{tableName: string, rows: any[]} | null>(null);
+  const [viewCode, setViewCode] = useState(false);
+  const [projectDatasets, setProjectDatasets] = useState<any[]>([]);
+  const isWorking = isPlanning || isMaterializing;
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (isTyping) {
+    if (isWorking) {
       const phrases = [
         { agent: "🧠 Planner", action: "Elaborando plano..." },
         { agent: "💾 Data Expert", action: "Consultando base analítica..." },
@@ -187,32 +112,71 @@ export default function EngineRoom() {
         i = (i + 1) % phrases.length;
         setLoadingAgent(phrases[i].agent);
         setLoadingAction(phrases[i].action);
-      }, 2500); // Mais rápido conforme pedido
+      }, 2500);
+    } else {
+      setLoadingAgent("Agent-BI Ready");
+      setLoadingAction("Aguardando nova solicitação...");
     }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [isTyping]);
+    return () => { if (interval) clearInterval(interval); };
+  }, [isWorking]);
+
+  const startResizing = (e: React.MouseEvent) => {
+    setIsResizing(true);
+    e.preventDefault();
+  };
 
   useEffect(() => {
-    setProjectId(sessionStorage.getItem("agent_bi_current_project_id"));
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      const newWidth = Math.max(320, Math.min(e.clientX - 32, 900));
+      setPlannerWidth(newWidth);
+    };
+    const handleMouseUp = () => setIsResizing(false);
+    if (isResizing) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
+  useEffect(() => {
+    if (projectId && projectId !== 'PRJ-TEMP') {
+      const sources = readProjectSources(projectId);
+      setProjectSources(sources);
+
+      // Buscar datasets reais para o contexto do dashboard
+      fetch(`http://127.0.0.1:8000/api/v1/datasets/?project_id=${projectId}`, {
+        headers: getBackendJsonHeaders()
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setProjectDatasets(data);
+        } else if (data.results && Array.isArray(data.results)) {
+          setProjectDatasets(data.results);
+        }
+      })
+      .catch(err => console.error("Erro ao carregar datasets do projeto:", err));
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    const pId = sessionStorage.getItem("agent_bi_current_project_id");
+    setProjectId(pId);
     const rawDraft = sessionStorage.getItem("agent_bi_project_draft");
     if (!rawDraft) return;
     try {
       const parsed = JSON.parse(rawDraft);
       setProjectDraft(parsed);
-      if (parsed.aiTemperature !== undefined) {
-        setAiTemperature(parsed.aiTemperature);
-      }
-    } catch {
-      setProjectDraft(null);
-    }
+      if (parsed.aiTemperature !== undefined) setAiTemperature(parsed.aiTemperature);
+    } catch { setProjectDraft(null); }
   }, []);
 
-  // Polling para verificar prontidão dos dados
   useEffect(() => {
-    if (!projectId || dataReady) return;
-
+    if (!projectId || projectId === "PRJ-TEMP" || dataReady) return;
     const checkStatus = async () => {
       try {
         const response = await fetch(`http://127.0.0.1:8000/api/v1/projects/${projectId}/`, {
@@ -222,206 +186,150 @@ export default function EngineRoom() {
           const data = await response.json();
           setDataReady(data.data_ready);
           setPendingCount(data.pending_datasets_count || 0);
-        }
-      } catch (err) {
-        console.error("Erro ao checar status do projeto:", err);
-      }
-    };
+          
+          // Captura metadados para carregamento instantâneo do plano estratégico
+          if (data.intake_metadata) {
+             setProjectMetadata(data.intake_metadata);
+          }
 
+          if (data.dashboards && data.dashboards.length > 0) {
+            setActiveDashboardId(data.dashboards[0].id);
+          }
+        }
+      } catch (err) { console.error("Erro ao checar status do projeto:", err); }
+    };
     checkStatus();
-    const interval = setInterval(checkStatus, 3000);
+    const interval = setInterval(checkStatus, 1500); // Polling mais agressivo para ROI de tempo
     return () => clearInterval(interval);
   }, [projectId, dataReady]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isTyping) return;
+  // Gatilho de Autostart: Se os dados estão prontos e não há widgets, inicia o planejamento automático
+  useEffect(() => {
+    if (dataReady && plannedWidgets.length === 0 && !isPlanning && !isMaterializing && projectId) {
+       autoPlan();
+    }
+  }, [dataReady, plannedWidgets.length, projectId]);
 
-    const userQuery = input;
-    setMessages((prev) => [...prev, { role: "user", content: userQuery }]);
-    setInput("");
-    setIsTyping(true);
-
-    const traceId = crypto.randomUUID();
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent('agent-bi-trace', { detail: { traceId } }));
+  const autoPlan = async () => {
+    if (!projectId || isPlanning) return;
+    
+    // ATALHO: Cache Estratégico (Pre-Planning)
+    // Se a IA já desenhou o plano durante a ingestão, carregamos instantaneamente
+    if (projectMetadata?.initial_strategic_plan && Array.isArray(projectMetadata.initial_strategic_plan)) {
+       console.log("[Studio] 🎯 Carregando plano estratégico pré-gerado do cache inteligente.");
+       setPlannedWidgets(projectMetadata.initial_strategic_plan);
+       return; 
     }
 
+    setIsPlanning(true);
+    setLoadingAgent("Designer IA");
+    setLoadingAction("Interpretando datasets para sugestão estratégica...");
     try {
-      const sources = projectId ? readProjectSources(projectId) : [];
-      const relationships =
-        projectId && typeof window !== "undefined"
-          ? JSON.parse(sessionStorage.getItem(getProjectRelationshipsKey(projectId)) || "[]")
-          : [];
-      const previousUserPrompts = messages
-        .filter((message) => message.role === "user")
-        .map((message) => message.content);
-
-      const knowledgeBasePromptHints = Array.from(
-        new Set(
-          [
-            "template html padrao corporativo",
-            "layout executivo institucional",
-            "paleta de cores corporativa",
-            "padrao de componentes visual",
-            projectDraft?.dataDomain || "",
-            projectDraft?.dashboard || "",
-            projectDraft?.objective || "",
-          ].filter((item) => item && item.trim().length > 0),
-        ),
-      );
-
-      const safeProjectId = isValidUuid(projectId) ? projectId : null;
-
-      const payload: CopilotGeneratePayload = {
-        project_id: safeProjectId,
-        dashboardName: projectDraft?.dashboard || "Dashboard Corporativo",
-        reportTitle: projectDraft?.dashboard || "Dashboard Corporativo",
-        reportDescription: projectDraft?.objective || "Evolucao incremental do dashboard corporativo.",
-        dataDomain: projectDraft?.dataDomain || "",
-        domainDataOwner: projectDraft?.domainDataOwner || "",
-        dataConfidentiality: projectDraft?.confidentiality || "",
-        crawlerFrequency: projectDraft?.crawlFrequency || "",
-        sessionAuthor: "frontend-local",
-        currentVersion: activeTab?.name || "v1.0 (Rascunho)",
-        currentDashboardState: activeTab?.isBlueprint ? "BLUEPRINT" : "DRAFT",
-        previousUserPrompts,
-        currentUserPrompt: userQuery,
-        templatePrompt: "",
-        masterPrompt: "",
-        reportMetadata: {
-          activeTabId,
-          tabsCount: tabs.length,
-        },
-        datasets: sources.map((source) => ({
-          id: source.id,
-          name: source.name,
-          source_type: source.type,
-          row_count: source.rows,
-          column_count: source.columns.length,
-          schema_json: {
-            column_count: source.columns.length,
-            columns: source.columns.map((column) => ({
-              name: column,
-              type: "TEXT",
-              description: source.descriptions?.[column] || "",
-            })),
-          },
-          sample_json: source.sample,
-          selectedCols: source.selectedCols || source.columns,
-        })),
-        semanticRelationships: relationships,
-        knowledgeBasePromptHints,
-        existingDashboardHtml: activeTab?.content || "",
-        frontendComponentContract: {
-          expectsStandaloneHtml: true,
-          renderMode: "iframe-srcdoc",
-        },
-        visualLayoutRules: {
-          style: "executive-corporate",
-          preserveExistingStructure: true,
-        },
-        outputFormatRules: {
-          requireValidJson: true,
-          preserveDraftFlow: true,
-        },
-        query: userQuery,
-        ai_temperature: aiTemperature,
-        trace_id: traceId,
-      };
-
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem("agent_bi_last_copilot_payload", JSON.stringify(payload, null, 2));
-      }
-
-      const response = await fetch("http://127.0.0.1:8000/api/v1/copilot/generate", {
+      const response = await fetch("http://127.0.0.1:8000/api/v1/ai/report-prompt/plan", {
         method: "POST",
         headers: getBackendJsonHeaders(),
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          project_id: projectId,
+          global_prompt: "Gere um esqueleto estratégico sugerindo 4 indicadores chave (BIGNUMBER) e 3 gráficos analíticos (CHART) baseados exclusivamente nas reais colunas e cruzamentos analíticos desse dataset."
+        }),
       });
-
-      const data = await response.json();
-
-      if (data.status === "data_not_ready") {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "agent",
-            content: `⚠️ ${data.message}. Por favor, aguarde a conclusão da análise estatística para garantir resultados precisos.`,
-          },
-        ]);
-        setDataReady(false);
-        return;
+      if (response.ok) {
+        const data = await response.json();
+        if (data.design && data.design.widgets) setPlannedWidgets(data.design.widgets);
       }
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "agent",
-          content:
-            "O Agente BI atualizou o painel de acordo com a sua diretriz. Voce pode promover este rascunho quando o resultado estiver aprovado.",
-        },
-      ]);
-
-      const nextVersionCounter = tabs.length + 1;
-      const newTabId = `v${nextVersionCounter}.0`;
-
-          setTabs((prev) => [
-        ...prev,
-        {
-          id: newTabId,
-          name: `${newTabId} (Rascunho)`,
-          prompt: userQuery,
-          isBlueprint: false,
-          content: data.dashboard_html || "Falha ao renderizar",
-          fullPrompt: data.generationMetadata?.full_prompt,
-          auditTrail: data.auditTrail,
-          followUpSuggestions: data.followUpSuggestions || []
-        },
-      ]);
-      setActiveTabId(newTabId);
-    } catch {
-      setMessages((prev) => [...prev, { role: "agent", content: "[ERRO] Falha na comunicação com a API." }]);
-    } finally {
-      setIsTyping(false);
-    }
+    } catch (err) { console.error("Erro no auto-planejamento:", err); }
+    finally { setIsPlanning(false); }
   };
 
-  const publishToAWS = () => {
-    alert(
-      "Iniciando publicacao...\n\nOrquestrando pipeline na AWS, politicas RBAC e estrutura de distribuicao.\n\n(Fluxo de backend ainda a ser finalizado)",
-    );
+  const addWidget = (type: 'BIGNUMBER' | 'CHART') => {
+    const id = `${type.toLowerCase()}_${Date.now()}`;
+    const newWidget = {
+      id,
+      title: type === 'BIGNUMBER' ? 'Novo Indicador' : 'Novo Gráfico',
+      type,
+      prompt: ''
+    };
+    setPlannedWidgets([...plannedWidgets, newWidget]);
   };
 
-  const handleExportPrompt = () => {
-    if (!activeTab?.fullPrompt) {
-      alert("Aguarde a geração do dashboard para exportar o prompt.");
-      return;
-    }
-    const blob = new Blob([activeTab.fullPrompt], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Agent-BI-Prompt-${activeTab.id}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const removeWidget = (id: string) => {
+    setPlannedWidgets(plannedWidgets.filter(w => w.id !== id));
   };
 
-  const toggleBlueprint = (id: string) => {
-    setTabs((prev) =>
-      prev.map((tab) => {
-        if (tab.id === id) {
-          return {
-            ...tab,
-            isBlueprint: true,
-            name: tab.name.replace("(Rascunho)", "").replace("(Publico)", "") + " (Publico)",
-          };
+  const handleMaterialize = async () => {
+    if (plannedWidgets.length === 0 || isMaterializing) return;
+    setIsMaterializing(true);
+    const trace_id = crypto.randomUUID();
+    window.dispatchEvent(new CustomEvent('agent-bi-trace', { detail: { traceId: trace_id } }));
+
+    try {
+      const response = await fetch("http://127.0.0.1:8000/api/v1/ai/report-prompt/materialize", {
+        method: "POST",
+        headers: getBackendJsonHeaders(),
+        body: JSON.stringify({
+          dashboard_id: activeDashboardId,
+          project_id: projectId,
+          widget_prompts: plannedWidgets.map(w => ({ 
+            id: w.id,
+            title: w.title,
+            prompt: w.prompt,
+            type: w.type,
+            subType: w.subType,
+            business_rationale: w.business_rationale,
+            view_mode: widgetViewMode[w.id] || 'PROMPT',
+            override_sql: (w as any).sql !== undefined ? (w as any).sql : extractWidgetSql(w.id, activeTab?.content)
+          })),
+          trace_id: trace_id
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Erro desconhecido no servidor");
+
+      if (data.status === "success") {
+        if (data.results && Array.isArray(data.results)) {
+            setPlannedWidgets(prev => prev.map(w => {
+                const matched = data.results.find((res: any) => res.widget_id === w.id);
+                if (matched && matched.script_content) {
+                    return { ...w, sql: matched.script_content };
+                }
+                return w;
+            }));
         }
-        return { ...tab, isBlueprint: false, name: tab.name.replace("(Publico)", "(Rascunho)") };
-      }),
-    );
+        
+        const dashboardIdStr = String(data.dashboard_id);
+        const newTab = {
+          id: dashboardIdStr,
+          name: data.dashboard_name,
+          prompt: "",
+          content: data.dashboard_html,
+          isBlueprint: false
+        };
+        setTabs(prev => [...prev, newTab]);
+        setTimeout(() => {
+          setActiveTabId(dashboardIdStr);
+          setViewCode(false);
+        }, 100); 
+      }
+    } catch (err) { console.error("Erro ao materializar:", err); }
+    finally { setIsMaterializing(false); }
+  };
+
+  const handlePromote = async (tabId: string) => {
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/api/v1/dashboards/${tabId}/promote/`, {
+        method: "POST",
+        headers: getBackendJsonHeaders()
+      });
+      const data = await response.json();
+      if (data.status === "success") {
+        setTabs(prev => prev.map(t => t.id === tabId ? { ...t, isBlueprint: true } : t));
+      }
+    } catch (err) { console.error("Erro ao elevar para Blueprint:", err); }
+  };
+
+  const saveTabName = (tabId: string, newName: string) => {
+    setTabs(prev => prev.map(t => t.id === tabId ? { ...t, name: newName } : t));
+    setEditingTabId(null);
   };
 
   const deleteTab = (id: string) => {
@@ -432,601 +340,661 @@ export default function EngineRoom() {
     }
   };
 
-  const activeTab = tabs.find((tab) => tab.id === activeTabId);
+  const wrapInPremiumShell = (fragment: string, datasets: any[]) => {
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+          <script src="https://cdn.tailwindcss.com"></script>
+          <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Outfit:wght@700&display=swap" rel="stylesheet">
+          <style>
+            body { font-family: 'Inter', sans-serif; background: #F8F9FA; color: #1A1A1A; margin: 0; overflow-x: hidden; }
+            .lux-text { font-family: 'Outfit', sans-serif; text-transform: uppercase; letter-spacing: 0.1em; color: #333; }
+            .kpi-card { background: #FFFFFF; border: 1px solid rgba(0,0,0,0.05); border-radius: 20px; transition: all 0.4s ease; box-shadow: 0 4px 20px -5px rgba(0,0,0,0.08); }
+            .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 10px 30px -10px rgba(0,0,0,0.12); border-color: #D4AF37; }
+            .kpi-value { font-family: 'Outfit', sans-serif; color: #1A1A1A; font-weight: 800; }
+            ::-webkit-scrollbar { width: 4px; }
+            ::-webkit-scrollbar-track { background: transparent; }
+            ::-webkit-scrollbar-thumb { background: rgba(212,175,55,0.3); border-radius: 10px; }
+            .animate-fade-in { animation: fadeIn 0.8s ease-out forwards; }
+            @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+          </style>
+        </head>
+        <body class="p-10 animate-fade-in">
+          <script>
+            window.AgentBI_Context = { datasets: ${JSON.stringify(datasets)} };
+            window.AgentBI = {
+                renderWidget: async (containerId, sql, type, title) => {
+                    const container = document.getElementById(containerId);
+                    if(!container) return;
+                    container.innerHTML = '<div class="flex items-center justify-center h-full opacity-20"><div class="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-500"></div></div>';
+                    
+                    const formatValue = (val) => {
+                        if (val === null || val === undefined || val === '') return '-';
+                        const num = parseFloat(val);
+                        if (isNaN(num)) return val;
+                        if (num > 1000000) return (num / 1000000).toFixed(1) + 'M';
+                        if (num > 1000) return (num / 1000).toFixed(1) + 'K';
+                        return num.toLocaleString();
+                    };
+
+                    try {
+                        const response = await fetch('http://127.0.0.1:8000/api/v1/ai/sql-preview', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                sql, 
+                                datasets: window.AgentBI_Context.datasets || [] 
+                            }) 
+                        });
+                        const data = await response.json();
+                        
+                        if (!response.ok) {
+                            throw new Error(data.detail || 'Falha na execução do SQL');
+                        }
+
+                        if (data && data.rows && data.rows.length > 0) {
+                            const rows = data.rows;
+                            const cols = Object.keys(rows[0]);
+
+                            if (type === 'BIGNUMBER') {
+                                let val = 0;
+                                if (rows.length === 1) {
+                                    val = Object.values(rows[0])[0];
+                                } else {
+                                    val = rows.reduce((acc, row) => {
+                                        const v = parseFloat(Object.values(row)[0]);
+                                        return acc + (isNaN(v) ? 0 : v);
+                                    }, 0);
+                                }
+                                
+                                container.innerText = formatValue(val);
+                            } else {
+                                const chart = echarts.init(container, 'light');
+                                let xAxisData = [];
+                                let series = [];
+                                const pastelColors = ['#B3E5FC', '#C8E6C9', '#FFF9C4', '#FFCCBC', '#D1C4E9', '#F8BBD0', '#CFD8DC'];
+
+                                if (cols.length === 2) {
+                                    // Formato Simples: [Label, Valor]
+                                    xAxisData = rows.map(r => r[cols[0]]);
+                                    series = [{ name: title, data: rows.map(r => r[cols[1]]), type: type.toLowerCase() }];
+                                } else if (cols.length >= 3) {
+                                    // Detecção inteligente de formato: Pivotado [Series, Dim, Val] vs Wide [Dim, Metric1, Metric2]
+                                    const firstRow = rows[0];
+                                    const isPivoted = typeof firstRow[cols[0]] === 'string' && 
+                                                     (typeof firstRow[cols[1]] === 'string' || firstRow[cols[1]] instanceof Date) &&
+                                                     typeof firstRow[cols[2]] === 'number';
+
+                                    if (isPivoted && cols.length === 3) {
+                                        // Formato Pivotado ECharts padrão
+                                        const devNames = [...new Set(rows.map(r => r[cols[0]]))];
+                                        xAxisData = [...new Set(rows.map(r => r[cols[1]]))].sort();
+                                        series = devNames.map(name => ({
+                                            name: name, type: type.toLowerCase(),
+                                            data: xAxisData.map(x => {
+                                                const m = rows.find(r => r[cols[0]] === name && r[cols[1]] === x);
+                                                return m ? m[cols[2]] : 0;
+                                            })
+                                        }));
+                                    } else {
+                                        // Formato Wide: [X-Axis, Métrica 1, Métrica 2, ...]
+                                        xAxisData = rows.map(r => r[cols[0]]);
+                                        series = cols.slice(1).map(colName => ({
+                                            name: colName,
+                                            type: type.toLowerCase(),
+                                            data: rows.map(r => r[colName])
+                                        }));
+                                    }
+                                }
+
+                                chart.setOption({
+                                    backgroundColor: 'transparent', color: pastelColors,
+                                    tooltip: { trigger: 'axis', backgroundColor: 'rgba(255,255,255,0.9)', borderWidth: 0, textStyle: { color: '#000', fontSize: 10 } },
+                                    legend: { show: true, bottom: 0, itemWidth: 8, itemHeight: 8, textStyle: { color: '#8C8C8C', fontSize: 8 } },
+                                    grid: { top: 40, bottom: 60, left: 50, right: 20 },
+                                    xAxis: { type: 'category', data: xAxisData, axisLine: { lineStyle: { color: 'rgba(0,0,0,0.05)' } }, axisLabel: { color: '#8C8C8C', fontSize: 9 } },
+                                    yAxis: { type: 'value', splitLine: { lineStyle: { color: 'rgba(0,0,0,0.05)' } }, axisLabel: { color: '#8C8C8C', fontSize: 9 } },
+                                    series: series.map(s => ({ ...s, smooth: true, itemStyle: { borderRadius: [4, 4, 0, 0] } }))
+                                });
+                                // Ajuste de altura para gráficos para garantir que não fiquem achatados
+                                container.style.minHeight = '400px';
+                            }
+
+                            // Adiciona indicador de status da base (KPI ou Gráfico)
+                            const isFull = data.engine === 'sqlite-analytics-local';
+                            const badgeId = 'status-badge-' + containerId;
+                            let badge = document.getElementById(badgeId);
+                            if(!badge) {
+                                badge = document.createElement('div');
+                                badge.id = badgeId;
+                                badge.style.position = 'absolute';
+                                badge.style.top = '10px';
+                                badge.style.right = '10px';
+                                badge.style.fontSize = '8px';
+                                badge.style.padding = '2px 6px';
+                                badge.style.borderRadius = '4px';
+                                badge.style.fontWeight = 'bold';
+                                badge.style.zIndex = '50';
+                                container.parentElement.style.position = 'relative';
+                                container.parentElement.appendChild(badge);
+                            }
+                            badge.innerText = isFull ? 'BASE TOTAL' : 'AMOSTRA';
+                            badge.style.background = isFull ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)';
+                            badge.style.color = isFull ? '#10b981' : '#f59e0b';
+
+                        } else {
+                            container.innerHTML = \`
+                                <div class="kpi-card p-8 flex flex-col items-center justify-center text-center shadow-md h-full">
+                                    <span class="text-[10px] text-gray-400 uppercase tracking-widest">No Data Distributed</span>
+                                    <span class="text-[8px] text-gray-300 mt-1 whitespace-normal max-w-[150px]">\${title}</span>
+                                </div>\`;
+                        }
+                    } catch (e) {
+                        console.error('Widget Error:', e);
+                        container.innerHTML = \`
+                            <div class="kpi-card p-6 border-red-200 bg-red-50 flex flex-col items-center justify-center text-center shadow-inner h-full overflow-hidden">
+                                <svg class="w-8 h-8 text-red-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                <span class="text-red-700 text-[10px] uppercase font-black tracking-widest mb-2">Erro de Execução</span>
+                                <div class="bg-white/50 p-3 rounded-lg border border-red-100 w-full overflow-auto max-h-[150px]">
+                                    <code class="text-red-600 text-[9px] font-mono leading-tight break-words">\${e.message}</code>
+                                </div>
+                                <span class="text-gray-400 text-[8px] mt-3 italic">Verifique as colunas e a sintaxe do SQL manual.</span>
+                            </div>\`;
+                    }
+                }
+            };
+          </script>
+
+          <div id="dashboard-root" class="max-w-7xl mx-auto space-y-12">
+            ${fragment}
+          </div>
+        </body>
+      </html>
+    `;
+  };
+
+  const GeneratingAnimation = () => (
+    <div className="flex flex-col items-center justify-center p-20 text-center h-full relative overflow-hidden">
+      <motion.div 
+        animate={{ scale: [1, 1.2, 1], opacity: [0.1, 0.3, 0.1] }}
+        transition={{ repeat: Infinity, duration: 4 }}
+        className="absolute w-[400px] h-[400px] bg-lux-accent/10 rounded-full blur-[100px]"
+      />
+      <div className="relative z-10">
+        <div className="relative flex items-center justify-center">
+          {[0, 72, 144, 216, 288].map((angle, i) => (
+            <motion.div
+              key={i}
+              animate={{ rotate: 360, scale: [1, 1.5, 1] }}
+              transition={{ 
+                rotate: { repeat: Infinity, duration: 3 + i, ease: "linear" },
+                scale: { repeat: Infinity, duration: 2, delay: i * 0.2 }
+              }}
+              className="absolute w-2 h-2 rounded-full bg-lux-accent shadow-[0_0_10px_rgba(212,175,55,0.8)]"
+              style={{ originX: "28px", originY: "28px" }}
+            />
+          ))}
+          <div className="w-24 h-24 rounded-full border-2 border-lux-accent/20 flex items-center justify-center bg-lux-card/40 backdrop-blur-xl shadow-2xl relative overflow-hidden group">
+            <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }}>
+              <RefreshCw size={40} className="text-lux-accent" />
+            </motion.div>
+          </div>
+        </div>
+        <div className="mt-12 space-y-4">
+           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-2">
+             <h3 className="font-serif italic text-2xl text-lux-text tracking-tighter">{loadingAgent}</h3>
+             <div className="flex items-center justify-center gap-3">
+               <span className="text-[10px] font-black uppercase tracking-[0.3em] text-lux-accent animate-pulse">{loadingAction}</span>
+             </div>
+           </motion.div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const extractWidgetSql = (widgetId: string, content: string | undefined): string => {
+    if (!content) return "-- Dashboard não gerado.";
+    try {
+      const pattern = "AgentBI\\.renderWidget\\s*\\(\\s*['\"]widget-" + widgetId + "['\"]\\s*,\\s*(.*?)\\s*,\\s*['\"]";
+      const regex = new RegExp(pattern, 'm');
+      const match = content.match(regex);
+      if (match && match[1]) {
+          try {
+              let sql = JSON.parse(match[1]);
+              return sql;
+          } catch(e) {
+              return match[1].replace(/^"|"$/g, '').replace(/\\n/g, '\n').trim();
+          }
+      }
+      return "-- SQL não encontrado para este widget.";
+    } catch (err) { return "-- Erro na extração do SQL."; }
+  };
+
+  const activeTab = tabs.find((tab) => String(tab.id) === String(activeTabId));
+  
+  // Sincronização de segurança: Se temos abas mas nenhuma ativa (ou ID órfão), seleciona a primeira
+  useEffect(() => {
+    if (tabs.length > 0 && !activeTab && !isWorking) {
+      setActiveTabId(tabs[tabs.length - 1].id);
+    }
+  }, [tabs, activeTab, isWorking]);
+
   const previousHref = projectId ? `/projects/${projectId}/insights` : "/projects";
 
   return (
-    <div className="max-w-[1600px] mx-auto w-full h-screen flex flex-col px-4 overflow-hidden">
-      <div className="relative z-0 mb-4 pt-2">
-        <ProjectPhases projectId={projectId || "PRJ-TEMP"} />
-      </div>
+    <div className="max-w-full mx-auto w-full h-screen flex flex-col overflow-hidden bg-lux-bg transition-colors duration-500">
+      <header className="shrink-0 z-[60] bg-white/80 dark:bg-lux-card/80 backdrop-blur-md border-b border-lux-border/10">
+        <div className="px-6 py-3 flex items-center justify-between">
+          <ProjectHeaderStandard 
+            projectId={projectId || "PRJ-TEMP"} step={5} title="Studio Room" 
+            prevHref={previousHref} prevLabel="Insights" isCompact 
+          />
+          <ProjectPhases projectId={projectId || "PRJ-TEMP"} isCompact />
+        </div>
+      </header>
 
-      <ProjectHeaderStandard 
-        projectId={projectId || "PRJ-TEMP"}
-        step={5}
-        title="Agente BI"
-        prevHref={previousHref}
-        prevLabel="Voltar para Semântica"
-      />
-
-      <div className="flex items-center justify-center gap-6 mb-4">
-          <div className={`px-4 py-1.5 rounded-full border flex items-center gap-2 transition-all duration-700 ${
-            dataReady 
-              ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.1)]" 
-              : "bg-amber-500/10 border-amber-500/20 text-amber-500 animate-pulse shadow-[0_0_15px_rgba(245,158,11,0.1)]"
-          }`}>
-            {dataReady ? (
-              <>
-                <CheckCircle2 size={14} className="stroke-[3]" />
-                <span className="text-[10px] font-black uppercase tracking-[0.2em]">Cérebro Pronto</span>
-              </>
-            ) : (
-              <>
-                <Loader2 size={14} className="animate-spin" />
-                <span className="text-[10px] font-black uppercase tracking-[0.2em]">Otimizando Dados...</span>
-              </>
-            )}
-          </div>
-      </div>
-      <p className="text-[11px] text-lux-muted font-medium italic text-center mb-6">"Refine o painel com o agente e publique a versão aprovada."</p>
-
-      <div className="flex flex-col lg:flex-row w-full flex-1 min-h-[400px] gap-8 pb-6 overflow-hidden px-4 md:px-8">
-        {/* LADO ESQUERDO: Dashboard (Protagonista - Expansível) */}
-        <div className="flex-1 min-h-0 flex flex-col bg-white dark:bg-lux-card/55 backdrop-blur-xl border border-lux-border/60 dark:border-lux-border/85 rounded-[3rem] overflow-hidden shadow-2xl shadow-lux-shadow/10 transition-all duration-500">
-          <div className="flex bg-[#F9F9F9] dark:bg-lux-card/90 border-b border-[#F1E9DB] dark:border-lux-border/85 overflow-x-auto custom-scrollbar shrink-0 p-2 gap-1">
-            {tabs.map((tab) => (
-              <div
-                key={tab.id}
-                onClick={() => setActiveTabId(tab.id)}
-                className={`flex items-center gap-3 px-8 py-3 cursor-pointer min-w-max transition-all text-[10px] font-black uppercase tracking-widest rounded-2xl ${
-                  activeTabId === tab.id
-                    ? "bg-white border border-[#D4AF37]/30 text-[#1A1A1A] shadow-md scale-[1.02]"
-                    : "bg-transparent text-[#8C8C8C] hover:bg-white"
-                }`}
-              >
-                {tab.name}
-                {tab.isBlueprint && <Star size={12} className="text-[#D4AF37] fill-current ml-1" />}
-                {tabs.length > 1 && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteTab(tab.id);
-                    }}
-                    className="text-lux-muted/40 hover:text-red-800 transition-colors ml-4"
-                    title="Descartar versao"
-                  >
-                    <Trash size={12} />
-                  </button>
-                )}
-              </div>
-            ))}
+      <div className="flex w-full flex-1 min-h-0 overflow-hidden relative border-t border-lux-border/10">
+        <div style={{ width: plannerWidth }} className="flex-shrink-0 flex flex-col bg-white/40 dark:bg-black/20 backdrop-blur-xl border-r border-lux-border/20 overflow-hidden">
+          <div className="p-6 border-b border-lux-border/10 flex items-center justify-between shrink-0">
+             <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-lux-text text-lux-bg flex items-center justify-center shadow-lg"><LayoutDashboard size={18} /></div>
+                <h2 className="text-sm font-black uppercase tracking-widest text-lux-text">Planner</h2>
+             </div>
+             <button onClick={() => setIsDrawerOpen(true)} className="flex items-center gap-2 bg-lux-accent/10 border border-lux-accent/30 text-lux-accent px-3 py-1.5 rounded-xl text-[10px] font-black uppercase shadow-sm">
+               <Database size={12} /><span>Catalog</span>
+             </button>
           </div>
 
-            <div className="flex-grow bg-[#F3F4F6] dark:bg-[#0a0807] relative overflow-hidden p-4 md:p-8 flex items-center justify-center">
-              {/* Moldura Premium Browser - Professional Finish */}
-              <div className="w-full h-full bg-white dark:bg-lux-card rounded-[2rem] shadow-[0_40px_120px_-20px_rgba(0,0,0,0.2)] border border-[#F1E9DB] dark:border-lux-border/40 overflow-hidden flex flex-col">
-                <div className="h-12 bg-white dark:bg-black/40 border-b border-[#F1E9DB] flex items-center px-6 gap-6 shrink-0">
-                  <div className="flex gap-2">
-                    <div className="w-3 h-3 rounded-full bg-[#FF5F57] shadow-inner" />
-                    <div className="w-3 h-3 rounded-full bg-[#FFBD2E] shadow-inner" />
-                    <div className="w-3 h-3 rounded-full bg-[#28C840] shadow-inner" />
-                  </div>
-                  <div className="flex-1 bg-[#F9F9F9] dark:bg-white/5 rounded-full h-7 border border-[#F1E9DB] flex items-center px-4 gap-3">
-                    <LayoutDashboard size={12} className="text-[#D4AF37]" />
-                    <span className="text-[10px] text-[#8C8C8C] font-bold tracking-tight truncate">secure.agent-bi.ai / {activeTab?.name}</span>
-                  </div>
-                </div>
-                
-                <div className="flex-1 relative overflow-hidden bg-white dark:bg-[#120f0d] p-0">
-                  {activeTab?.content && !viewCode ? (
-                    <iframe
-                      srcDoc={activeTab.content}
-                      className="w-full h-full border-none shadow-inner"
-                      sandbox="allow-scripts allow-same-origin"
-                      title="Agente BI Canvas"
-                    />
-                  ) : activeTab?.content ? (
-                    <pre className="p-10 text-xs text-[#E0E0E0] bg-[#1A1A1A] h-full overflow-auto font-mono leading-relaxed">
-                      {activeTab.content}
-                    </pre>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center p-20 text-lux-muted/50 text-center h-full">
-                      <div className="p-6 bg-[#FDF9F0] rounded-full mb-8 animate-pulse text-[#D4AF37]">
-                        <RefreshCw size={48} className="animate-spin duration-[3s]" />
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6 pb-32">
+            <div className="flex items-center justify-between mb-8">
+               <h2 className="text-[10px] uppercase font-black text-lux-text tracking-[0.4em] flex items-center gap-3">
+                 <ShieldCheck size={14} className="text-lux-accent" /> Planner Estratégico
+               </h2>
+               <button 
+                  onClick={handleMaterialize} disabled={plannedWidgets.length === 0 || isMaterializing}
+                  className="bg-lux-text text-lux-bg px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-xl hover:scale-105 transition-all disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isMaterializing ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} className="text-lux-accent" />}
+                  {isMaterializing ? "Gerando..." : "Gerar Relatório"}
+               </button>
+            </div>
+            
+              {isPlanning && plannedWidgets.length === 0 && (
+                <div className="space-y-4">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="h-32 bg-lux-bg/50 dark:bg-white/5 border border-lux-border/10 rounded-3xl animate-pulse flex flex-col p-4 gap-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-xl bg-lux-text/10" />
+                          <div className="w-24 h-3 bg-lux-text/10 rounded-full" />
+                        </div>
+                        <div className="w-12 h-4 bg-lux-accent/10 rounded-full" />
                       </div>
-                      <p className="font-serif italic text-xl text-[#1A1A1A] mb-2">{loadingAgent}</p>
-                      <p className="text-xs font-black uppercase tracking-[0.2em] text-[#D4AF37]">{loadingAction}</p>
+                      <div className="w-full h-12 bg-lux-text/5 rounded-2xl" />
                     </div>
-                  )}
+                  ))}
+                  <div className="flex flex-col items-center gap-2 py-4">
+                     <Loader2 size={18} className="text-lux-accent animate-spin" />
+                     <p className="text-[9px] font-black uppercase tracking-widest text-lux-accent animate-pulse">IA desenhando estratégia...</p>
+                  </div>
                 </div>
-              </div>
+              )}
 
-            <div className="absolute bottom-12 right-12 flex gap-3 z-20">
-              <button
-                onClick={() => setShowAuditModal(true)}
-                className="bg-lux-text text-white px-8 py-4 rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.3)] flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.25em] hover:scale-105 hover:bg-lux-accent hover:text-lux-text transition-all active:scale-95"
+              <Reorder.Group 
+                axis="y" 
+                values={plannedWidgets} 
+                onReorder={setPlannedWidgets}
+                className="space-y-4"
               >
-                <Terminal size={18} />
-                Audit Log: Ver Lógica
+                {plannedWidgets.map((widget) => {
+                  const isBigNumber = widget.type === 'BIGNUMBER';
+                  const viewMode = widgetViewMode[widget.id] || 'PROMPT';
+                  
+                  return (
+                    <Reorder.Item 
+                      key={widget.id} 
+                      value={widget}
+                      initial={{ opacity: 0, x: -20 }} 
+                      animate={{ opacity: 1, x: 0 }}
+                      className="group bg-white border border-lux-border/20 rounded-3xl overflow-hidden shadow-sm hover:shadow-xl hover:border-lux-accent/30 transition-shadow flex flex-col cursor-auto select-none"
+                    >
+                      <div className={`px-4 py-3 bg-[#fdfdfd] border-b border-lux-border/10 flex items-center justify-between gap-3`}>
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                           {/* Alça de Arraste */}
+                           <div className="cursor-grab active:cursor-grabbing text-lux-muted/30 hover:text-lux-accent transition-colors shrink-0 -ml-1 pr-1">
+                              <GripVertical size={14} />
+                           </div>
+
+                           <div className={`p-2 rounded-xl shrink-0 ${isBigNumber ? 'bg-lux-text/10 text-lux-text' : 'bg-lux-accent/20 text-lux-accent'}`}>
+                             {isBigNumber ? <Activity size={15} /> : (
+                               widget.subType === 'PIE' ? <PieChartIcon size={15} /> : (widget.subType === 'LINE' ? <LineChartIcon size={15} /> : <BarChart3 size={15} />)
+                             )}
+                           </div>
+                           <input 
+                              value={widget.title}
+                              onChange={(e) => {
+                                const next = [...plannedWidgets];
+                                const idx = next.findIndex(w => w.id === widget.id);
+                                next[idx].title = e.target.value;
+                                setPlannedWidgets(next);
+                              }}
+                              className="bg-transparent border-none text-[11px] font-black uppercase text-lux-text p-0 focus:ring-0 flex-1 min-w-0 truncate"
+                              placeholder="Título..."
+                           />
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                           <div className={`hidden sm:inline-block px-2 py-0.5 rounded-full text-[7px] font-black uppercase ${isBigNumber ? 'bg-emerald-500 text-white' : 'bg-lux-accent text-black'}`}>
+                              {isBigNumber ? 'KPI' : 'Chrt'}
+                           </div>
+                           <div className="flex items-center gap-0.5 bg-black/5 p-0.5 rounded-xl border border-black/5">
+                              <button onClick={() => setWidgetViewMode(prev => ({ ...prev, [widget.id]: 'PROMPT' }))} className={`px-2.5 py-1 rounded-lg text-[8px] font-black transition-all ${viewMode === 'PROMPT' ? 'bg-lux-text text-white shadow-md' : 'text-lux-muted hover:text-lux-text'}`}>PROMPT</button>
+                              <button onClick={() => tabs.length > 0 && setWidgetViewMode(prev => ({ ...prev, [widget.id]: 'SQL' }))} disabled={tabs.length === 0} className={`px-2.5 py-1 rounded-lg text-[8px] font-black transition-all ${viewMode === 'SQL' ? 'bg-lux-accent text-black shadow-md' : 'text-lux-muted hover:text-lux-accent disabled:opacity-30'}`}>SQL</button>
+                           </div>
+                        </div>
+                      </div>
+                      <div className="p-4 relative min-h-[140px] flex flex-col">
+                        {/* Conteúdo do Card (Omitido para brevidade no diff se possível, mas vou manter para garantir integridade) */}
+                        {viewMode === 'PROMPT' ? (
+                          <div className="flex-1 flex flex-col">
+                            <textarea 
+                              value={widget.prompt}
+                              onChange={(e) => {
+                                const next = [...plannedWidgets];
+                                const idx = next.findIndex(w => w.id === widget.id);
+                                next[idx].prompt = e.target.value;
+                                setPlannedWidgets(next);
+                              }}
+                              className="w-full bg-transparent text-xs text-lux-text font-medium leading-relaxed resize-none outline-none flex-1 min-h-[80px] overflow-y-auto custom-scrollbar"
+                              placeholder="Descreva a regra de negócio..."
+                            />
+                            {!isBigNumber && (
+                              <div className="mt-2 flex gap-1.5 border-t border-lux-border/5 pt-2">
+                                {['BAR', 'LINE', 'PIE'].map((type) => (
+                                  <button key={type} onClick={() => {
+                                    const next = [...plannedWidgets];
+                                    const idx = next.findIndex(w => w.id === widget.id);
+                                    next[idx].subType = type;
+                                    setPlannedWidgets(next);
+                                  }} className={`px-1.5 py-0.5 rounded border text-[7px] font-black ${widget.subType === type ? 'bg-lux-accent text-black border-lux-accent' : 'border-lux-border/10 text-lux-muted'}`}>{type}</button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex-1 bg-black rounded-2xl p-4 overflow-hidden border border-white/10 shadow-inner group/terminal relative">
+                            <div className="absolute top-2 right-4 flex gap-1.5">
+                              <div className="w-1.5 h-1.5 rounded-full bg-red-500/30" />
+                              <div className="w-1.5 h-1.5 rounded-full bg-amber-500/30" />
+                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/30" />
+                            </div>
+                             <textarea 
+                                value={(widget as any).sql !== undefined ? (widget as any).sql : extractWidgetSql(widget.id, activeTab?.content)}
+                                onChange={(e) => {
+                                  const next = [...plannedWidgets];
+                                  const idx = next.findIndex(w => w.id === widget.id);
+                                  (next[idx] as any).sql = e.target.value;
+                                  setPlannedWidgets(next);
+                                }}
+                                spellCheck={false}
+                                className="w-full h-full bg-transparent border-none outline-none resize-none text-[11px] font-mono text-[#00FF41] custom-scrollbar whitespace-pre-wrap break-words leading-relaxed drop-shadow-[0_0_5px_rgba(0,255,65,0.4)] mt-2 pt-1 overflow-y-auto"
+                             />
+                          </div>
+                        )}
+                        <button onClick={() => removeWidget(widget.id)} className="absolute top-2 right-2 p-1 text-red-500 opacity-0 group-hover:opacity-100 transition-all font-bold">✕</button>
+                      </div>
+                    </Reorder.Item>
+                  );
+                })}
+              </Reorder.Group>
+
+            <div className="flex items-center gap-3 mt-6">
+              <button 
+                onClick={() => addWidget('BIGNUMBER')}
+                className="flex-1 py-4 border-2 border-dashed border-lux-border/20 rounded-3xl text-lux-muted hover:border-lux-accent transition-all flex flex-col items-center gap-1 group"
+              >
+                 <Plus size={16} className="group-hover:rotate-90 transition-transform" />
+                 <span className="text-[8px] font-black uppercase tracking-widest">Novo KPI</span>
               </button>
-              
-              <button
-                onClick={() => setViewCode(!viewCode)}
-                className="bg-[#1A1A1A] text-white px-8 py-4 rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.3)] flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.25em] hover:scale-105 hover:bg-[#D4AF37] hover:text-[#1A1A1A] transition-all active:scale-95"
+              <button 
+                onClick={() => addWidget('CHART')}
+                className="flex-1 py-4 border-2 border-dashed border-lux-border/20 rounded-3xl text-lux-muted hover:border-lux-accent transition-all flex flex-col items-center gap-1 group"
               >
-                {viewCode ? <Eye size={18} /> : <Code size={18} />}
-                {viewCode ? "Visualizar Painel" : "Inspecionar Código"}
+                 <Plus size={16} className="group-hover:rotate-90 transition-transform" />
+                 <span className="text-[8px] font-black uppercase tracking-widest">Novo Gráfico</span>
               </button>
             </div>
           </div>
         </div>
 
-        {/* Modal de Auditoria Analítica */}
-        <AnimatePresence>
+        <div onMouseDown={startResizing} className={`w-1 cursor-col-resize z-[30] ${isResizing ? 'bg-lux-accent' : 'bg-transparent hover:bg-lux-border/30'}`} />
+
+        <div className="flex-1 min-w-0 bg-[#f8f9fa] dark:bg-[#0c0c0e] flex flex-col relative overflow-hidden">
+            <div className="h-14 bg-white/80 dark:bg-lux-card/80 backdrop-blur-xl border-b border-lux-border/10 flex items-center px-6 gap-2 shrink-0 z-40 relative">
+              <div className="flex items-center gap-3 pr-4 border-r border-lux-border/10 mr-2 shrink-0">
+                <ClockIcon size={14} className="text-lux-accent" />
+                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-lux-muted">History</span>
+              </div>
+              
+              {/* Rail de Versões Ativas (Max 5) */}
+              <div className="flex items-center gap-1 overflow-visible">
+                {tabs.slice(0, 5).map((tab) => (
+                  <div key={tab.id} className="relative group/tab">
+                    {editingTabId === tab.id ? (
+                      <div className="h-9 px-4 bg-lux-accent/10 border border-lux-accent/30 rounded-xl flex items-center gap-2">
+                        <input 
+                          autoFocus
+                          className="bg-transparent border-none outline-none text-[10px] font-bold text-lux-accent w-20"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') saveTabName(tab.id, editingName); if (e.key === 'Escape') setEditingTabId(null); }}
+                          onBlur={() => saveTabName(tab.id, editingName)}
+                        />
+                        <Check size={12} className="text-lux-accent cursor-pointer" onClick={() => saveTabName(tab.id, editingName)} />
+                      </div>
+                    ) : (
+                      <button 
+                        onClick={() => setActiveTabId(tab.id)}
+                        onDoubleClick={() => { setEditingTabId(tab.id); setEditingName(tab.name); }}
+                        className={`h-9 px-5 flex items-center gap-3 transition-all relative rounded-xl group ${activeTabId === tab.id ? "bg-lux-text text-white shadow-lg scale-[1.02]" : "text-lux-muted hover:bg-lux-border/5"}`}
+                      >
+                        <span className="text-[10px] font-black uppercase tracking-widest truncate max-w-[80px]">
+                          {tab.isBlueprint ? 'BLU' : tab.name.split(' ').pop()}
+                        </span>
+                        {tab.isBlueprint && <Star size={10} className="text-lux-accent fill-current animate-pulse" />}
+                        {activeTabId === tab.id && (
+                          <motion.div layoutId="tab-glow" className="absolute inset-0 bg-lux-accent/10 rounded-xl -z-10" />
+                        )}
+                        <button onClick={(e) => { e.stopPropagation(); deleteTab(tab.id); }} className="p-1 hover:text-red-500 rounded-lg transition-colors opacity-0 group-hover:opacity-40"><Plus size={10} className="rotate-45" /></button>
+                      </button>
+                    )}
+                  </div>
+                ))}
+                
+                {/* Botão de Histórico / Dropdown */}
+                <div className="relative">
+                  <button 
+                    onClick={() => setIsHistoryOpen(!isHistoryOpen)}
+                    className={`h-9 w-9 flex items-center justify-center rounded-xl transition-all ${isHistoryOpen ? 'bg-lux-accent text-black' : 'text-lux-muted hover:bg-lux-border/5'}`}
+                  >
+                    <History size={16} />
+                  </button>
+                  
+                  <AnimatePresence>
+                    {isHistoryOpen && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        className="absolute top-12 left-0 w-64 bg-white dark:bg-lux-card border border-lux-border/20 shadow-2xl rounded-2xl overflow-hidden z-[100] backdrop-blur-2xl"
+                      >
+                        <div className="p-3 bg-lux-bg/50 dark:bg-black/20 border-b border-lux-border/10">
+                          <span className="text-[8px] font-black uppercase tracking-widest text-lux-muted">Timeline Completa</span>
+                        </div>
+                        <div className="max-h-80 overflow-y-auto custom-scrollbar">
+                          {tabs.map((tab) => (
+                            <button 
+                              key={tab.id}
+                              onClick={() => { setActiveTabId(tab.id); setIsHistoryOpen(false); }}
+                              className={`w-full p-4 flex items-center justify-between hover:bg-lux-accent/5 transition-all border-b border-lux-border/5 text-left group ${activeTabId === tab.id ? 'bg-lux-accent/10' : ''}`}
+                            >
+                              <div className="flex items-center gap-3">
+                                {tab.isBlueprint ? <Star size={12} className="text-lux-accent fill-current" /> : <div className="w-1.5 h-1.5 rounded-full bg-lux-muted/30" />}
+                                <span className={`text-[10px] font-bold ${activeTabId === tab.id ? 'text-lux-text' : 'text-lux-muted'}`}>{tab.name}</span>
+                              </div>
+                              <div className="opacity-0 group-hover:opacity-100 flex items-center gap-2">
+                                <Edit2 size={10} className="text-lux-muted hover:text-lux-accent" onClick={(e) => { e.stopPropagation(); setEditingTabId(tab.id); setEditingName(tab.name); setIsHistoryOpen(false); }} />
+                                <Plus size={12} className="rotate-45 text-lux-muted hover:text-red-500" onClick={(e) => { e.stopPropagation(); deleteTab(tab.id); }} />
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                        {tabs.length === 0 && (
+                          <div className="p-10 text-center text-lux-muted italic text-[10px]">Nenhum rascunho na linha do tempo</div>
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+            </div>
+
+           <div className="flex-1 relative flex flex-col p-6 space-y-6 overflow-hidden">
+              <div className="flex-1 bg-white dark:bg-lux-card rounded-[2.5rem] shadow-2xl border border-lux-border/5 overflow-hidden flex flex-col relative">
+                <div className="h-12 bg-lux-bg/50 dark:bg-black/40 border-b border-lux-border/10 flex items-center px-6 gap-4 shrink-0 transition-all">
+                  <div className="flex gap-1.5 shrink-0"><div className="w-2.5 h-2.5 rounded-full bg-[#FF5F56] shadow-sm" /><div className="w-2.5 h-2.5 rounded-full bg-[#FFBD2E] shadow-sm" /><div className="w-2.5 h-2.5 rounded-full bg-[#27C93F] shadow-sm" /></div>
+                  
+                  <div className="flex-1 h-7 bg-white/40 dark:bg-white/5 rounded-xl border border-lux-border/10 flex items-center px-4 justify-between group overflow-hidden">
+                     <div className="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity overflow-hidden">
+                       <span className="text-[9px] text-lux-muted font-bold tracking-widest uppercase shrink-0">secure.agent-bi.studio /</span> 
+                       <span className="text-[9px] text-lux-accent font-black uppercase truncate">{activeTab?.name || 'pipeline-active'}</span>
+                     </div>
+                     {activeTab?.isBlueprint ? (
+                       <div className="flex items-center gap-2 bg-lux-accent/10 px-3 py-1 rounded-lg">
+                          <Star size={10} className="text-lux-accent fill-current" />
+                          <span className="text-[8px] font-black text-lux-accent uppercase tracking-tighter">Certified Blueprint</span>
+                       </div>
+                     ) : (
+                       <div className="flex items-center gap-2 px-3 py-1 bg-amber-500/10 rounded-lg">
+                         <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                         <span className="text-[8px] font-black text-amber-500 uppercase tracking-tighter">Draft Version</span>
+                       </div>
+                     )}
+                  </div>
+
+                  {activeTab && !activeTab.isBlueprint && (
+                    <button 
+                      onClick={() => handlePromote(activeTab.id)}
+                      className="h-8 px-4 bg-lux-accent text-black rounded-xl text-[9px] font-black uppercase tracking-widest hover:scale-105 hover:shadow-lg hover:shadow-lux-accent/20 transition-all flex items-center gap-2 shrink-0"
+                    >
+                      <Zap size={12} fill="currentColor" /> Elevate to Blueprint
+                    </button>
+                  )}
+                </div>
+                <div className="flex-1 relative bg-white dark:bg-[#0c0c0e] overflow-hidden">
+                   {activeTab?.content && !viewCode ? (
+                    <iframe key={`dashboard-${activeTab.id}`} srcDoc={wrapInPremiumShell(activeTab.content, projectDatasets)} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin" title="Agente BI Canvas" />
+                  ) : activeTab?.content ? (
+                    <pre className="p-10 text-[11px] text-[#E0E0E0] bg-[#0c0c0e] h-full overflow-auto font-mono leading-relaxed custom-scrollbar">{activeTab.content}</pre>
+                  ) : activeTabId && !activeTab ? (
+                    <div className="flex flex-col items-center justify-center h-full text-lux-muted">
+                      <p className="text-sm font-bold">Aba {activeTabId} não encontrada</p>
+                      <button onClick={() => setActiveTabId(tabs[0]?.id)} className="mt-2 text-[10px] underline">Voltar para início</button>
+                    </div>
+                  ) : isWorking ? (
+                    <GeneratingAnimation />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center p-20 text-lux-muted/50 text-center h-full">
+                      <div className="p-10 rounded-[3rem] border border-lux-border/10 bg-lux-bg/5 flex flex-col items-center gap-6">
+                        <Layers size={48} strokeWidth={1} className="opacity-20" />
+                        <div className="space-y-2">
+                           <p className="font-serif italic text-xl text-lux-text">Agent-BI Engine Ready</p>
+                           <p className="text-[9px] font-black uppercase tracking-[0.3em] text-lux-accent">Aguardando sua configuração estratégica</p>
+                        </div>
+                        <button onClick={autoPlan} className="mt-4 px-6 py-3 bg-lux-text text-lux-bg hover:bg-lux-accent transition-all rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl flex items-center gap-2 group">
+                           <Sparkles size={14} className="group-hover:animate-spin" /> Auto-Configuração IA
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 p-1.5 bg-black/90 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-30">
+                    <button onClick={() => setShowAuditModal(true)} title="Governance Trail" className="p-3 text-white/60 hover:text-lux-accent transition-colors"><ShieldCheck size={18} /></button>
+                    <div className="w-[1px] h-6 bg-white/10" />
+                    <button onClick={() => setViewCode(!viewCode)} title="Toggle Code View" className="p-3 text-white/60 hover:text-lux-accent transition-colors">{viewCode ? <EyeIcon size={18} /> : <CodeIcon size={18} />}</button>
+          </div>
+        </div>
+      </div>
+
+      <div className="fixed bottom-10 right-10 z-[100]">
+        <motion.div animate={{ width: isDrawerOpen ? 340 : 56, height: isDrawerOpen ? 500 : 56, borderRadius: isDrawerOpen ? 32 : 28 }} className="bg-white/90 dark:bg-lux-card/90 backdrop-blur-2xl border border-lux-border/40 shadow-2xl overflow-hidden flex flex-col relative">
+          <div className="flex items-center justify-between p-3 shrink-0">
+             {isDrawerOpen && (
+               <div className="flex items-center gap-3 px-3">
+                 <div className="w-8 h-8 rounded-full bg-lux-accent/20 flex items-center justify-center"><Database size={16} className="text-lux-accent" /></div>
+                 <div className="flex flex-col text-left"><span className="text-[10px] font-black uppercase tracking-widest text-lux-text">Data Assets</span><span className="text-[8px] text-lux-muted font-bold">FIELD CATALOG</span></div>
+               </div>
+             )}
+             <button onClick={() => setIsDrawerOpen(!isDrawerOpen)} className={`flex items-center justify-center transition-all ${isDrawerOpen ? 'w-10 h-10 hover:bg-lux-border/10 text-lux-muted' : 'w-10 h-10 bg-lux-text text-lux-bg shadow-lg hover:scale-110'}`}>{isDrawerOpen ? <Plus className="rotate-45" size={24} /> : <Database size={20} />}</button>
+          </div>
+          <AnimatePresence>
+            {isDrawerOpen && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 overflow-y-auto px-5 pb-8 space-y-6 custom-scrollbar">
+                 {projectSources.map((source) => (
+                   <div key={source.id} className="space-y-4">
+                      <div className="flex items-center justify-between px-2 pt-2"><span className="text-[10px] font-black text-lux-accent uppercase truncate">{source.name}</span><button onClick={() => setSampleData({ tableName: source.name, rows: source.sample.slice(0, 5) })} className="p-1.5 hover:bg-lux-accent/10 rounded-lg text-lux-accent"><EyeIcon size={14} /></button></div>
+                      <div className="grid grid-cols-1 gap-2">
+                         {source.columns.map((col: string) => (
+                           <div key={col} draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", col)} className="px-4 py-2 bg-lux-bg/50 dark:bg-white/5 border border-lux-border/10 rounded-2xl text-[10px] font-bold text-lux-text hover:border-lux-accent hover:scale-[1.02] transition-all cursor-grab flex items-center justify-between group shadow-sm text-left">
+                              <div className="flex items-center gap-3 overflow-hidden"><div className="w-1.5 h-1.5 rounded-full bg-lux-accent/30 group-hover:bg-lux-accent shrink-0" /><span className="truncate">{col}</span></div>
+                              <Plus size={10} className="text-lux-muted/30 group-hover:text-lux-accent" />
+                           </div>
+                         ))}
+                      </div>
+                   </div>
+                 ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      </div>
+
+      <AnimatePresence>
+        {sampleData && (
+          <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="fixed bottom-12 left-1/2 -translate-x-1/2 z-[80] w-[90%] max-w-4xl bg-white dark:bg-lux-card rounded-[2.5rem] shadow-2xl border border-lux-border/30 overflow-hidden flex flex-col max-h-[400px]">
+            <div className="p-6 bg-lux-text text-lux-bg flex items-center justify-between shrink-0"><div className="flex items-center gap-3"><Table size={20} className="text-lux-accent" /><span className="text-xs font-black uppercase tracking-widest">Sample View: {sampleData.tableName}</span></div><button onClick={() => setSampleData(null)} className="p-1 hover:bg-white/10 rounded-full"><Plus size={20} className="rotate-45" /></button></div>
+            <div className="flex-1 overflow-auto p-4 custom-scrollbar">
+               <table className="w-full text-left border-collapse">
+                  <thead><tr className="border-b border-lux-border/20 sticky top-0 bg-white dark:bg-lux-card z-10">{sampleData.rows.length > 0 && Object.keys(sampleData.rows[0]).map(col => (<th key={col} className="p-4 text-[9px] font-black uppercase tracking-widest text-lux-muted">{col}</th>))}</tr></thead>
+                  <tbody>{sampleData.rows.map((row, i) => (<tr key={i} className="border-b border-lux-border/10 hover:bg-lux-accent/5 transition-colors">{Object.values(row).map((val: any, j) => (<td key={j} className="p-4 text-[10px] font-bold text-lux-text tabular-nums">{String(val)}</td>))}</tr>))}</tbody>
+               </table>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
           {showAuditModal && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6 md:p-12"
-            >
-              <motion.div 
-                initial={{ scale: 0.9, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.9, y: 20 }}
-                className="w-full max-w-5xl h-full max-h-[85vh] bg-lux-bg border border-lux-border/40 rounded-[3rem] shadow-2xl overflow-hidden flex flex-col"
-              >
-                <div className="p-8 border-b border-lux-border/20 flex items-center justify-between shrink-0">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-lux-text text-white flex items-center justify-center shadow-xl">
-                      <ShieldCheck size={28} />
-                    </div>
-                    <div>
-                      <h2 className="text-2xl font-serif font-bold text-lux-text">Trilha de Auditoria Analítica</h2>
-                      <p className="text-xs text-lux-muted uppercase tracking-widest font-black mt-1">Audit Log • {activeTab?.name}</p>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => setShowAuditModal(false)}
-                    className="w-12 h-12 rounded-full border border-lux-border/20 flex items-center justify-center text-lux-muted hover:bg-lux-text hover:text-white transition-all shadow-sm"
-                  >
-                    <Plus className="rotate-45" size={24} />
-                  </button>
-                </div>
-
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-6 md:p-12">
+              <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} className="w-full max-w-5xl h-full max-h-[85vh] bg-lux-bg border border-lux-border/40 rounded-[3rem] shadow-2xl overflow-hidden flex flex-col">
+                <div className="p-8 border-b border-lux-border/20 flex items-center justify-between shrink-0"><div className="flex items-center gap-4"><div className="w-12 h-12 rounded-2xl bg-lux-text text-lux-bg flex items-center justify-center shadow-xl"><ShieldCheck size={28} /></div><div><h2 className="text-2xl font-serif font-bold text-lux-text">Analytics Audit Trail</h2><p className="text-xs text-lux-muted uppercase tracking-widest font-black mt-1">Audit Log • {activeTab?.name}</p></div></div><button onClick={() => setShowAuditModal(false)} className="w-12 h-12 rounded-full border border-lux-border/20 flex items-center justify-center text-lux-muted hover:bg-lux-text hover:text-white transition-all"><Plus className="rotate-45" size={24} /></button></div>
                 <div className="flex-1 overflow-y-auto p-10 space-y-12 custom-scrollbar">
-                  {/* Sessão: Pensamento Estratégico */}
-                  <section>
-                    <h3 className="text-sm font-black uppercase tracking-[0.2em] text-lux-text mb-6 flex items-center gap-3">
-                      <Sparkles size={18} className="text-lux-accent" /> Raciocínio do Orquestrador
-                    </h3>
-                    <div className="p-8 bg-white/60 border border-lux-border/20 rounded-[2rem] text-sm text-lux-text italic leading-relaxed shadow-inner">
-                      {activeTab?.auditTrail?.orchestrator_thought || activeTab?.auditTrail?.pandas_thought || activeTab?.auditTrail?.nl2sql_thought || "Nenhum raciocínio técnico capturado para esta versão."}
-                    </div>
-                  </section>
-
-                  {/* Sessão: Código Python (Pandas) */}
+                  <section><h3 className="text-sm font-black uppercase tracking-widest text-lux-text mb-6 flex items-center gap-3"><Sparkles size={18} className="text-lux-accent" /> Raciocínio de Dados</h3><div className="p-8 bg-white/40 dark:bg-white/5 border border-lux-border/10 rounded-[2rem] text-sm text-lux-text italic leading-relaxed shadow-inner">{activeTab?.auditTrail?.nl2sql_thought || "Nenhum raciocínio técnico capturado."}</div></section>
                   {activeTab?.auditTrail?.pandas_code && (
-                    <section>
-                      <h3 className="text-sm font-black uppercase tracking-[0.2em] text-lux-text mb-6 flex items-center gap-3">
-                        <Code size={18} className="text-lux-accent" /> Algoritmo Python (Pandas Analytics)
-                      </h3>
-                      <div className="relative group">
-                        <pre className="p-8 bg-[#1a1c1e] text-emerald-400 rounded-[2rem] overflow-x-auto font-mono text-xs leading-relaxed shadow-2xl border border-lux-border/10">
-                          {activeTab.auditTrail.pandas_code}
-                        </pre>
-                        <div className="absolute top-4 right-4 text-[9px] uppercase font-bold text-lux-muted/40 bg-black/20 px-3 py-1 rounded-full">
-                          Python Executor
-                        </div>
-                      </div>
-                    </section>
+                    <section><h3 className="text-sm font-black uppercase tracking-widest text-lux-text mb-6 flex items-center gap-3"><CodeIcon size={18} className="text-lux-accent" /> Algoritmo Python (Pandas Analytics)</h3><div className="relative group"><pre className="p-8 bg-[#1a1c1e] text-emerald-400 rounded-[2rem] overflow-x-auto font-mono text-xs leading-relaxed shadow-2xl border border-lux-border/10">{activeTab?.auditTrail?.pandas_code || "Código não disponível"}</pre></div></section>
                   )}
-
-                  {/* Sessão: Query SQL (NL2SQL) */}
-                  {activeTab?.auditTrail?.nl2sql_sql && (
-                    <section>
-                      <h3 className="text-sm font-black uppercase tracking-[0.2em] text-lux-text mb-6 flex items-center gap-3">
-                        <Database size={18} className="text-lux-accent" /> Consulta SQL (NL2SQL Core)
-                      </h3>
-                      <div className="relative group">
-                        <pre className="p-8 bg-[#1a1c1e] text-blue-300 rounded-[2rem] overflow-x-auto font-mono text-xs leading-relaxed shadow-2xl border border-lux-border/10">
-                          {activeTab.auditTrail.nl2sql_sql}
-                        </pre>
-                        <div className="absolute top-4 right-4 text-[9px] uppercase font-bold text-lux-muted/40 bg-black/20 px-3 py-1 rounded-full">
-                          SQLite Generator
-                        </div>
-                      </div>
-                    </section>
-                  )}
+                  <section><h3 className="text-sm font-black uppercase tracking-widest text-lux-text mb-6 flex items-center gap-3"><Database size={18} className="text-lux-accent" /> Consulta SQL Analytics</h3><pre className="p-8 bg-black text-emerald-400 rounded-3xl font-mono text-xs overflow-x-auto leading-relaxed border border-emerald-500/20 shadow-inner">{activeTab?.auditTrail?.nl2sql_sql || "-- SQL indisponível."}</pre></section>
                 </div>
-
-                <div className="p-8 bg-lux-bg/50 border-t border-lux-border/20 flex items-center justify-between shrink-0">
-                  <div className="flex items-center gap-2 text-[10px] text-lux-muted font-bold tracking-widest uppercase">
-                    <AlertCircle size={14} /> Trilha auditada e criptografada por NTT DATA Governance
-                  </div>
-                  <button 
-                    onClick={() => setShowAuditModal(false)}
-                    className="bg-lux-text text-white px-10 py-3 rounded-2xl text-xs font-bold shadow-xl hover:scale-105 transition-transform"
-                  >
-                    Fechar Auditoria
-                  </button>
-                </div>
+                <div className="p-8 bg-lux-bg/50 border-t border-lux-border/20 flex items-center justify-between shrink-0"><div className="flex items-center gap-2 text-[10px] text-lux-muted font-bold tracking-widest uppercase"><AlertCircle size={14} /> Trilha auditada e criptografada por NTT DATA Governance</div><button onClick={() => setShowAuditModal(false)} className="bg-lux-text text-lux-bg px-10 py-3 rounded-2xl text-xs font-bold shadow-xl hover:scale-105 transition-transform">Fechar Auditoria</button></div>
               </motion.div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* LADO DIREITO: Painel de Conversação (Abas - Largura Otimizada 320px) */}
-        <div className="w-full lg:w-[320px] shrink-0 min-h-0 flex flex-col bg-white/70 backdrop-blur-3xl border border-[#F1E9DB] rounded-[3rem] overflow-hidden shadow-2xl transition-all duration-500">
-          {/* Seletor de Abas Lateral */}
-          <div className="flex bg-lux-bg/50 dark:bg-black/20 border-b border-lux-border/20 p-2 gap-2 shrink-0 pt-3 px-3">
-             <button
-               onClick={() => setRightTab('chat')}
-               className={`flex-1 flex items-center justify-center gap-3 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                 rightTab === 'chat' 
-                   ? "bg-lux-text text-white shadow-xl scale-[1.02]" 
-                   : "text-lux-muted hover:bg-lux-border/20"
-               }`}
-             >
-               <Terminal size={14} /> 🤖 Agente BI
-             </button>
-             <button
-               onClick={() => setRightTab('ingest')}
-               className={`flex-1 flex items-center justify-center gap-3 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                 rightTab === 'ingest' 
-                   ? "bg-lux-text text-white shadow-xl scale-[1.02]" 
-                   : "text-lux-muted hover:bg-lux-border/20"
-               }`}
-             >
-               <CloudUpload size={14} /> ☁️ Ingestão AWS
-             </button>
-          </div>
-
-              <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
-                {rightTab === 'chat' ? (
-                  <>
-                    <div className="px-6 py-3 border-b border-lux-border/10 bg-white/5 flex items-center justify-between shrink-0 relative z-10">
-                       <span className="text-[9px] font-black uppercase tracking-widest text-lux-muted">Logs da Sessão</span>
-                       <div className="flex items-center gap-2">
-                         <button 
-                           onClick={() => setShowAISettings(!showAISettings)}
-                           className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all text-[9px] font-black uppercase tracking-wider ${
-                             showAISettings 
-                               ? "bg-lux-text text-white border-lux-text" 
-                               : "bg-white/5 border-lux-border/20 text-lux-text hover:bg-lux-border/10"
-                           }`}
-                         >
-                           <Zap size={12} className={aiTemperature > 0.5 ? "text-amber-500 fill-current" : ""} />
-                           IA
-                         </button>
-                         {activeTab?.fullPrompt && (
-                           <button 
-                             onClick={handleExportPrompt}
-                             className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-lux-accent/10 border border-lux-accent/20 text-lux-text hover:bg-lux-accent hover:text-white transition-all text-[9px] font-black uppercase tracking-wider group"
-                             title="Exportar Prompt Bedrock (.txt)"
-                           >
-                             <Download size={12} className="group-hover:scale-110 transition-transform" />
-                             Prompt
-                           </button>
-                         )}
-                       </div>
-                    </div>
-
-                    {/* AI Calibration Panel (Retractable) */}
-                    {showAISettings && (
-                      <motion.div 
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        className="bg-lux-card/80 border-b border-lux-border/20 overflow-hidden shrink-0"
-                      >
-                        <div className="p-6 space-y-6">
-                          <div className="flex justify-between items-center bg-[#FDF9F0] p-3 rounded-2xl border border-[#F1E9DB]">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-[#D4AF37]">Calibração IA</span>
-                            <span className={`text-[10px] font-black px-3 py-1 rounded-full shadow-sm ${
-                              aiTemperature === 0.0 ? "bg-[#1A1A1A] text-white" :
-                              aiTemperature === 0.3 ? "bg-[#1A1A1A] text-[#D4AF37]" :
-                              "bg-[#D4AF37] text-[#1A1A1A]"
-                            }`}>
-                              {aiTemperature === 0.0 ? "Audit Mode" : aiTemperature === 0.3 ? "Insight Mode" : "Discovery Mode"}
-                            </span>
-                          </div>
-                          
-                          <div className="flex gap-2">
-                             {[0.0, 0.3, 0.7].map((temp) => (
-                               <button
-                                 key={temp}
-                                 onClick={() => setAiTemperature(temp)}
-                                 className={`flex-1 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2 ${
-                                   aiTemperature === temp 
-                                     ? "bg-[#1A1A1A] text-white border-[#1A1A1A] shadow-xl" 
-                                     : "bg-white border-[#F1E9DB] text-[#8C8C8C] hover:bg-[#FDF9F0]"
-                                 }`}
-                               >
-                                 {temp.toFixed(1)}
-                               </button>
-                             ))}
-                          </div>
-                          <p className="text-[9px] text-[#8C8C8C] leading-relaxed italic border-l-2 border-[#D4AF37] pl-3">
-                            {aiTemperature === 0.0 && "Aproximação matemática rigorosa. Recomendado para P&L e Audit."}
-                            {aiTemperature === 0.3 && "Equilíbrio entre fidelidade absoluta e insights de mercado."}
-                            {aiTemperature === 0.7 && "Foco em descobertas e sugestões de novos KPIs estratégicos."}
-                          </p>
-                        </div>
-                      </motion.div>
-                    )}
-                    <div 
-                      ref={scrollRef}
-                      onScroll={handleScroll}
-                      className="flex-1 overflow-y-auto p-6 space-y-6 flex flex-col custom-scrollbar scroll-smooth relative"
-                      style={{ display: 'flex', flexDirection: 'column' }} // Garante ordem 0=topo, N=base
-                    >
-                  {messages.length === 0 && (
-                    <div className="flex flex-col items-center justify-center h-full opacity-30 text-center px-10 italic">
-                       <Sparkles size={40} className="mb-4" />
-                       <p className="text-sm">"Olá! Como posso refinar sua experiência analítica hoje?"</p>
-                    </div>
-                  )}
-                  {messages.map((msg, i) => (
-                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                      <div
-                        className={`max-w-[90%] p-5 rounded-2xl text-xs leading-relaxed shadow-sm ${
-                          msg.role === "user"
-                            ? "bg-lux-text text-white rounded-br-none"
-                            : "bg-white dark:bg-white/5 border border-lux-border/20 text-lux-text dark:text-lux-accent rounded-bl-none"
-                        }`}
-                      >
-                        {msg.role === "agent" && <Sparkles size={14} className="mb-3 text-[#D4AF37]" />}
-                        {msg.content}
-                      </div>
-                    </motion.div>
-                  ))}
-                    {isTyping && (
-                    <div className="flex justify-start">
-                      <div className="bg-white dark:bg-white/5 border border-lux-border/20 p-5 rounded-2xl rounded-bl-none flex items-center gap-3">
-                        <div className="w-1.5 h-1.5 bg-lux-accent rounded-full animate-bounce" />
-                        <div className="w-1.5 h-1.5 bg-lux-accent rounded-full animate-bounce delay-100" />
-                        <div className="w-1.5 h-1.5 bg-lux-accent rounded-full animate-bounce delay-200" />
-                      </div>
-                      </div>
-                    )}
-
-                    {/* Proactive Follow-up Suggestions */}
-                    {!isTyping && activeTab?.followUpSuggestions && activeTab.followUpSuggestions.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                        {activeTab.followUpSuggestions.map((suggestion, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => {
-                              setInput(suggestion.prompt);
-                              // Opcional: disparar submit automático
-                              // handleSubmit(new Event('submit') as any);
-                            }}
-                            className="bg-lux-accent/10 border border-lux-accent/30 text-lux-text hover:bg-lux-accent hover:text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm flex items-center gap-2 group"
-                          >
-                            <Sparkles size={12} className="group-hover:animate-pulse" />
-                            {suggestion.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Botão Flutuante de Novas Mensagens */}
-                  {hasNewMessages && !shouldAutoScroll && (
-                    <motion.button
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      onClick={() => {
-                        setShouldAutoScroll(true);
-                        scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-                        setHasNewMessages(false);
-                      }}
-                      className="absolute bottom-32 left-1/2 -translate-x-1/2 bg-lux-accent text-black px-6 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-2xl z-20 flex items-center gap-2 hover:scale-105 transition-all active:scale-95 border border-white/20"
-                    >
-                      <Sparkles size={14} className="animate-pulse" /> Novas mensagens abaixo
-                    </motion.button>
-                  )}
-
-                <div className="p-6 bg-transparent border-t border-lux-border/20 shrink-0">
-                  <form onSubmit={handleSubmit} className="flex gap-2 relative">
-                    <input
-                      type="text"
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      placeholder="Comando analítico..."
-                      className="flex-1 bg-white/80 dark:bg-black/20 border border-lux-border/30 text-lux-text px-6 py-4 rounded-3xl text-xs focus:outline-none focus:border-lux-accent transition-all shadow-inner placeholder:italic"
-                    />
-                    <button
-                      type="submit"
-                      disabled={isTyping || !input.trim() || !dataReady}
-                      className={`bg-lux-text dark:bg-lux-accent text-white dark:text-black p-4 rounded-2xl hover:scale-105 transition-transform shadow-xl flex items-center justify-center ${
-                        (isTyping || !input.trim() || !dataReady) ? "opacity-30 cursor-not-allowed grayscale" : ""
-                      }`}
-                    >
-                      {isTyping ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
-                    </button>
-                  </form>
-                </div>
-              </>
-            ) : (
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-                 <IngestionControlPanel projectId={projectId} onComplete={() => setRightTab('chat')} />
-                 
-                 <div className="mt-8 bg-lux-accent/5 p-6 rounded-[2.5rem] border border-lux-accent/10">
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-lux-accent mb-4">Relacionamentos Ativos</h4>
-                    <ul className="space-y-4">
-                       <li className="flex items-start gap-4">
-                          <div className="w-8 h-8 rounded-full bg-lux-accent/10 flex items-center justify-center shrink-0">
-                             <Database size={14} className="text-lux-accent" />
-                          </div>
-                          <div>
-                             <p className="text-[11px] font-bold text-lux-text dark:text-white">Fatos x Dimensões</p>
-                             <p className="text-[9px] text-lux-muted mt-1 leading-relaxed italic">"Join detectado entre fontes locais via ID de Transação."</p>
-                          </div>
-                       </li>
-                    </ul>
-                 </div>
-              </div>
-            )}
+      <DevHUD />
           </div>
         </div>
       </div>
-
-      <div className="lg:hidden mt-5 p-4 bg-lux-card/50 backdrop-blur-xl border border-lux-border/60 rounded-xl shadow-xl shadow-lux-shadow/10">
-        <div className="flex items-center gap-2 text-lux-text mb-3">
-          <LayoutDashboard size={18} />
-          <span className="text-sm font-bold uppercase tracking-wider">Agente BI</span>
-        </div>
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Descreva o ajuste desejado para o painel..."
-            className="flex-1 bg-lux-card border border-lux-border/60 text-lux-text px-4 py-3 rounded-lg text-sm focus:outline-none focus:border-lux-text transition-colors shadow-inner"
-          />
-          <button
-            type="submit"
-            disabled={isTyping || !input.trim()}
-            className="bg-lux-text text-lux-bg p-3 rounded-lg hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-          >
-            <Send size={18} />
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-}
-/**
- * IngestionControlPanel
- * ──────────────
- * Painel lateral para consolidar dados locais na AWS antes das análises de IA.
- */
-function IngestionControlPanel({ projectId, onComplete }: { projectId: string | null; onComplete?: () => void }) {
-  const [sources, setSources] = useState<any[]>([]);
-  const [ingesting, setIngesting] = useState(false);
-  const [success, setSuccess] = useState(false);
-
-  useEffect(() => {
-    if (!projectId) return;
-    const items = readProjectSources(projectId);
-    setSources(items);
-  }, [projectId]);
-
-  const localSources = sources.filter(s => s.id.startsWith("local-") || s.status !== "INGESTED");
-  const ingestedCount = sources.filter(s => s.status === "INGESTED").length;
-
-  const handleIngestAll = async () => {
-    if (!projectId || localSources.length === 0) return;
-    setIngesting(true);
-    
-    const results = [...sources];
-    
-    for (const source of localSources) {
-      if (!source.previewData || source.previewData.length === 0) continue;
-      
-      try {
-        const { getBackendJsonHeaders } = await import("@/lib/backendAuth");
-        const hdrs = await getBackendJsonHeaders();
-
-        // ── Simulação de Ingestão AWS (Upload em Lote) ────────────────────────
-        // Na prática, aqui faríamos o upload real se tivéssemos o RawFile.
-        // Como o RawFile não sobrevive ao refresh, usamos o previewData se for pequeno
-        // ou avisamos o usuário. Para o MVP, marcamos como INGESTED.
-        
-        await new Promise(r => setTimeout(r, 1500)); // Simula latência AWS
-        
-        const idx = results.findIndex(s => s.id === source.id);
-        if (idx !== -1) {
-          results[idx] = { ...results[idx], status: "INGESTED", id: `aws-${Math.random().toString(36).slice(2, 8)}` };
-        }
-      } catch (err) {
-        console.error("Falha na ingestão AWS:", err);
-      }
-    }
-
-    writeProjectSources(projectId, results);
-    setSources(results);
-    setIngesting(false);
-    setSuccess(true);
-    setTimeout(() => setSuccess(false), 3000);
-    if (onComplete) onComplete();
-  };
-
-  const handleClear = () => {
-    if (!projectId || !confirm("Deseja excluir todas as ingestões deste projeto?")) return;
-    writeProjectSources(projectId, []);
-    setSources([]);
-    window.location.reload();
-  };
-
-  if (!projectId) return null;
-
-  return (
-    <div className="bg-white/80 dark:bg-lux-card/85 backdrop-blur-3xl border border-lux-border/20 dark:border-lux-border/50 rounded-[3rem] p-6 shadow-2xl relative overflow-hidden group">
-      <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
-         <Database size={60} />
-      </div>
-
-      <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-lux-accent mb-6 flex items-center gap-3">
-        <Server size={14} /> Ingestão AWS
-      </h3>
-
-      <div className="space-y-4 mb-8">
-        <div className="flex justify-between items-center px-4 py-3 bg-lux-bg/30 dark:bg-white/5 rounded-2xl border border-lux-border/10">
-           <span className="text-[10px] font-black text-lux-muted uppercase tracking-widest">Base de Dados</span>
-           <span className="text-[11px] font-bold text-lux-text dark:text-lux-accent">{sources.length} Tabelas</span>
-        </div>
-        
-        <div className="grid grid-cols-2 gap-3">
-           <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl text-center">
-              <p className="text-[8px] font-black text-emerald-600 uppercase tracking-tighter mb-1">Cloud AWS</p>
-              <p className="text-xl font-mono font-black text-emerald-600">{ingestedCount}</p>
-           </div>
-           <div className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-2xl text-center">
-              <p className="text-[8px] font-black text-amber-600 uppercase tracking-tighter mb-1">Local / Cache</p>
-              <p className="text-xl font-mono font-black text-amber-600">{localSources.length}</p>
-           </div>
-        </div>
-      </div>
-
-      <div className="space-y-3 relative z-10">
-        <button 
-          onClick={handleIngestAll}
-          disabled={ingesting || localSources.length === 0}
-          className="w-full h-14 bg-lux-text dark:bg-lux-accent text-white dark:text-black rounded-2xl font-black text-sm flex items-center justify-center gap-3 hover:scale-[1.02] shadow-xl transition-all disabled:opacity-40 disabled:grayscale active:scale-95 group/btn overflow-hidden"
-        >
-          {ingesting ? <RefreshCw className="animate-spin" size={20} /> : <Zap size={20} className="group-hover/btn:animate-pulse" />}
-          {ingesting ? "Processando AWS..." : "Consolidar Base AWS"}
-          
-          <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover/btn:translate-x-[100%] transition-transform duration-700" />
-        </button>
-
-        <button 
-          onClick={handleClear}
-          className="w-full h-12 border border-lux-border/20 text-lux-muted hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-all rounded-xl text-[10px] font-black uppercase tracking-widest"
-        >
-          Limpar Ingestão Atual
-        </button>
-      </div>
-
-      <div className="mt-6 flex items-center gap-3 px-3">
-         <div className={`w-2 h-2 rounded-full ${localSources.length > 0 ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`} />
-         <p className="text-[9px] font-black text-lux-muted uppercase tracking-[0.1em]">
-           {localSources.length > 0 ? 'Existem fontes aguardando cloud' : 'Sistema em Compliance AWS'}
-         </p>
-      </div>
-      
-      {success && (
-        <motion.div 
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="absolute inset-0 bg-emerald-600 flex items-center justify-center gap-3 text-white font-black uppercase tracking-[0.2em] text-xs z-20"
-        >
-          <CheckCircle2 size={24} /> Sucesso
-        </motion.div>
-      )}
-    </div>
-  );
+    );
 }

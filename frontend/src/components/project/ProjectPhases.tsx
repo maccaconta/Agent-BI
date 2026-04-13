@@ -12,7 +12,7 @@ interface Phase {
   path: string;
 }
 
-export function ProjectPhases({ projectId }: { projectId: string }) {
+export function ProjectPhases({ projectId, isCompact = false }: { projectId: string, isCompact?: boolean }) {
   const pathname = usePathname();
 
   const phases: Phase[] = [
@@ -70,13 +70,13 @@ export function ProjectPhases({ projectId }: { projectId: string }) {
   const progressWidth = activeIndex === -1 ? 0 : (activeIndex / (phases.length - 1)) * 100;
 
   return (
-    <div className="w-full pt-1 pb-14 md:pb-12 mb-1">
-      <div className="max-w-5xl mx-auto px-2 md:px-4">
+    <div className={`w-full ${isCompact ? "py-1" : "pt-1 pb-14 md:pb-12 mb-1"}`}>
+      <div className={`${isCompact ? "max-w-xl" : "max-w-5xl"} mx-auto px-2 md:px-4`}>
         <div className="relative flex items-center justify-between gap-4">
-          <div className="absolute top-1/2 left-0 w-full h-[2px] bg-lux-border/45 dark:bg-lux-border/75 -translate-y-1/2 z-0" />
+          <div className="absolute top-1/2 left-0 w-full h-[1px] bg-lux-border/45 dark:bg-lux-border/75 -translate-y-1/2 z-0" />
 
           <motion.div
-            className="absolute top-1/2 left-0 h-[3px] bg-lux-text dark:bg-lux-accent -translate-y-1/2 z-0"
+            className="absolute top-1/2 left-0 h-[2px] bg-lux-text dark:bg-lux-accent -translate-y-1/2 z-0"
             initial={{ width: "0%" }}
             animate={{ width: `${progressWidth}%` }}
             transition={{ duration: 0.8, ease: "easeInOut" }}
@@ -94,30 +94,33 @@ export function ProjectPhases({ projectId }: { projectId: string }) {
                     whileHover={{ scale: 1.08 }}
                     whileTap={{ scale: 0.95 }}
                     className={`
-                      w-11 h-11 md:w-12 md:h-12 rounded-full border-2 flex items-center justify-center transition-all duration-500
+                      ${isCompact ? "w-7 h-7" : "w-11 h-11 md:w-12 md:h-12"} rounded-full border flex items-center justify-center transition-all duration-500
                       ${
                         isActive
-                          ? "bg-lux-text text-lux-bg border-lux-text shadow-[0_0_20px_rgba(81,56,48,0.3)] dark:border-lux-accent dark:bg-lux-accent"
+                          ? "bg-lux-text text-lux-bg border-lux-text shadow-lg dark:border-lux-accent dark:bg-lux-accent"
                           : isCompleted
                             ? "bg-lux-bg/80 text-lux-text border-lux-text dark:text-lux-accent dark:border-lux-accent"
                             : "bg-lux-bg text-lux-muted border-lux-border/60 dark:border-lux-border/90 dark:text-lux-muted hover:border-lux-text/60 dark:hover:border-lux-accent"
                       }
                     `}
                   >
-                    {isCompleted ? <Check size={20} strokeWidth={3} /> : phase.icon}
+                    {isCompleted ? <Check size={isCompact ? 12 : 20} strokeWidth={3} /> : 
+                     React.cloneElement(phase.icon as React.ReactElement<any>, { size: isCompact ? 12 : 18 })}
                   </motion.div>
                 </Link>
 
-                <span
-                  className={`
-                    absolute top-full mt-3 text-[9px] md:text-[11px] font-bold uppercase tracking-widest transition-colors duration-500 leading-tight max-w-[110px] md:max-w-[150px]
-                    ${isActive ? "text-lux-text dark:text-lux-accent" : "text-lux-muted/75 dark:text-lux-muted"}
-                  `}
-                >
-                  {phase.label}
-                </span>
+                {!isCompact && (
+                  <span
+                    className={`
+                      absolute top-full mt-3 text-[9px] md:text-[11px] font-bold uppercase tracking-widest transition-colors duration-500 leading-tight max-w-[110px] md:max-w-[150px]
+                      ${isActive ? "text-lux-text dark:text-lux-accent" : "text-lux-muted/75 dark:text-lux-muted"}
+                    `}
+                  >
+                    {phase.label}
+                  </span>
+                )}
 
-                {isActive && (
+                {isActive && !isCompact && (
                   <motion.div
                     layoutId="phase-indicator"
                     className="absolute -top-2 w-1 h-1 rounded-full bg-lux-text dark:bg-lux-accent"

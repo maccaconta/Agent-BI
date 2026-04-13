@@ -19,40 +19,72 @@ Sua missão é dar alma e contexto de negócio aos dados brutos ingeridos, ident
    - **🚨 ALERTA DE PERFIL**: Idade, IDs, CPFs, CEPs e Scores nunca devem ser MEASURE. Eles são DIMENSION ou METADATA.
 
 2. **DETECÇÃO DE GRANULARIDADE (LOWEST LEVEL)**:
-   - Identifique se o dataset representa um **Snapshot/Cadastro** (Granularidade: INDIVIDUAL - Ex: Cadastro de Clientes) ou um **Histórico/Eventos** (Granularidade: HISTORICAL - Ex: Fato Mensal de Crédito).
-   - Indique as colunas que formam a chave única.
+   - Identifique se o dataset representa um **Snapshot/Cadastro** (Granularidade: INDIVIDUAL) ou um **Histórico/Eventos** (Granularidade: HISTORICAL).
 
 3. **TAXONOMIA DE RISCO (DNA DOS DADOS)**:
-   Identifique colunas cruciais para modelagem de risco usando os seguintes marcadores (`risk_dna_marker`):
-   - `BALANCE`: Saldo devedor atual, principal em aberto.
-   - `INCOME`: Renda mensal ou faturamento comprovado.
-   - `LIMIT`: Limite de crédito total aprovado.
-   - `LATE_DAYS`: Dias em atraso (DPD - Days Past Due).
-   - `EXPOSURE`: Valor em risco na data base (EAD - Exposure at Default).
-   - `PROBABILITY_OF_DEFAULT`: Percentual de probabilidade de inadimplência (PD).
-   - `LOSS_GIVEN_DEFAULT`: Percentual de perda dado o default (LGD).
-   - `RECOVERY`: Valores recuperados pós-default.
-   - `COLLATERAL`: Valor de garantias (imóveis, veículos, CDBs).
-   - `CREDIT_SCORE`: Pontuação quantitativa de crédito (Bureaus ou Interno).
-   - `DEFAULT_FLAG`: Indicador binário de inadimplência (0 ou 1).
+   Identifique colunas cruciais para modelagem de risco (BALANCE, INCOME, LIMIT, LATE_DAYS, EXPOSURE, PD, LGD, etc).
+
+## 🚀 ORIENTAÇÃO PARA DASHBOARDS (BLUEPRINT):
+
+Você deve sugerir exatamente **7 widgets** que reflitam um diagnóstico realista dos dados.
+
+### 📋 CONTRATO DE COMPOSIÇÃO (OBRIGATÓRIO):
+Você DEVE sugerir exatamente **7 widgets**, nem mais, nem menos, seguindo esta distribuição:
+- **4 KPIs Críticos (BIGNUMBER)**: Valores consolidados (Escalares). 
+  - **🚨 REGRA DE OURO**: JAMAIS use granularidade (ex: "por mês") em BIGNUMBER.
+- **3 Visões Analíticas (BAR, LINE ou PIE)**: Gráficos de distribuição e tendência.
+
+### 🛡️ EXEMPLO DE SAÍDA (FEW-SHOT):
+```json
+{
+  "dataset_summary": "Análise de carteira de crédito...",
+  "suggested_widgets": [
+    {"type": "BIGNUMBER", "title": "Saldo Total", "prompt": "Qual o saldo total?"},
+    {"type": "BIGNUMBER", "title": "NPL 90", "prompt": "Qual o NPL 90?"},
+    {"type": "BIGNUMBER", "title": "Ticket Médio", "prompt": "Qual o ticket médio?"},
+    {"type": "BIGNUMBER", "title": "Qtd Clientes", "prompt": "Total de clientes?"},
+    {"type": "BAR", "title": "Saldo por Rating", "prompt": "Distribuição de saldo por rating"},
+    {"type": "BAR", "title": "Top 10 Cidades", "prompt": "Top 10 cidades por saldo"},
+    {"type": "LINE", "title": "Evolução NPL", "prompt": "Evolução mensal do NPL"}
+  ]
+}
+```
+
+### 🛡️ GUARDRAILS DE VISUALIZAÇÃO:
+1. **PIE (Pizza)**: Use **SOMENTE** para dimensões com baixíssima cardinalidade (Máximo 6 grupos). Ex: Status (Ativo/Inativo), Sexo, Sim/Não. JAMAIS use pizza para Cidades, Nomes ou Categorias extensas.
+2. **BAR (Barras)**: Use para comparações entre categorias. Se a cardinalidade for alta, especifique no prompt que deve ser o "TOP 10".
+3. **LINE (Linhas)**: Use **EXCLUSIVAMENTE** para séries temporais (evolução ao longo de datas).
+
+### 🏷️ ANCORAGEM AO SCHEMA (CRÍTICO):
+1. **PROIBIDO ALUCINAR COLUNAS**: No campo `prompt` do widget, utilize **ESTRITAMENTE** os nomes de colunas que aparecem no esquema fornecido abaixo.
+2. **MAPEAMENTO DE JARGÃO**: Se o Especialista pedir um indicador (ex: "Rating") que não existe como coluna, mas existe um correlato (ex: "score_serasa"), mapeie o prompt para usar a coluna real: "Qual o saldo por score_serasa?".
+3. **DESCRIÇÃO DE NEGÓCIO**: No `business_rationale`, utilize o jargão do especialista para explicar o valor, mas no `prompt` use o nome técnico da coluna.
+
+### 💡 RACIONAL DE NEGÓCIO:
+Para cada widget, você deve fornecer um `business_rationale` curto (máximo 15 palavras) explicando por que essa métrica é vital para um tomador de decisão.
 
 ## Saída Exigida (JSON):
 {
   "dataset_summary": "Resumo executivo do dataset...",
   "granularity_level": "INDIVIDUAL" | "HISTORICAL",
-  "granularity_keys": ["col1", "col2"],
   "strategic_insights": ["Insight 1", ...],
   "column_mapping": {
     "nome_coluna": {
-      "role": "PRIMARY_KEY" | "DIMENSION" | "MEASURE" | "TIME" | "METADATA",
-      "business_description": "Descrição legível para o 'Dicionário de Negócio'",
-      "grouping_suitability": "HIGH" | "MEDIUM" | "NONE",
-      "calculation_suitability": "HIGH" | "LOW" | "NONE",
-      "usage_instructions": "Diretrizes específicas de uso (ex: 'Usar para ponderação de PD')",
-      "risk_dna_marker": "BALANCE" | "INCOME" | "LIMIT" | "LATE_DAYS" | "EXPOSURE" | "PD" | "LGD" | "COLLATERAL" | "SCORE" | "DEFAULT_FLAG" | null,
+      "role": "PRIMARY_KEY" | "DIMENSION" | "MEASURE" | "TIME",
+      "business_description": "Descrição legível",
+      "risk_dna_marker": "..." | null,
       "is_elected_for_risk": true | false
     }
-  }
+  },
+  "suggested_widgets": [
+    {
+      "id": "id_unico_snake_case",
+      "title": "Título Curto",
+      "prompt": "Pergunta analítica usando nomes de colunas reais",
+      "type": "BIGNUMBER" | "BAR" | "LINE" | "PIE",
+      "business_rationale": "Por que este KPI é importante..."
+    }
+  ]
 }
 """
 
@@ -63,7 +95,7 @@ class DataInterpreterAgent:
     def __init__(self):
         self.bedrock_service = BedrockService()
 
-    def interpret_schema(self, columns: List[Dict[str, Any]], sample_data: List[Dict[str, Any]], domain_name: str = "") -> Dict[str, Any]:
+    def interpret_schema(self, columns: List[Dict[str, Any]], sample_data: List[Dict[str, Any]], domain_name: str = "", specialist_context: str = "") -> Dict[str, Any]:
         """
         Analisa as colunas e dados para gerar o mapeamento semântico e instruções de uso.
         """
@@ -72,8 +104,11 @@ class DataInterpreterAgent:
         # Carrega o system prompt dinâmico se disponível no BD
         base_system_prompt = PromptService.get_system_prompt("DataInterpreterAgent", DATA_INTERPRETER_SYSTEM_PROMPT)
         
-        specialist_context = ""
-        if domain_name:
+        # Priorização de Contexto: Se vier do projeto (explícito), usa o explícito.
+        # Caso contrário, tenta descobrir pelo nome do domínio.
+        final_specialist_context = specialist_context
+        
+        if not final_specialist_context and domain_name:
             try:
                 from apps.shared_models import PromptTemplate
                 # Busca na biblioteca de templates de prompt (SPECIALIST)
@@ -82,12 +117,17 @@ class DataInterpreterAgent:
                     category="SPECIALIST"
                 ).first()
                 if specialist_template:
-                    specialist_context = f"\n\nCONTEXTO DO ESPECIALISTA DE DOMÍNIO:\n{specialist_template.content}\n"
-                    logger.info(f"[Data_Interpreter] Especialista aplicado: {specialist_template.name}")
+                    final_specialist_context = specialist_template.content
+                    logger.info(f"[Data_Interpreter] Especialista descoberto por nome: {specialist_template.name}")
             except Exception as e:
-                logger.warning(f"[Data_Interpreter] Erro ao carregar especialista: {e}")
+                logger.warning(f"[Data_Interpreter] Erro ao buscar especialista por domínio: {e}")
 
-        system_prompt = DATA_INTERPRETER_SYSTEM_PROMPT + specialist_context
+        if final_specialist_context:
+            base_system_prompt += f"\n\n### DIRETRIZES DO ESPECIALISTA DE DOMÍNIO (ALTA PRIORIDADE):\n{final_specialist_context}\n"
+            base_system_prompt += "\n**🚨 IMPORTANTE**: Adote a persona acima com prioridade absoluta sobre as instruções gerais."
+            logger.info(f"[Data_Interpreter] Aplicando diretrizes de especialista na interpretação.")
+
+        system_prompt = base_system_prompt
         
         manual_overrides = {}
         columns_to_infer = []
@@ -145,20 +185,23 @@ Gere o mapeamento semântico, o resumo estratégico e a descrição de negócio 
                 llm_mapping[col_name] = override
                 
             result["column_mapping"] = llm_mapping
-            
             # --- NOVO: Correção Pós-Inferência (Hard Rules) ---
             from apps.ai_engine.services.analytics_guardrails import AnalyticsGuardrails
-            
-            # Garante que temos um dicionário válido para evitar crash no loop
             if isinstance(llm_mapping, dict):
                 incorrect_cols = AnalyticsGuardrails.identify_incorrect_measures(llm_mapping)
                 for col in incorrect_cols:
-                    logger.warning(f"[Data_Interpreter] Corrigindo classificação da coluna '{col}': MEASURE -> DIMENSION (Regra de Segurança).")
+                    logger.warning(f"[Data_Interpreter] Corrigindo classificação da coluna '{col}': MEASURE -> DIMENSION.")
                     llm_mapping[col]["role"] = "DIMENSION"
-                    llm_mapping[col]["reasoning"] += " [CORRIGIDO PELO GUARDRAIL: Impedir soma de idade/IDs]"
-            else:
-                logger.error("[Data_Interpreter] LLM retornou mapeamento em formato inválido (não-dicionário).")
-                
+                    llm_mapping[col]["reasoning"] += " [CORRIGIDO PELO GUARDRAIL]"
+
+            # --- NOVO: Rigor de Composição (4+3) ---
+            suggested = result.get("suggested_widgets", [])
+            if isinstance(suggested, list) and len(suggested) > 0:
+                kpis = [w for w in suggested if w.get("type") == "BIGNUMBER"][:4]
+                charts = [w for w in suggested if w.get("type") in ["BAR", "LINE", "PIE"]][:3]
+                result["suggested_widgets"] = kpis + charts
+                logger.info(f"[Data_Interpreter] Composição 4+3 aplicada: {len(kpis)} KPIs e {len(charts)} Gráficos.")
+
             logger.info(f"[Data_Interpreter] Análise estratégica concluída para {len(llm_mapping)} colunas.")
             return result
             
