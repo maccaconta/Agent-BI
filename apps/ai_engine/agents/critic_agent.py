@@ -118,11 +118,17 @@ class CriticAgent:
         system_instructions = PromptService.get_system_prompt("CriticAgent", CRITIC_SYSTEM_PROMPT)
         
         if dataset and hasattr(dataset, 'project'):
-            from apps.governance.models import GlobalSystemPrompt
+            from apps.governance.models import GlobalAIConfig
             tenant = dataset.project.tenant
-            global_policy = GlobalSystemPrompt.objects.filter(tenant=tenant, is_active=True).first()
-            if global_policy:
-                system_instructions = global_policy.generate_full_system_prompt() + "\n\n" + system_instructions
+            global_config = GlobalAIConfig.objects.filter(tenant=tenant, is_active=True).first()
+            if global_config:
+                # Injetar Persona Master e Diretrizes de Compliance
+                persona_info = f"\n\n## CONTEXTO DA PERSONA MASTER:\n{global_config.persona_title}: {global_config.persona_description}"
+                system_instructions = persona_info + "\n\n" + system_instructions
+                
+                if global_config.compliance_rules:
+                    compliance_info = f"\n\n## DIRETRIZES DE COMPLIANCE (OBRIGATÓRIAS):\n{global_config.compliance_rules}"
+                    system_instructions += compliance_info
 
         # Verificar se o Bedrock está disponível e configurado
         if not self._is_bedrock_available():

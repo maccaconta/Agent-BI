@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" fill="none">
+  <defs>
+    <linearGradient id="nova-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#EC4899"/>
+    </linearGradient>
+  </defs>
+  <!-- Star-burst / Nova symbol: 6 thick arrow arms -->
+  <path d="
+    M96 16
+    L112 56 L136 32 L116 72
+    L156 56 L132 80
+    L176 96
+    L136 112 L160 136 L120 116
+    L136 156 L112 132 L96 176
+    L80 132 L56 156 L72 116
+    L32 136 L56 112
+    L16 96
+    L60 80 L36 56 L76 72
+    L56 32 L80 56 Z
+  " fill="url(#nova-grad)"/>
+</svg>

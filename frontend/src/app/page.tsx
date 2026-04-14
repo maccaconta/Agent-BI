@@ -9,7 +9,7 @@ const FloatingSymbols = () => {
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-[0.6]">
       {/* Grupo Esquerdo */}
-      {Array.from({ length: 30 }).map((_, i) => (
+      {Array.from({ length: 25 }).map((_, i) => (
         <motion.span
           key={`left-${i}`}
           initial={{ 
@@ -29,14 +29,41 @@ const FloatingSymbols = () => {
             ease: "linear",
             delay: Math.random() * -60
           }}
-          className="absolute text-[#1A1A1A] font-serif text-xl md:text-2xl"
+          className="absolute text-[#1A1A1A] font-serif text-2xl md:text-3xl"
+        >
+          {symbols[i % symbols.length]}
+        </motion.span>
+      ))}
+
+      {/* Grupo Central — emerge do meio */}
+      {Array.from({ length: 20 }).map((_, i) => (
+        <motion.span
+          key={`center-${i}`}
+          initial={{ 
+            left: `${30 + Math.random() * 40}%`,
+            y: "110vh",
+            opacity: 0,
+            scale: Math.random() * 0.4 + 0.3
+          }}
+          animate={{ 
+            y: "-10vh",
+            opacity: [0, 0.6, 0],
+            rotate: Math.random() * 360
+          }}
+          transition={{ 
+            duration: Math.random() * 40 + 40, 
+            repeat: Infinity, 
+            ease: "linear",
+            delay: Math.random() * -80
+          }}
+          className="absolute text-[#1A1A1A] font-serif text-sm md:text-base"
         >
           {symbols[i % symbols.length]}
         </motion.span>
       ))}
       
       {/* Grupo Direito */}
-      {Array.from({ length: 30 }).map((_, i) => (
+      {Array.from({ length: 25 }).map((_, i) => (
         <motion.span
           key={`right-${i}`}
           initial={{ 
@@ -56,7 +83,7 @@ const FloatingSymbols = () => {
             ease: "linear",
             delay: Math.random() * -60
           }}
-          className="absolute text-[#1A1A1A] font-serif text-xl md:text-2xl"
+          className="absolute text-[#1A1A1A] font-serif text-2xl md:text-3xl"
         >
           {symbols[i % symbols.length]}
         </motion.span>
@@ -67,7 +94,7 @@ const FloatingSymbols = () => {
 
 export default function Home() {
   return (
-    <div className="h-screen w-full flex flex-col items-center justify-center p-2 md:p-6 relative overflow-hidden bg-white">
+    <div className="h-screen w-full flex flex-col items-center justify-center px-4 py-4 md:px-24 md:py-14 relative overflow-hidden bg-white">
 
 
       <FloatingSymbols />
@@ -85,7 +112,7 @@ export default function Home() {
         initial={false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-        className="glass-panel w-full max-w-6xl z-10 p-6 md:p-10 text-center flex flex-col items-center justify-between h-[90vh] md:h-auto overflow-hidden bg-white/50 border-white/40"
+        className="glass-panel w-full max-w-6xl z-10 p-6 md:p-10 text-center flex flex-col items-center justify-between h-full overflow-hidden bg-white/50 border-white/40"
       >
         <motion.div
            initial={{ opacity: 0, y: 20 }}
@@ -152,11 +179,17 @@ export default function Home() {
           </motion.div>
 
           <motion.div whileHover={{ y: -4 }} className="space-y-4">
-            <div className="w-10 h-10 bg-[#1A1A1A] rounded-xl flex items-center justify-center shadow-lg overflow-hidden border border-white/20">
-              <img src="/logos/AWS-Bedrock.png" alt="Bedrock" className="w-full h-full object-cover scale-110" />
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 bg-[#1A1A1A] rounded-xl flex items-center justify-center shadow-lg overflow-hidden border border-white/20">
+                <img src="/logos/AWS-Bedrock.png" alt="Bedrock" className="w-full h-full object-cover scale-110" />
+              </div>
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center shadow-lg bg-gradient-to-br from-violet-500/10 to-pink-500/10 border border-violet-300/30">
+                <img src="/logos/amazon-nova.png" alt="Nova Pro" className="w-6 h-6 object-contain" />
+              </div>
             </div>
             <div>
-              <h3 className="text-lg font-black font-serif text-lux-text tracking-tight">Amazon Bedrock</h3>
+              <h3 className="text-lg font-black font-serif text-lux-text tracking-tight">AWS Bedrock</h3>
+              <p className="text-[10px] font-black uppercase tracking-widest bg-gradient-to-r from-violet-500 to-pink-500 bg-clip-text text-transparent mb-1">Amazon Nova Pro Model</p>
               <p className="text-lux-muted text-xs leading-tight font-medium">O motor de modelos de fundação mais avançado da AWS aplicado ao negócio.</p>
             </div>
           </motion.div>
