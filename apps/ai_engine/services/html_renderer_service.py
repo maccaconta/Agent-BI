@@ -13,53 +13,65 @@ from django.utils import timezone
 class DashboardHtmlRendererService:
     OPERATIONAL_MARKER = 'data-agent-bi-operational-dashboard="true"'
 
-    def render_premium_deterministic_dashboard(self, dashboard, widget_results, diagnostico_consolidado: str = "") -> str:
+    def render_premium_deterministic_dashboard(self, dashboard, widget_results, diagnostico_consolidado: str = "", is_blueprint: bool = False) -> str:
         """
-        Gera o HTML do dashboard de forma determinística (sem LLM de layout).
-        Garante estabilidade total, zero sobreposição e alta performance.
+        Gera o HTML final do dashboard com motor JS embutido. Standalone.
         """
-        # Utiliza o nome do Projeto que o usuário digitou na etapa inicial
-        project_name = dashboard.project.name if dashboard.project else dashboard.name
-        title = self._escape_html(project_name)
-        generated_at = timezone.now().strftime("%d/%m/%Y %H:%M")
+        import json
+        import re
         
-        # Separação de widgets por tipo para o grid
+        # Limpeza de insights (remover artefatos de pontuação indesejados no início/fim)
+        clean_diag = diagnostico_consolidado.strip()
+        clean_diag = re.sub(r'^[.,\s]+|[.,\s]+$', '', clean_diag)
+        
         kpis = [w for w in widget_results if w.get('visual_type') == 'BIGNUMBER']
-        others = [w for w in widget_results if w not in kpis]
+        others = [w for w in widget_results if w.get('visual_type') != 'BIGNUMBER']
+        
+        title = dashboard.project.name if dashboard.project else dashboard.name
+        title = title.lstrip("/").strip()
+        generated_at = timezone.now().strftime('%d %b %Y • %H:%M')
+        
+        dataset_ids = [str(ds.id) for ds in dashboard.project.datasets.filter(is_deleted=False)] if dashboard.project else []
 
-        # Montagem do Layout Principal (Usando f-string para o esqueleto)
-        html_body = f"""<!DOCTYPE html>
+        # Template HTML com Runtime embutido
+        html = f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{title}</title>
+  <title>{self._escape_html(title)}</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap" rel="stylesheet">
   <style>
-    body {{ font-family: 'Inter', sans-serif; background-color: #F8F9FA; color: #1A1A1A; margin: 0; }}
-    .kpi-card {{ background: white; border-radius: 24px; padding: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.03); border: 1px solid #F1F1F1; transition: all 0.3s ease; }}
-    .kpi-card:hover {{ transform: translateY(-4px); box-shadow: 0 12px 30px rgba(0,0,0,0.08); border-color: #D4AF37; }}
-    .kpi-value {{ background: linear-gradient(135deg, #1A1A1A 0%, #444 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
-    .kpi-label {{ color: #D4AF37; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase; font-size: 10px; word-break: break-word; line-height: 1.4; display: block; }}
-    @media print {{ .no-print {{ display: none; }} }}
+    body {{ font-family: 'Inter', sans-serif; background-color: #FDFDFD; color: #1A1A1A; margin: 0; -webkit-print-color-adjust: exact; }}
+    .kpi-card {{ background: white; border-radius: 24px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.02); border: 1px solid #F0F0F0; transition: all 0.3s ease; break-inside: avoid; }}
+    .kpi-value {{ color: #1A1A1A; font-size: 28px; font-weight: 900; margin-top: 8px; font-variant-numeric: tabular-nums; }}
+    .kpi-label {{ color: #D4AF37; font-weight: 900; letter-spacing: 0.2em; text-transform: uppercase; font-size: 13px; }}
+    .diagnostic-box {{ break-inside: avoid; background: white; border-radius: 32px; border: 1px solid #F0F0F0; padding: 48px; box-shadow: 0 10px 40px rgba(0,0,0,0.03); }}
+    @media print {{ .no-print {{ display: none; }} body {{ padding: 0 !important; }} .kpi-card {{ box-shadow: none; border: 1px solid #EEE; }} }}
   </style>
 </head>
-<body class="p-4 md:p-10" data-agent-bi-operational-dashboard="true">
-  <div id="dashboard-container" class="max-w-7xl mx-auto">
+<body class="p-6 md:p-16">
+  <div class="max-w-7xl mx-auto">
     
-    <header class="flex items-center justify-between mb-12 pb-8 border-b border-gray-100 gap-4">
-      <div class="flex-none basis-[100px] md:basis-[150px] flex justify-start items-center">
-        <img src="/logos/aws-partner.png" alt="AWS" class="h-5 md:h-6 w-auto object-contain opacity-90" />
+    <header class="flex flex-row items-center justify-between mb-12">
+      <div class="flex-none w-32 md:w-48 flex justify-start no-print">
+        <img src="/logos/ntt-data-black.png" alt="NTT DATA" style="height:32px" onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/NTT_Data_logo.svg/320px-NTT_Data_logo.svg.png'" />
       </div>
-      <div class="flex-1 text-center">
-        <h1 class="text-2xl md:text-3xl lg:text-4xl font-black tracking-tighter italic text-gray-900 leading-tight">{title}</h1>
-        <p class="text-[8px] md:text-[10px] text-gray-400 uppercase tracking-[0.3em] mt-2 font-bold">Relatório Executivo • Inteligência Competitiva • {generated_at}</p>
+
+      <div class="flex-grow text-center flex flex-col items-center justify-center px-4">
+        { f'<div class="inline-flex items-center gap-2 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full mb-4"><span class="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]"></span><span class="text-[9px] font-black text-amber-600 uppercase tracking-widest">Certified Blueprint</span></div>' if is_blueprint else '' }
+        <h1 class="text-4xl md:text-5xl font-black tracking-tightest text-gray-900 lowercase italic">{self._escape_html(title)}</h1>
+        <p class="text-[10px] text-gray-400 font-bold uppercase tracking-[0.4em] mt-3">{generated_at}</p>
       </div>
-      <div class="flex-none basis-[100px] md:basis-[150px] flex justify-end items-center">
-        <img src="/logos/ntt-data-black.png" alt="NTT DATA" class="h-6 md:h-8 w-auto object-contain" />
+
+      <div class="flex-none w-32 md:w-48 flex justify-end no-print">
+        <img src="/logos/aws-partner.png" alt="AWS" style="height:35px" onerror="this.src='https://upload.wikimedia.org/wikipedia/commons/thumb/9/93/Amazon_Web_Services_Logo.svg/200px-Amazon_Web_Services_Logo.svg.png'" />
       </div>
     </header>
+
+    <div class="w-full h-[1px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent opacity-40 mb-16"></div>
 
     {self._render_kpi_grid(kpis)}
 
@@ -67,21 +79,79 @@ class DashboardHtmlRendererService:
       {self._render_other_widgets(others)}
     </div>
 
-    {self._render_diagnostico(diagnostico_consolidado)}
+    {self._render_diagnostico(clean_diag)}
 
-    <footer class="mt-20 pt-8 border-t border-gray-100 flex justify-between items-center no-print">
-      <span class="text-[10px] text-gray-300 font-bold tracking-widest uppercase">Agent-BI Engine v2.0 • NTT DATA Private</span>
-      <button onclick="window.print()" class="text-[10px] bg-gray-900 text-white px-6 py-2 rounded-full font-bold hover:bg-black transition-colors">EXPORTAR PDF</button>
+    <footer class="mt-24 pt-10 border-t border-gray-100 flex justify-between items-center text-[9px] font-black uppercase tracking-[0.4em] text-gray-300">
+      <span>Agent-BI Engine v4.0 • Strategic Analytics</span>
+      <div class="flex items-center gap-4 no-print">
+         <button onclick="window.focus(); window.print();" class="bg-gray-900 text-white px-6 py-2 rounded-full hover:bg-black transition-all">Exportar PDF</button>
+      </div>
     </footer>
   </div>
-"""
-        
-        # Injeção SEGURA de Scripts (Sem f-string para evitar conflitos de chaves)
-        scripts_section = "\n  <script>\n    setTimeout(function() {\n"
-        scripts_section += self._assemble_scripts(widget_results)
-        scripts_section += "\n    }, 100);\n  </script>\n</div>\n"
 
-        return html_body + scripts_section
+  <script>
+    window.AgentBI_Datasets = {json.dumps(dataset_ids)};
+    window.AgentBI = {{
+      renderWidget: async (containerId, content, type, title) => {{
+        const container = document.getElementById(containerId);
+        if(!container) return;
+        
+        const formatValue = (val) => {{
+          if (val === null || val === undefined || val === '') return '-';
+          const num = parseFloat(val);
+          if (isNaN(num)) return val;
+          if (num > 1000000) return (num / 1000000).toFixed(1) + 'M';
+          if (num > 1000) return (num / 1000).toFixed(1) + 'K';
+          return num.toLocaleString('pt-BR');
+        }};
+
+        try {{
+          const response = await fetch('http://127.0.0.1:8000/api/v1/ai/sql-preview', {{
+            method: 'POST',
+            headers: {{ 'Content-Type': 'application/json' }},
+            body: JSON.stringify({{ sql: content, datasets: window.AgentBI_Datasets }}) 
+          }});
+          const data = await response.json();
+          
+          if (data && data.rows && data.rows.length > 0) {{
+            const rows = data.rows;
+            const cols = Object.keys(rows[0]);
+
+            if (type === 'BIGNUMBER') {{
+              container.innerText = formatValue(Object.values(rows[0])[0]);
+            }} else {{
+              const chart = echarts.init(container);
+              const isPie = type.toLowerCase() === 'pie';
+              const xAxisData = rows.map(r => r[cols[0]]);
+              const series = cols.slice(1).map(c => ({{
+                name: c, type: isPie ? 'pie' : 'bar',
+                colorBy: isPie ? 'data' : (cols.length === 2 ? 'data' : 'series'),
+                radius: isPie ? ['40%', '70%'] : undefined,
+                data: isPie ? rows.map(r => ({{name: r[cols[0]], value: r[c]}})) : rows.map(r => r[c])
+              }}));
+
+              chart.setOption({{
+                color: ['#112A46', '#D4AF37', '#1A2530', '#0F4C5C', '#7F8C8D', '#34495E', '#BDC3C7'],
+                tooltip: {{ trigger: isPie ? 'item' : 'axis' }},
+                legend: {{ bottom: 0, textStyle: {{ fontSize: 8, fontWeight: 'bold' }} }},
+                grid: {{ top: 40, bottom: 60, left: 60, right: 30 }},
+                xAxis: isPie ? undefined : {{ type: 'category', data: xAxisData, axisLabel: {{ fontSize: 9 }} }},
+                yAxis: isPie ? undefined : {{ type: 'value', axisLabel: {{ fontSize: 9 }} }},
+                series: series
+              }});
+            }}
+          }}
+        }} catch (e) {{ console.error(e); container.innerText = 'Erro de Dados'; }}
+      }}
+    }};
+
+    document.addEventListener('DOMContentLoaded', () => {{
+      {self._assemble_scripts(widget_results)}
+    }});
+  </script>
+</body>
+</html>"""
+        return html
 
     def _render_kpi_grid(self, kpis: list) -> str:
         if not kpis: return ""
@@ -109,7 +179,7 @@ class DashboardHtmlRendererService:
             html += f"""
             <div class="kpi-card flex flex-col min-h-[500px] relative group">
               <div class="flex items-center justify-between mb-6 pb-4 border-b border-gray-50">
-                <h3 class="text-sm font-black text-gray-800 uppercase tracking-widest italic">{self._escape_html(w_title)}</h3>
+                <h3 class="text-sm font-black uppercase tracking-widest italic" style="color: #D4AF37;">{self._escape_html(w_title)}</h3>
                 <div class="flex items-center gap-2">
                     <div class="opacity-0 group-hover:opacity-100 transition-opacity cursor-help" title="{self._escape_html(w.get('business_rationale', 'Insight estratégico'))}">
                         <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -123,11 +193,13 @@ class DashboardHtmlRendererService:
 
     def _render_diagnostico(self, diagnostico: str) -> str:
         if not diagnostico: return ""
-        lines = [line.strip() for line in diagnostico.split('\n') if line.strip()]
+        # Limpeza de pontuação indesejada gerada por modelos de IA (ex: .,)
+        clean_text = diagnostico.replace('.,', '.').replace(',.', '.')
+        lines = [line.strip() for line in clean_text.split('\n') if line.strip()]
         formatted = "".join([f'<p class="mb-3">{self._escape_html(line)}</p>' for line in lines])
         
         return f"""
-        <div class="bg-white rounded-[2.5rem] p-12 shadow-2xl border border-gray-100 relative overflow-hidden">
+        <div class="diagnostic-box bg-white rounded-[2.5rem] p-12 shadow-2xl border border-gray-100 relative overflow-hidden">
           <div class="relative z-10">
             <div class="flex items-center gap-4 mb-8">
               <div class="w-12 h-12 bg-gray-900 rounded-2xl flex items-center justify-center text-white">
@@ -144,13 +216,11 @@ class DashboardHtmlRendererService:
         for w in results:
             content = w.get('script_content', '')
             w_id = w.get('widget_id', 'unknown')
-            w_type = w.get('visual_type', 'BAR') # Agora usa o tipo visual correto (PIE, LINE, BIGNUMBER)
+            w_type = w.get('visual_type', 'BAR')
             title = w.get('title', w_id.replace('_', ' ').title())
             
-            # Serializa o SQL/Python retornado para ser alocado como uma string segura no JS
             content_js = json.dumps(content)
-            
-            scripts += f"      try {{ if(window.AgentBI && window.AgentBI.renderWidget) {{ window.AgentBI.renderWidget('widget-{w_id}', {content_js}, '{w_type}', '{title}'); }} else {{ console.warn('AgentBI runtime indisponível para {w_id}'); }} }} catch(e) {{ console.error('Erro no widget {w_id}:', e); }}\n"
+            scripts += f"window.AgentBI.renderWidget('widget-{w_id}', {content_js}, '{w_type}', '{json.dumps(title)}');\n"
         return scripts
 
     def _escape_html(self, value: Any) -> str:

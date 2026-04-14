@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
@@ -15,9 +15,11 @@ import {
   Compass,
   Activity,
   Sparkles,
+  BookOpen,
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
+import HelpModal from "./HelpModal";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -43,6 +45,7 @@ const DOMAINS = [
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const params = useParams();
   const pathname = usePathname();
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   const menuItems = [
     { name: "1. Governanca Corporativa", icon: <ShieldCheck size={18} />, path: `/projects/${params.id}` },
@@ -130,6 +133,13 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   <Cpu size={18} />
                   <span className="text-sm font-bold tracking-tight">Centro de Governança de IA</span>
                 </Link>
+                <button 
+                  onClick={() => setIsHelpOpen(true)}
+                  className="w-full mt-2 flex items-center gap-3 p-4 rounded-2xl transition-all text-lux-muted hover:bg-[#FDF9F0] hover:text-[#D4AF37]"
+                >
+                  <BookOpen size={18} />
+                  <span className="text-sm font-bold tracking-tight text-left">Ajuda de Arquitetura RAG</span>
+                </button>
               </div>
 
               <div className="flex items-center gap-4 p-4 bg-lux-bg/40 border border-lux-border/20 rounded-3xl mb-2 group-hover:border-lux-text/20 transition-all">
@@ -143,6 +153,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               </div>
             </div>
           </motion.div>
+          <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
         </>
       )}
     </AnimatePresence>

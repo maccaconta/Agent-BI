@@ -148,7 +148,7 @@ export default function SourcesPage() {
   };
 
   return (
-    <motion.div initial={false} animate={{ opacity: 1, y: 0 }} className="max-w-[1600px] mx-auto pb-10 px-4">
+    <motion.div initial={false} animate={{ opacity: 1, y: 0 }} className="max-w-[1600px] mx-auto pt-6 pb-10 px-4">
       <ProjectHeaderStandard 
         projectId={projectId}
         step={2}

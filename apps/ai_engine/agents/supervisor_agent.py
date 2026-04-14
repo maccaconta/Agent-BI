@@ -53,7 +53,8 @@ Analise a pergunta e o contexto para decidir a melhor rota.
             decision_json = self.bedrock_service.invoke_with_json_output(
                 system_prompt=system_prompt,
                 user_message=prompt,
-                temperature=0.1
+                temperature=0.1,
+                trace=trace
             )
             
             if not decision_json:
@@ -142,7 +143,8 @@ Gere o fragmento de layout chamando renderWidget para cada widget listado acima.
             html = self.bedrock_service.invoke(
                 system_prompt=system_prompt,
                 user_message=user_message,
-                temperature=0.2
+                temperature=0.2,
+                trace=trace
             )
             
             # Limpeza de possíveis marks de markdown que a IA possa ter incluído

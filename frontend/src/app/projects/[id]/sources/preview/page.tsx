@@ -259,7 +259,7 @@ export default function DataPreviewPage() {
   const getSelectedCount = (source: StoredProjectSource) => (source.selectedCols || columns).length;
 
   return (
-    <motion.div initial={false} animate={{ opacity: 1 }} className="max-w-[1600px] mx-auto pb-6 px-4 h-screen flex flex-col overflow-hidden">
+    <motion.div initial={false} animate={{ opacity: 1 }} className="max-w-[1600px] mx-auto pt-6 pb-6 px-4 h-screen flex flex-col overflow-hidden">
       <ProjectHeaderStandard 
         projectId={projectId}
         step={3}

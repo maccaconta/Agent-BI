@@ -15,7 +15,8 @@ import {
   Minimize2,
   Search,
   BarChart3,
-  X
+  X,
+  Download
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -42,14 +43,21 @@ export default function DevHUD() {
   // Escutar eventos globais para capturar o trace_id atual (Ingestão ou IA)
   useEffect(() => {
     const handleTraceEvent = (e: any) => {
-      if (e.detail?.traceId) {
+      if (e.detail && e.detail.traceId) {
         setActiveTraceId(e.detail.traceId);
-        // Opcional: auto-expandir se quiser que o usuário veja o início
-        // setIsOpen(true); 
       }
     };
+
+    const handleExportRequest = () => {
+      handleExportJSON();
+    };
+
     window.addEventListener('agent-bi-trace', handleTraceEvent);
-    return () => window.removeEventListener('agent-bi-trace', handleTraceEvent);
+    window.addEventListener('agent-bi-export-trace', handleExportRequest);
+    return () => {
+      window.removeEventListener('agent-bi-trace', handleTraceEvent);
+      window.removeEventListener('agent-bi-export-trace', handleExportRequest);
+    };
   }, []);
 
   const [isPaused, setIsPaused] = useState(false);
@@ -113,6 +121,18 @@ export default function DevHUD() {
     return <Activity className="w-3.5 h-3.5 text-zinc-400" />;
   };
 
+  const handleExportJSON = () => {
+    const dataStr = JSON.stringify(traces, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    
+    const exportFileDefaultName = `agent-bi-trace-${activeTraceId?.slice(0,8)}.json`;
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+  };
+
   const lastStep = traces.length > 0 ? traces[traces.length - 1] : null;
   const historySteps = traces.length > 1 ? [...traces.slice(0, -1)].reverse() : [];
 
@@ -135,6 +155,14 @@ export default function DevHUD() {
               <span>LOG DE EXECUÇÃO</span>
             </div>
             <div className="flex items-center gap-2">
+              <button 
+                onClick={handleExportJSON}
+                className="text-lux-bg/60 hover:text-lux-accent transition-colors p-1"
+                title="Exportar Logs (JSON)"
+                disabled={traces.length === 0}
+              >
+                <Download className="w-4 h-4" />
+              </button>
               <button 
                 onClick={() => setIsExpanded(!isExpanded)} 
                 className="text-lux-bg/60 hover:text-lux-accent transition-colors p-1"

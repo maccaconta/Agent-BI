@@ -186,10 +186,12 @@ class ReportPromptService:
                 if insights:
                     diagnostico_consolidado += f"  INSIGHTS: {', '.join(insights)}\n"
         
+        from apps.dashboards.models import DashboardStatus
         html = self.renderer.render_premium_deterministic_dashboard(
             dashboard=dashboard, 
             widget_results=results, 
-            diagnostico_consolidado=diagnostico_consolidado
+            diagnostico_consolidado=diagnostico_consolidado,
+            is_blueprint=dashboard.status == DashboardStatus.PUBLISHED
         )
         
         logger.info(f"[ReportPromptService] Dashboard HTML gerado via motor local. Tamanho: {len(html) if html else 0} caracteres.")

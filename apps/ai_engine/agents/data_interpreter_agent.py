@@ -37,15 +37,15 @@ Você DEVE sugerir exatamente **7 widgets**, nem mais, nem menos, seguindo esta 
 ### 🛡️ EXEMPLO DE SAÍDA (FEW-SHOT):
 ```json
 {
-  "dataset_summary": "Análise de carteira de crédito...",
+  "dataset_summary": "Análise de operações de vendas e faturamento...",
   "suggested_widgets": [
-    {"type": "BIGNUMBER", "title": "Saldo Total", "prompt": "Qual o saldo total?"},
-    {"type": "BIGNUMBER", "title": "NPL 90", "prompt": "Qual o NPL 90?"},
-    {"type": "BIGNUMBER", "title": "Ticket Médio", "prompt": "Qual o ticket médio?"},
-    {"type": "BIGNUMBER", "title": "Qtd Clientes", "prompt": "Total de clientes?"},
-    {"type": "BAR", "title": "Saldo por Rating", "prompt": "Distribuição de saldo por rating"},
-    {"type": "BAR", "title": "Top 10 Cidades", "prompt": "Top 10 cidades por saldo"},
-    {"type": "LINE", "title": "Evolução NPL", "prompt": "Evolução mensal do NPL"}
+    {"type": "BIGNUMBER", "title": "Receita Total", "prompt": "Qual a receita total?"},
+    {"type": "BIGNUMBER", "title": "Qtd Clientes", "prompt": "Total de clientes ativos?"},
+    {"type": "BIGNUMBER", "title": "Ticket Médio", "prompt": "Qual o ticket médio por venda?"},
+    {"type": "BIGNUMBER", "title": "Taxa de Conversão", "prompt": "Qual a taxa de conversão geral?"},
+    {"type": "BAR", "title": "Receita por Região", "prompt": "Distribuição de receita por região"},
+    {"type": "BAR", "title": "Top 10 Produtos", "prompt": "Top 10 produtos mais vendidos"},
+    {"type": "LINE", "title": "Evolução da Receita", "prompt": "Evolução mensal da receita"}
   ]
 }
 ```

@@ -3,6 +3,7 @@ apps.ai_engine.agents.generator_agent
 Generator Agent legado: gera SQL + HTML via IA.
 """
 from __future__ import annotations
+from typing import Any
 
 import logging
 import time
@@ -54,13 +55,8 @@ class GeneratorAgent:
         self.bedrock = BedrockService()
         self.athena = AthenaService() if self.use_aws_data_services else None
 
-    def generate(
-        self,
-        instruction: str,
-        dataset,
-        template_hints: str = "",
-        previous_feedback: str = "",
         iteration: int = 1,
+        trace: Any = None,
     ) -> GeneratorAgentResult:
         start_time = time.time()
         logger.info(
@@ -97,6 +93,7 @@ class GeneratorAgent:
                 system_prompt=system_instructions,
                 user_message=prompt,
                 temperature=0.3 if iteration == 1 else 0.4,
+                trace=trace
             )
         except BedrockInvocationError as exc:
             raise GeneratorAgentError(f"Erro ao invocar Bedrock: {exc}") from exc

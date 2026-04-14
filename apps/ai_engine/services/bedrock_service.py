@@ -7,7 +7,7 @@ import logging
 import re
 import time
 import uuid
-from typing import Optional
+from typing import Optional, Any, List, Dict
 
 import boto3
 from botocore.config import Config
@@ -89,11 +89,14 @@ class BedrockService:
         temperature: float = 0.3,
         max_tokens: Optional[int] = None,
         stop_sequences: Optional[list] = None,
+        trace: Any = None,
     ) -> str:
         """
         Invoca modelo Foundation via bedrock-runtime.
         Suporta user_message unico ou lista de messages (history).
         """
+        if trace and hasattr(trace, "log_thought"):
+            trace.log_thought("AWS Bedrock", f"Solicitando inferência ao modelo {self.model_id.split(':')[-1] if ':' in self.model_id else self.model_id}...")
         max_tokens = max_tokens or self.max_tokens
 
         # Se nao houver messages, cria a partir de user_message
@@ -106,7 +109,8 @@ class BedrockService:
                 system_prompt=system_prompt,
                 messages=messages,
                 temperature=temperature,
-                max_tokens=max_tokens
+                max_tokens=max_tokens,
+                trace=trace
             )
 
         body = {
@@ -138,6 +142,22 @@ class BedrockService:
 
                 text = content[0].get("text", "")
                 usage = response_body.get("usage", {})
+                if trace and hasattr(trace, "end_step"):
+                    trace.end_step(
+                        "AWS Bedrock Inference",
+                        message=f"Inferência concluída com sucesso em {elapsed:.2f}s",
+                        metadata={
+                            "model_id": self.model_id,
+                            "system_prompt": system_prompt,
+                            "messages": messages,
+                            "input_tokens": usage.get("input_tokens", 0),
+                            "output_tokens": usage.get("output_tokens", 0),
+                            "temperature": temperature
+                        },
+                        input_tokens=usage.get("input_tokens", 0),
+                        output_tokens=usage.get("output_tokens", 0)
+                    )
+
                 logger.info(
                     "Bedrock invoke_model: model=%s, input_tokens=%s, output_tokens=%s, elapsed=%.2fs",
                     self.model_id,
@@ -182,11 +202,14 @@ class BedrockService:
         messages: Optional[list] = None,
         temperature: float = 0.3,
         max_tokens: Optional[int] = None,
+        trace: Any = None,
     ) -> str:
         """
         Invoca modelo via API Converse (necessario para familias como Amazon Nova).
         Suporta tanto user_message unico quanto lista de messages (historico).
         """
+        if trace and hasattr(trace, "log_thought"):
+            trace.log_thought("AWS Bedrock", f"Iniciando conversação (Converse API) com {self.model_id}...")
         max_tokens = max_tokens or self.max_tokens
         
         # Constrói a lista de mensagens no formato exigido pela Converse API
@@ -248,6 +271,23 @@ class BedrockService:
 
                 text = content[0].get("text", "")
                 usage = response.get("usage", {})
+                
+                if trace and hasattr(trace, "end_step"):
+                    trace.end_step(
+                        "AWS Bedrock Converse",
+                        message=f"Inferência via Converse API concluída em {elapsed:.2f}s",
+                        metadata={
+                            "model_id": self.model_id,
+                            "system_prompt": system_prompt,
+                            "messages": messages or [{"role": "user", "content": user_message}],
+                            "input_tokens": usage.get("inputTokens", 0),
+                            "output_tokens": usage.get("outputTokens", 0),
+                            "temperature": temperature
+                        },
+                        input_tokens=usage.get("inputTokens", 0),
+                        output_tokens=usage.get("outputTokens", 0)
+                    )
+
                 logger.info(
                     "Bedrock converse: model=%s, input_tokens=%s, output_tokens=%s, elapsed=%.2fs",
                     self.model_id,
@@ -286,10 +326,13 @@ class BedrockService:
         agent_id: Optional[str] = None,
         agent_alias_id: Optional[str] = None,
         end_session: bool = True,
+        trace: Any = None,
     ) -> str:
         """
         Invoca Bedrock Agent Runtime usando agentId + agentAliasId.
         """
+        if trace and hasattr(trace, "log_thought"):
+            trace.log_thought("AWS Bedrock Agent", f"Delegando tarefa para o agente Bedrock {agent_id or 'padrão'}...")
         final_agent_id = agent_id or getattr(settings, "BEDROCK_AGENT_ID", "")
         final_alias_id = agent_alias_id or getattr(settings, "BEDROCK_AGENT_ALIAS_ID", "")
         if not final_agent_id or not final_alias_id:
@@ -321,6 +364,20 @@ class BedrockService:
                 raise BedrockInvocationError(f"Erro no Agent Runtime: {text}")
 
             elapsed = time.time() - start_time
+            
+            if trace and hasattr(trace, "end_step"):
+                trace.end_step(
+                    "AWS Bedrock Agent",
+                    message=f"Tarefa executada pelo agente em {elapsed:.2f}s",
+                    metadata={
+                        "agent_id": final_agent_id,
+                        "alias_id": final_alias_id,
+                        "session_id": final_session_id,
+                        "input_text": user_message,
+                        "output_text": text
+                    }
+                )
+
             logger.info(
                 "Bedrock invoke_agent: agent_id=%s alias_id=%s session_id=%s elapsed=%.2fs",
                 final_agent_id,
@@ -345,6 +402,7 @@ class BedrockService:
         temperature: float = 0.2,
         max_tokens: Optional[int] = None,
         session_id: Optional[str] = None,
+        trace: Any = None,
     ) -> dict:
         """
         Invoca Bedrock e espera saida JSON.
@@ -387,11 +445,13 @@ class BedrockService:
             metadata["used_agent_runtime"] = True
             payload = self._build_agent_input_message(system_prompt, user_message_with_json)
             try:
-                response_text = self.invoke_agent(user_message=payload, session_id=session_id, end_session=False)
+                response_text = self.invoke_agent(user_message=payload, session_id=session_id, end_session=False, trace=trace)
             except (BedrockInvocationError, Exception) as e:
                 logger.warning(f"Falha ao invocar Agent Runtime ({e}). Tentando fallback para Model Runtime.")
                 response_text = "" # Força falha no parse inicial para disparar o fallback abaixo
         else:
+            if trace and hasattr(trace, "log_thought"):
+                trace.log_thought("AWS Bedrock", "Requisitando via Model Runtime")
             print(f"[BedrockService] 🚀 Requisitando via Model Runtime (Model ID: {self.model_id})")
             metadata["used_model_runtime"] = True
             runtime_api, response_text = self._invoke_model_runtime(
@@ -400,6 +460,7 @@ class BedrockService:
                 messages=current_messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                trace=trace,
             )
             metadata["model_runtime_api"] = runtime_api
 
@@ -422,6 +483,7 @@ class BedrockService:
                 messages=current_messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                trace=trace,
             )
             metadata["model_runtime_api"] = runtime_api
             parsed_fallback = self._parse_json_response(fallback_text)
@@ -506,6 +568,7 @@ class BedrockService:
         messages: Optional[list] = None,
         temperature: float = 0.2,
         max_tokens: Optional[int] = None,
+        trace: Any = None,
     ) -> tuple[str, str]:
         if self._should_use_converse_api():
             return (
@@ -516,6 +579,7 @@ class BedrockService:
                     messages=messages,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    trace=trace,
                 ),
             )
         return (
@@ -526,6 +590,7 @@ class BedrockService:
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                trace=trace,
             ),
         )
 

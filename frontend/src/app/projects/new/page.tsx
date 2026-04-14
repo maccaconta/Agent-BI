@@ -1,11 +1,13 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Building2, ArrowLeft, Target, Briefcase, FileText, ShieldCheck, Zap } from "lucide-react";
+import { Building2, ArrowLeft, Target, Briefcase, FileText, ShieldCheck, Zap, Sparkles, Info } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import WizardStepper from "@/components/layout/WizardStepper";
+import { ProjectHeaderStandard } from "@/components/project/ProjectHeaderStandard";
+import { ProjectPhases } from "@/components/project/ProjectPhases";
+import { AnimatePresence } from "framer-motion";
 import { getBackendJsonHeaders } from "@/lib/backendAuth";
 
 const DRAFT_KEY = "agent_bi_project_draft";
@@ -40,10 +42,25 @@ export default function NewProjectWorkspace() {
   const [fetchingSpecialists, setFetchingSpecialists] = useState(false);
   const [domains, setDomains] = useState<any[]>([]);
   const [fetchingDomains, setFetchingDomains] = useState(false);
+  const [showAgentPrompt, setShowAgentPrompt] = useState(false);
 
   useEffect(() => {
     const rawDraft = sessionStorage.getItem(DRAFT_KEY);
-    if (!rawDraft) return;
+    
+    // Default Owner
+    let loggedUser = "Usuário Corporativo";
+    try {
+      const stored = localStorage.getItem("agent_bi_user") || sessionStorage.getItem("agent_bi_user");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        loggedUser = parsed.name || parsed.email || loggedUser;
+      }
+    } catch(e) {}
+
+    if (!rawDraft) {
+       setForm(f => ({ ...f, domainDataOwner: loggedUser }));
+       return;
+    }
 
     try {
       const parsed = JSON.parse(rawDraft) as Partial<ProjectDraft>;
@@ -51,9 +68,11 @@ export default function NewProjectWorkspace() {
         ...current,
         ...parsed,
         projectId: parsed.projectId || current.projectId,
+        domainDataOwner: parsed.domainDataOwner || loggedUser,
       }));
     } catch {
       // Keep defaults if browser draft is invalid.
+      setForm(f => ({ ...f, domainDataOwner: loggedUser }));
     }
   }, []);
 
@@ -111,8 +130,8 @@ export default function NewProjectWorkspace() {
     setForm((current) => ({ ...current, [field]: value }));
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     console.log("🔵 Iniciando persistencia do projeto no backend...");
     setLoading(true);
     setSubmitError(null);
@@ -162,22 +181,29 @@ export default function NewProjectWorkspace() {
   };
 
   return (
-    <motion.div initial={false} animate={{ opacity: 1, scale: 1 }} className="max-w-4xl mx-auto pb-20">
-      <Link href="/projects" className="inline-flex items-center gap-2 mb-8 text-lux-muted hover:text-lux-text font-medium text-sm transition-colors">
-        <ArrowLeft size={16} /> Meus Projetos de Dados
-      </Link>
+    <motion.div initial={false} animate={{ opacity: 1, y: 0 }} className="max-w-[1600px] mx-auto pt-6 pb-10 px-4">
+      <ProjectHeaderStandard 
+        projectId={"PRJ-TEMP"} 
+        step={1} 
+        title="Governança Corporativa"
+        prevHref="/projects" 
+        prevLabel="Cancelar" 
+        nextLabel="Avançar para Ingestão AWS"
+        onNext={() => handleSave()}
+        nextDisabled={loading}
+      />
 
-      <WizardStepper currentStep={1} />
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start mt-6">
+        {/* Painel de Configuracao (Esq) */}
+        <div className="xl:col-span-8 space-y-6">
+          <div className="mb-4">
+            <p className="text-lux-muted dark:text-lux-muted/80 leading-relaxed text-md font-light italic">
+              Defina as diretrizes estratégicas e a Persona Especialista para este projeto. Estas definições orientam a inteligência estratégica e garantem o isolamento seguro do domínio no ambiente AWS.
+            </p>
+          </div>
 
-      <div className="mb-10">
-        <h1 className="text-4xl font-serif font-bold text-lux-text mb-2">Novo Projeto de Dados</h1>
-        <p className="text-lux-muted text-lg">
-          Os atributos de seguranca desta pagina guiam a rede da Agent-BI e populam de maneira estrita o catalogo de dados da AWS e os pesos dos agentes semanticos.
-        </p>
-      </div>
-
-      <form onSubmit={handleSave} className="glass-panel p-8 bg-lux-bg/60 border-lux-border/50 shadow-2xl relative overflow-hidden transition-all hover:border-lux-border/80">
-        <div className="space-y-6 relative z-10 flex flex-col">
+          <form onSubmit={handleSave} className="glass-panel p-8 bg-white/50 dark:bg-white/5 border-lux-border/30 dark:border-lux-border/50 shadow-2xl relative overflow-hidden transition-all hover:border-lux-border/80 rounded-[3rem]">
+            <div className="space-y-6 relative z-10 flex flex-col">
           {submitError ? (
             <div className="rounded-xl border border-red-400/40 bg-red-100/70 px-4 py-3 text-sm font-semibold text-red-900">
               {submitError}
@@ -300,18 +326,33 @@ export default function NewProjectWorkspace() {
                     </p>
                     
                     <div className="pt-4 border-t border-lux-border/20">
-                      <p className="text-[9px] text-lux-muted font-bold uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                        <Zap size={10} /> Base de Conhecimento do Agente
-                      </p>
-                      <div className="relative group/preview overflow-hidden bg-slate-50/50 rounded-xl border border-lux-border/10">
-                          <div className="max-h-40 overflow-y-auto p-3 text-[11px] text-lux-text/70 font-mono leading-relaxed scrollbar-thin scrollbar-thumb-lux-border/20 scrollbar-track-transparent">
-                              {(() => {
-                                  const content = specialists.find(s => s.id === form.specialist_prompt_id)?.content || "";
-                                  if (content.toLowerCase() === "nan" || !content) return "Carregando instruções nativas...";
-                                  return content;
-                              })()}
-                          </div>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[9px] text-lux-muted font-bold uppercase tracking-widest flex items-center gap-1.5">
+                          <Zap size={10} /> Base de Conhecimento do Agente
+                        </p>
+                        <button type="button" onClick={() => setShowAgentPrompt(!showAgentPrompt)} className="text-[9px] text-lux-accent font-bold uppercase hover:underline transition-all">
+                          {showAgentPrompt ? "- Recolher Prompt" : "+ Ver Prompt Raiz Exposto"}
+                        </button>
                       </div>
+                      
+                      <AnimatePresence>
+                        {showAgentPrompt && (
+                          <motion.div 
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="relative group/preview overflow-hidden bg-slate-50/50 rounded-xl border border-lux-border/10"
+                          >
+                              <div className="max-h-40 overflow-y-auto p-3 text-[11px] text-lux-text/70 font-mono leading-relaxed scrollbar-thin scrollbar-thumb-lux-border/20 scrollbar-track-transparent">
+                                  {(() => {
+                                      const content = specialists.find(s => s.id === form.specialist_prompt_id)?.content || "";
+                                      if (content.toLowerCase() === "nan" || !content) return "Carregando instruções nativas...";
+                                      return content;
+                                  })()}
+                              </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                   </div>
 
@@ -325,17 +366,60 @@ export default function NewProjectWorkspace() {
           </div>
 
 
-        </div>
+          </div>
+        </form>
+      </div>
 
-        <div className="mt-12 pt-6 border-t border-lux-border/30 flex justify-end gap-5 relative z-10 items-center">
-          <button type="button" onClick={() => router.push("/projects")} className="px-6 py-3 rounded-xl font-bold text-lux-muted hover:bg-lux-border/20 transition-colors">
-            Cancelar Rascunho
-          </button>
-          <button type="submit" disabled={loading} className="flex items-center gap-3 bg-lux-text text-lux-bg px-10 py-5 rounded-2xl font-bold font-serif shadow-xl hover:scale-105 transition-transform disabled:opacity-50 disabled:cursor-wait tracking-wide text-lg">
-            {loading ? "Criando Projeto no Backend..." : <>Gravar Metadados Corporativos e Iniciar Ingestao &gt;</>}
-          </button>
+      {/* Painel de Resumo (Dir) */}
+      <div className="xl:col-span-4 h-full">
+        <div className="bg-white/60 dark:bg-lux-card/40 border border-lux-border/20 dark:border-lux-border/40 p-8 h-full shadow-2xl flex flex-col rounded-[3.5rem] relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-8 opacity-5">
+             <ShieldCheck size={120} />
+          </div>
+
+          <div className="flex items-center justify-between gap-3 mb-8 relative z-10">
+            <h3 className="text-[10px] uppercase font-black text-lux-text dark:text-lux-accent tracking-[0.25em] flex items-center gap-3">
+              <Target size={16} /> Resumo do Dominio
+            </h3>
+            <div className="p-2 bg-lux-accent/10 rounded-xl">
+               <Sparkles className="text-lux-accent" size={16} />
+            </div>
+          </div>
+
+          <div className="space-y-6 flex-1 relative z-10">
+            <div className="p-5 bg-white dark:bg-white/5 border border-lux-border/20 dark:border-lux-border/60 rounded-[1.75rem] shadow-sm relative border-l-4 border-l-lux-accent">
+               <p className="text-[9px] text-lux-muted font-bold uppercase tracking-widest mb-1">Impacto Analítico</p>
+               <p className="text-sm font-black text-lux-text dark:text-lux-accent">
+                 {form.dataDomain || "Selecione um domínio..."}
+               </p>
+               <div className="mt-4 pt-4 border-t border-lux-border/10">
+                  <p className="text-[10px] leading-relaxed text-lux-muted italic">
+                    Ao definir o domínio e a persona, o Agent-BI prepara o catálogo semântico da AWS Glue e ajusta os pesos cognitivos do LLM Bedrock.
+                  </p>
+               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+               <div className="p-4 bg-lux-accent/5 rounded-2xl border border-lux-border/10">
+                  <p className="text-[8px] font-black uppercase text-lux-muted tracking-tighter">Segurança</p>
+                  <p className="text-[11px] font-bold text-lux-text mt-1">{form.confidentiality || "Pendente"}</p>
+               </div>
+               <div className="p-4 bg-lux-accent/5 rounded-2xl border border-lux-border/10">
+                  <p className="text-[8px] font-black uppercase text-lux-muted tracking-tighter">Frequência</p>
+                  <p className="text-[11px] font-bold text-lux-text mt-1">{form.crawlFrequency || "Manual"}</p>
+               </div>
+            </div>
+
+            <div className="p-4 bg-lux-accent/5 rounded-2xl border border-lux-border/10 flex items-center gap-3">
+               <Info size={16} className="text-lux-accent" />
+               <p className="text-[10px] text-lux-muted leading-relaxed font-medium">
+                 Este rascunho é persistido localmente e na nuvem para garantir a rastreabilidade do projeto.
+               </p>
+            </div>
+          </div>
         </div>
-      </form>
+      </div>
+    </div>
     </motion.div>
   );
 }

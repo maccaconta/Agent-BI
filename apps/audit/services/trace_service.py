@@ -18,18 +18,30 @@ class TraceService:
         self.job_type = job_type
         self._start_times = {}
 
-    def start_step(self, step_name: str):
+    def start_step(self, step_name: str, message: str = None):
         """Inicia a cronometragem de um passo e persiste imediatamente para o HUD."""
         self._start_times[step_name] = time.perf_counter()
-        logger.debug(f"[Tracer] Inciando: {step_name} (Trace: {self.trace_id})")
+        logger.debug(f"[Tracer] Iniciando: {step_name} (Trace: {self.trace_id})")
         
+        # Fallbacks dinâmicos para evitar repetição excessiva
+        import random
+        placeholders = [
+            "Orquestrando fluxos analíticos...",
+            "Sincronizando metadados estratégicos...",
+            "Refinando contexto de negócio...",
+            "Iniciando engine de processamento...",
+            "Calibrando modelos de análise...",
+            "Rastreando dependências de dados..."
+        ]
+        display_message = message or random.choice(placeholders)
+
         # Persistência imediata do início da etapa para feedback no HUD
         try:
             ExecutionTrace.objects.create(
                 trace_id=self.trace_id,
                 job_type=self.job_type,
                 step_name=step_name,
-                message="Iniciando processamento analítico...",
+                message=display_message,
                 status="IN_PROGRESS",
                 duration_ms=0
             )

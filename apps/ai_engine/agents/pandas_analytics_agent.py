@@ -126,7 +126,8 @@ Decida se agrupamentos (groupby) são necessários para responder à pergunta co
                 system_prompt=base_system_prompt,
                 user_message=planning_prompt,
                 temperature=0.1,
-                max_tokens=2500
+                max_tokens=2500,
+                trace=trace
             )
             
             thought = plan.get("thought", "Planejando execução de código Pandas.")
@@ -183,9 +184,10 @@ Escreva a análise final para o usuário.
             """
             
             final_report = self.bedrock_service.generate_text(
-                prompt=synthesis_prompt,
                 system_prompt=PANDAS_SYNTHESIS_SYSTEM_PROMPT,
-                max_tokens=1500
+                user_message=synthesis_prompt,
+                max_tokens=1500,
+                trace=trace
             )
             
             return {

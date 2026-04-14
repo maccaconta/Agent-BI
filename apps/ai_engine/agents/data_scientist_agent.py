@@ -32,7 +32,7 @@ class DataScientistAgent:
             }
 
         # Orquestração via Supervisor
-        routing = self.supervisor.determine_route(widget_prompt, datasets)
+        routing = self.supervisor.determine_route(widget_prompt, datasets, trace=trace)
         route = routing.get("route", "ROUTE_NL2SQL")
         
         # Override temporário: sempre forçar NL2SQL para estabilidade se não houver Redis

@@ -340,20 +340,36 @@ export default function EngineRoom() {
     }
   };
 
-  const wrapInPremiumShell = (fragment: string, datasets: any[]) => {
+  const wrapInPremiumShell = (fragment: string, datasets: any[], isBlueprint: boolean = false) => {
+    const title = activeTab?.name || "Pipeline Canvas";
+    const generatedAt = new Date().toLocaleDateString('pt-BR') + " " + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    if (fragment && fragment.startsWith("<!DOCTYPE")) {
+      return fragment;
+    }
+
     return `
       <!DOCTYPE html>
-      <html>
+      <html lang="pt-BR">
         <head>
           <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
           <script src="https://cdn.tailwindcss.com"></script>
           <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Outfit:wght@700&display=swap" rel="stylesheet">
           <style>
-            body { font-family: 'Inter', sans-serif; background: #F8F9FA; color: #1A1A1A; margin: 0; overflow-x: hidden; }
-            .lux-text { font-family: 'Outfit', sans-serif; text-transform: uppercase; letter-spacing: 0.1em; color: #333; }
-            .kpi-card { background: #FFFFFF; border: 1px solid rgba(0,0,0,0.05); border-radius: 20px; transition: all 0.4s ease; box-shadow: 0 4px 20px -5px rgba(0,0,0,0.08); }
+            body { font-family: 'Inter', sans-serif; background: ${isBlueprint ? '#FFFFFF' : '#F8F9FA'}; color: #1A1A1A; margin: 0; overflow-x: hidden; transition: background 0.5s ease; }
+            .kpi-card { background: #FFFFFF; border: 1px solid rgba(0,0,0,0.05); border-radius: 20px; transition: all 0.4s ease; box-shadow: 0 4px 20px -5px rgba(0,0,0,0.08); break-inside: avoid; }
             .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 10px 30px -10px rgba(0,0,0,0.12); border-color: #D4AF37; }
-            .kpi-value { font-family: 'Outfit', sans-serif; color: #1A1A1A; font-weight: 800; }
+            .kpi-value { font-family: 'Outfit', sans-serif; color: #1A1A1A; font-weight: 800; font-size: 28px; }
+            .kpi-label { color: #D4AF37; font-weight: 900; letter-spacing: 0.15em; text-transform: uppercase; font-size: 11px; }
+            .diagnostic-box { break-inside: avoid; }
+            
+            /* Melhoria Dark Mode no Iframe Shell */
+            @media (prefers-color-scheme: dark) {
+              body { background: ${isBlueprint ? '#FFFFFF' : '#0c0c0e'}; color: ${isBlueprint ? '#1A1A1A' : '#E0E0E0'}; }
+              .kpi-card { background: ${isBlueprint ? '#FFFFFF' : '#161618'}; border-color: rgba(255,255,255,0.05); color: ${isBlueprint ? '#1A1A1A' : '#FFF'}; }
+              .kpi-value { color: ${isBlueprint ? '#1A1A1A' : '#FFF'}; }
+            }
+
             ::-webkit-scrollbar { width: 4px; }
             ::-webkit-scrollbar-track { background: transparent; }
             ::-webkit-scrollbar-thumb { background: rgba(212,175,55,0.3); border-radius: 10px; }
@@ -462,28 +478,7 @@ export default function EngineRoom() {
                                 container.style.minHeight = '400px';
                             }
 
-                            // Adiciona indicador de status da base (KPI ou Gráfico)
-                            const isFull = data.engine === 'sqlite-analytics-local';
-                            const badgeId = 'status-badge-' + containerId;
-                            let badge = document.getElementById(badgeId);
-                            if(!badge) {
-                                badge = document.createElement('div');
-                                badge.id = badgeId;
-                                badge.style.position = 'absolute';
-                                badge.style.top = '10px';
-                                badge.style.right = '10px';
-                                badge.style.fontSize = '8px';
-                                badge.style.padding = '2px 6px';
-                                badge.style.borderRadius = '4px';
-                                badge.style.fontWeight = 'bold';
-                                badge.style.zIndex = '50';
-                                container.parentElement.style.position = 'relative';
-                                container.parentElement.appendChild(badge);
-                            }
-                            badge.innerText = isFull ? 'BASE TOTAL' : 'AMOSTRA';
-                            badge.style.background = isFull ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)';
-                            badge.style.color = isFull ? '#10b981' : '#f59e0b';
-
+                            // Indicador de status removido a pedido do usuário
                         } else {
                             container.innerHTML = \`
                                 <div class="kpi-card p-8 flex flex-col items-center justify-center text-center shadow-md h-full">
@@ -506,6 +501,25 @@ export default function EngineRoom() {
                 }
             };
           </script>
+
+          <header class="flex flex-col items-center mb-10 pt-4 relative">
+            <div class="w-full flex justify-between items-center mb-10 px-2 opacity-60 grayscale hover:grayscale-0 transition-all no-print">
+              <img src="/logos/aws.svg" alt="AWS" class="h-8 w-auto object-contain" />
+              <img src="/logos/ntt-data.svg" alt="NTT DATA" class="h-8 w-auto object-contain" />
+            </div>
+
+            <div class="text-center max-w-4xl mx-auto space-y-3">
+              ${isBlueprint ? `<div class="inline-flex items-center gap-2 px-4 py-1.5 bg-[#D4AF37]/10 border border-[#D4AF37]/40 rounded-full mb-6 animate-fade-in"><span class="w-2 h-2 rounded-full bg-[#D4AF37] shadow-[0_0_8px_#D4AF37]"></span><span class="text-[9px] font-black text-[#D4AF37] uppercase tracking-[0.2em]">Certified Analytics Blueprint</span></div>` : ''}
+              <h1 class="text-4xl md:text-5xl lg:text-6xl font-black tracking-tightest text-gray-900 leading-none">${title}</h1>
+              <div class="flex items-center justify-center gap-4 mt-6">
+                <span class="h-[1px] w-12 bg-gray-200"></span>
+                <p class="text-[10px] text-gray-500 font-medium uppercase tracking-[0.4em]">${generatedAt}</p>
+                <span class="h-[1px] w-12 bg-gray-200"></span>
+              </div>
+            </div>
+          </header>
+
+          <div class="w-full h-[2px] bg-gradient-to-r from-black via-[#D4AF37] to-black mb-12 opacity-80 shadow-sm transition-all"></div>
 
           <div id="dashboard-root" class="max-w-7xl mx-auto space-y-12">
             ${fragment}
@@ -658,9 +672,9 @@ export default function EngineRoom() {
                       value={widget}
                       initial={{ opacity: 0, x: -20 }} 
                       animate={{ opacity: 1, x: 0 }}
-                      className="group bg-white border border-lux-border/20 rounded-3xl overflow-hidden shadow-sm hover:shadow-xl hover:border-lux-accent/30 transition-shadow flex flex-col cursor-auto select-none"
+                      className="group bg-white dark:bg-[#161618] border border-lux-border/20 rounded-3xl overflow-hidden shadow-sm hover:shadow-xl hover:border-lux-accent/30 transition-shadow flex flex-col cursor-auto select-none"
                     >
-                      <div className={`px-4 py-3 bg-[#fdfdfd] border-b border-lux-border/10 flex items-center justify-between gap-3`}>
+                      <div className={`px-4 py-3 bg-[#fdfdfd] dark:bg-black/20 border-b border-lux-border/10 flex items-center justify-between gap-3`}>
                         <div className="flex items-center gap-2 flex-1 min-w-0">
                            {/* Alça de Arraste */}
                            <div className="cursor-grab active:cursor-grabbing text-lux-muted/30 hover:text-lux-accent transition-colors shrink-0 -ml-1 pr-1">
@@ -685,7 +699,7 @@ export default function EngineRoom() {
                            />
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                           <div className={`hidden sm:inline-block px-2 py-0.5 rounded-full text-[7px] font-black uppercase ${isBigNumber ? 'bg-emerald-500 text-white' : 'bg-lux-accent text-black'}`}>
+                           <div className={`hidden sm:inline-block px-2 py-0.5 rounded-full text-[7px] font-black uppercase ${isBigNumber ? 'bg-emerald-500 text-white' : 'bg-blue-500 text-white shadow-[0_2px_8px_rgba(59,130,246,0.5)]'}`}>
                               {isBigNumber ? 'KPI' : 'Chrt'}
                            </div>
                            <div className="flex items-center gap-0.5 bg-black/5 p-0.5 rounded-xl border border-black/5">
@@ -799,10 +813,10 @@ export default function EngineRoom() {
                         onDoubleClick={() => { setEditingTabId(tab.id); setEditingName(tab.name); }}
                         className={`h-9 px-5 flex items-center gap-3 transition-all relative rounded-xl group ${activeTabId === tab.id ? "bg-lux-text text-white shadow-lg scale-[1.02]" : "text-lux-muted hover:bg-lux-border/5"}`}
                       >
-                        <span className="text-[10px] font-black uppercase tracking-widest truncate max-w-[80px]">
+                        <span className={`text-[10px] font-black uppercase tracking-widest truncate max-w-[80px] ${tab.isBlueprint ? 'text-lux-accent drop-shadow-[0_0_8px_rgba(212,175,55,0.4)]' : ''}`}>
                           {tab.isBlueprint ? 'BLU' : tab.name.split(' ').pop()}
                         </span>
-                        {tab.isBlueprint && <Star size={10} className="text-lux-accent fill-current animate-pulse" />}
+                        {tab.isBlueprint && <Star size={10} className="text-lux-accent fill-current animate-pulse shadow-[0_0_10px_rgba(212,175,55,0.5)]" />}
                         {activeTabId === tab.id && (
                           <motion.div layoutId="tab-glow" className="absolute inset-0 bg-lux-accent/10 rounded-xl -z-10" />
                         )}
@@ -868,11 +882,11 @@ export default function EngineRoom() {
                   <div className="flex-1 h-7 bg-white/40 dark:bg-white/5 rounded-xl border border-lux-border/10 flex items-center px-4 justify-between group overflow-hidden">
                      <div className="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity overflow-hidden">
                        <span className="text-[9px] text-lux-muted font-bold tracking-widest uppercase shrink-0">secure.agent-bi.studio /</span> 
-                       <span className="text-[9px] text-lux-accent font-black uppercase truncate">{activeTab?.name || 'pipeline-active'}</span>
+                       <span className={`text-[9px] font-black uppercase truncate ${activeTab?.isBlueprint ? 'text-lux-accent drop-shadow-[0_0_10px_rgba(212,175,55,0.6)] animate-pulse' : 'text-lux-accent'}`}>{activeTab?.name || 'pipeline-active'}</span>
                      </div>
                      {activeTab?.isBlueprint ? (
-                       <div className="flex items-center gap-2 bg-lux-accent/10 px-3 py-1 rounded-lg">
-                          <Star size={10} className="text-lux-accent fill-current" />
+                       <div className="flex items-center gap-2 bg-lux-accent/20 border border-lux-accent/30 px-3 py-1 rounded-lg">
+                          <Star size={10} className="text-lux-accent fill-current drop-shadow-[0_0_8px_rgba(212,175,55,0.8)]" />
                           <span className="text-[8px] font-black text-lux-accent uppercase tracking-tighter">Certified Blueprint</span>
                        </div>
                      ) : (
@@ -894,7 +908,7 @@ export default function EngineRoom() {
                 </div>
                 <div className="flex-1 relative bg-white dark:bg-[#0c0c0e] overflow-hidden">
                    {activeTab?.content && !viewCode ? (
-                    <iframe key={`dashboard-${activeTab.id}`} srcDoc={wrapInPremiumShell(activeTab.content, projectDatasets)} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin" title="Agente BI Canvas" />
+                    <iframe key={`dashboard-${activeTab.id}`} srcDoc={wrapInPremiumShell(activeTab.content, projectDatasets, activeTab.isBlueprint)} className="w-full h-full border-none" sandbox="allow-scripts allow-same-origin allow-modals" title="Agente BI Canvas" />
                   ) : activeTab?.content ? (
                     <pre className="p-10 text-[11px] text-[#E0E0E0] bg-[#0c0c0e] h-full overflow-auto font-mono leading-relaxed custom-scrollbar">{activeTab.content}</pre>
                   ) : activeTabId && !activeTab ? (
@@ -986,7 +1000,21 @@ export default function EngineRoom() {
                   )}
                   <section><h3 className="text-sm font-black uppercase tracking-widest text-lux-text mb-6 flex items-center gap-3"><Database size={18} className="text-lux-accent" /> Consulta SQL Analytics</h3><pre className="p-8 bg-black text-emerald-400 rounded-3xl font-mono text-xs overflow-x-auto leading-relaxed border border-emerald-500/20 shadow-inner">{activeTab?.auditTrail?.nl2sql_sql || "-- SQL indisponível."}</pre></section>
                 </div>
-                <div className="p-8 bg-lux-bg/50 border-t border-lux-border/20 flex items-center justify-between shrink-0"><div className="flex items-center gap-2 text-[10px] text-lux-muted font-bold tracking-widest uppercase"><AlertCircle size={14} /> Trilha auditada e criptografada por NTT DATA Governance</div><button onClick={() => setShowAuditModal(false)} className="bg-lux-text text-lux-bg px-10 py-3 rounded-2xl text-xs font-bold shadow-xl hover:scale-105 transition-transform">Fechar Auditoria</button></div>
+                <div className="p-8 bg-lux-bg/50 border-t border-lux-border/20 flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-2 text-[10px] text-lux-muted font-bold tracking-widest uppercase"><AlertCircle size={14} /> Trilha auditada e criptografada por NTT DATA Governance</div>
+                  <div className="flex gap-4">
+                    <button 
+                      onClick={() => {
+                        const traceEvent = new CustomEvent('agent-bi-export-trace');
+                        window.dispatchEvent(traceEvent);
+                      }}
+                      className="bg-lux-accent/10 border border-lux-accent/30 text-lux-accent px-6 py-3 rounded-2xl text-xs font-bold shadow-sm hover:bg-lux-accent/20 transition-all flex items-center gap-2"
+                    >
+                      <Download size={14} /> Exportar Auditoria (JSON)
+                    </button>
+                    <button onClick={() => setShowAuditModal(false)} className="bg-lux-text text-lux-bg px-10 py-3 rounded-2xl text-xs font-bold shadow-xl hover:scale-105 transition-transform">Fechar Auditoria</button>
+                  </div>
+                </div>
               </motion.div>
             </motion.div>
           )}

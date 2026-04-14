@@ -138,7 +138,7 @@ export default function RelationshipDesigner() {
   }
 
   return (
-    <motion.div initial={false} animate={{ opacity: 1, y: 0 }} className="max-w-[1600px] mx-auto pb-6 px-4">
+    <motion.div initial={false} animate={{ opacity: 1, y: 0 }} className="max-w-[1600px] mx-auto pt-6 pb-6 px-4">
       <ProjectHeaderStandard 
         projectId={projectId}
         step={4}
