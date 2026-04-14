@@ -125,7 +125,6 @@ Decida se agrupamentos (groupby) são necessários para responder à pergunta co
             plan = self.bedrock_service.invoke_with_json_output(
                 system_prompt=base_system_prompt,
                 user_message=planning_prompt,
-                temperature=None,
                 max_tokens=2500,
                 trace=trace
             )

@@ -1,13 +1,10 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { 
   MessageSquareQuote, 
-  Palette, 
-  ShieldAlert, 
-  Save, 
   RefreshCw, 
-  Globe,
   Sparkles,
   Info,
   CheckCircle2,
@@ -17,9 +14,7 @@ import {
   Activity,
   ArrowLeft,
   Trash2,
-  Settings2,
-  ChevronRight,
-  ShieldCheck
+  Save
 } from "lucide-react";
 
 /**
@@ -46,19 +41,7 @@ export default function AdminPromptsPage() {
     id: null as string | null,
     persona_title: "Analista Financeiro Sênior",
     persona_description: "Você é um analista financeiro sênior especializado em identificar relações ocultas em dados e gerar insights estratégicos.",
-    style_guide: {
-      primary_color: "#D4AF37",
-      secondary_color: "#1A1A1A",
-      logo_url: "",
-      font_family: "Inter"
-    } as any,
     compliance_rules: "",
-    language: "pt-BR",
-    enable_temporal_profile: true,
-    enable_correlation_profile: false,
-    enable_anomaly_detection: false,
-    enable_clustering_profile: false,
-    enable_forecasting_profile: false,
     temperature: 0.3,
     top_p: 0.9,
     top_k: 250,
@@ -116,26 +99,24 @@ export default function AdminPromptsPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.results && data.results.length > 0) {
-          const p = data.results[0];
+        // Ajuste Crítico: O backend retorna um array direto quando a paginação está desativada.
+        const configList = Array.isArray(data) ? data : (data.results || []);
+        
+        if (configList.length > 0) {
+          const p = configList[0];
+          console.log("✅ Governança Master carregada:", p.persona_title);
+          
           setPrompt({
             id: p.id,
-            persona_title: p.persona_title,
-            persona_description: p.persona_description,
-            style_guide: p.style_guide || {},
+            persona_title: p.persona_title || "",
+            persona_description: p.persona_description || "",
             compliance_rules: p.compliance_rules || "",
-            language: p.language || "pt-BR",
-            enable_temporal_profile: p.enable_temporal_profile ?? true,
-            enable_correlation_profile: p.enable_correlation_profile ?? false,
-            enable_anomaly_detection: p.enable_anomaly_detection ?? false,
-            enable_clustering_profile: p.enable_clustering_profile ?? false,
-            enable_forecasting_profile: p.enable_forecasting_profile ?? false,
             temperature: p.temperature ?? 0.3,
             top_p: p.top_p ?? 0.9,
             top_k: p.top_k ?? 250,
             max_tokens_limit: p.max_tokens_limit ?? 32000,
             ingestion_row_limit: p.ingestion_row_limit ?? 5000,
-            is_active: p.is_active
+            is_active: p.is_active ?? true
           });
         }
       }
@@ -257,14 +238,25 @@ export default function AdminPromptsPage() {
           {error && (
             <div className="bg-red-50 text-red-500 text-[10px] font-black uppercase px-4 py-2 border border-red-100 rounded-full animate-pulse">{error}</div>
           )}
-          <button 
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-2 px-6 py-3 bg-[#1A1A1A] text-white rounded-full font-black text-[11px] uppercase tracking-widest hover:scale-[1.02] hover:shadow-[0_10px_20px_rgba(212,175,55,0.15)] transition-all disabled:opacity-50 active:scale-95 group shadow-lg"
-          >
-            {saving ? <RefreshCw className="animate-spin" size={14} /> : <Save size={14} className="text-[#D4AF37] group-hover:scale-110 transition-transform" />}
-            {saving ? "Salvando..." : "Salvar Alterações"}
-          </button>
+          
+          <div className="flex items-center gap-3">
+            <Link 
+              href="/admin/datasets" 
+              className="flex items-center gap-2 px-6 py-3 bg-white border border-[#F1E9DB] text-[#8C8C8C] rounded-full font-black text-[11px] uppercase tracking-widest hover:border-[#D4AF37] hover:text-[#1A1A1A] transition-all active:scale-95 shadow-sm group"
+            >
+              <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
+              Portfólio de Dados
+            </Link>
+
+            <button 
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-3 bg-[#1A1A1A] text-white rounded-full font-black text-[11px] uppercase tracking-widest hover:scale-[1.02] hover:shadow-[0_10px_20px_rgba(212,175,55,0.15)] transition-all disabled:opacity-50 active:scale-95 group shadow-lg"
+            >
+              {saving ? <RefreshCw className="animate-spin" size={14} /> : <Save size={14} className="text-[#D4AF37] group-hover:scale-110 transition-transform" />}
+              {saving ? "Salvando..." : "Salvar Alterações"}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -487,7 +479,7 @@ export default function AdminPromptsPage() {
                 </div>
 
                 <div className="border-t border-[#F1E9DB] pt-8">
-                  <label className="text-[10px] uppercase tracking-[0.25em] font-black text-[#D4AF37] mb-4 block">Diretrizes de Compliance Bancário</label>
+                  <label className="text-[10px] uppercase tracking-[0.25em] font-black text-[#D4AF37] mb-4 block">Diretrizes de Compliance</label>
                   <textarea 
                     rows={5}
                     value={prompt.compliance_rules}

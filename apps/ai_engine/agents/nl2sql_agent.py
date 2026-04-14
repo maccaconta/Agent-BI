@@ -100,8 +100,8 @@ Gere o SQL e a descrição técnica.
             
         except Exception as e:
             logger.error(f"[NL2SQL] Falha ao gerar SQL: {e}")
-            if trace and hasattr(trace, "quick_log"):
-                 trace.quick_log("Assistente NL2SQL: Erro", str(e), status="ERROR")
+            if trace and hasattr(trace, "log_thought"):
+                 trace.log_thought("Assistente NL2SQL: Erro", str(e))
             
             return {
                 "specialist": "ASSISTENTE_NL2SQL",

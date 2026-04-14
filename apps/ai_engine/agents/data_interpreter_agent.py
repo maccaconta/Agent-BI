@@ -169,7 +169,6 @@ Gere o mapeamento semântico, o resumo estratégico e a descrição de negócio 
             result = self.bedrock_service.invoke_with_json_output(
                 system_prompt=system_prompt,
                 user_message=prompt,
-                temperature=None,
                 max_tokens=2500
             )
             

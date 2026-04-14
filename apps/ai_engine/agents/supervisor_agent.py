@@ -105,9 +105,9 @@ Sua missão é criar o LAYOUT de um Dashboard Executivo, Limpo e Elegante com fo
 1. **Corporate Branding**: Cabeçalho simétrico com Logos e Título. Inclua no topo:
    `<div class="flex items-center justify-between mb-10 pb-6 border-b border-gray-100">
       <div class="flex items-center gap-10">
-        <img src="/logos/ntt-data.svg" class="h-10 object-contain" />
+        <img src="/logos/ntt-data-black.png" class="h-10 object-contain" />
         <div class="h-10 w-[1px] bg-gray-200"></div>
-        <img src="/logos/aws.svg" class="h-10 object-contain" />
+        <img src="/logos/aws-partner.png" class="h-10 object-contain" />
       </div>
       <div class="text-right">
         <h1 class="text-3xl font-black text-gray-900 tracking-tighter italic font-serif">${dashboard.name}</h1>
@@ -143,7 +143,6 @@ Gere o fragmento de layout chamando renderWidget para cada widget listado acima.
             html = self.bedrock_service.invoke(
                 system_prompt=system_prompt,
                 user_message=user_message,
-                temperature=None,
                 trace=trace
             )
             

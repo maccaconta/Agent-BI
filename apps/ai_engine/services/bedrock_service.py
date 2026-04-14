@@ -84,12 +84,12 @@ class BedrockService:
             config = GlobalAIConfig.objects.filter(is_active=True).first()
             if config:
                 data = {
-                    "temperature": config.temperature,
-                    "top_p": config.top_p,
-                    "top_k": config.top_k,
-                    "max_tokens": config.max_tokens_limit,
-                    "persona_title": config.persona_title,
-                    "persona_description": config.persona_description
+                    "temperature": config.temperature if config.temperature is not None else 0.3,
+                    "top_p": config.top_p if config.top_p is not None else 0.9,
+                    "top_k": config.top_k if config.top_k is not None else 250,
+                    "max_tokens": config.max_tokens_limit if config.max_tokens_limit else self.max_tokens,
+                    "persona_title": config.persona_title or "Especialista em BI",
+                    "persona_description": config.persona_description or ""
                 }
                 self._global_config_cache = data
                 self._last_config_fetch = now
@@ -143,10 +143,16 @@ class BedrockService:
         # Nota: Chamadores técnicos como NL2SQL enviam temperature=0.0 explicitamente.
         # Chamadores genéricos que enviam None usarão o valor do Slider da Governança.
         
-        final_temp = temperature if temperature is not None else global_cfg.get("temperature", 0.3)
-        final_max_tokens = max_tokens or global_cfg.get("max_tokens", self.max_tokens)
-        final_top_p = top_p if top_p is not None else global_cfg.get("top_p", 0.9)
-        final_top_k = top_k if top_k is not None else global_cfg.get("top_k", 250)
+        final_temp = temperature if temperature is not None else global_cfg.get("temperature")
+        if final_temp is None: final_temp = 0.3
+        
+        final_max_tokens = max_tokens or global_cfg.get("max_tokens") or self.max_tokens
+        
+        final_top_p = top_p if top_p is not None else global_cfg.get("top_p")
+        if final_top_p is None: final_top_p = 0.9
+        
+        final_top_k = top_k if top_k is not None else global_cfg.get("top_k")
+        if final_top_k is None: final_top_k = 250
 
         if trace and hasattr(trace, "log_thought"):
             trace.log_thought("AWS Bedrock", f"Solicitando inferência ao modelo {self.model_id.split(':')[-1] if ':' in self.model_id else self.model_id}...")
@@ -278,7 +284,7 @@ class BedrockService:
         system_prompt: str,
         user_message: Optional[str] = None,
         messages: Optional[list] = None,
-        temperature: float = 0.3,
+        temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
         top_p: Optional[float] = None,
         top_k: Optional[int] = None,
@@ -290,7 +296,26 @@ class BedrockService:
         """
         if trace and hasattr(trace, "log_thought"):
             trace.log_thought("AWS Bedrock", f"Iniciando conversação (Converse API) com {self.model_id}...")
-        max_tokens = max_tokens or self.max_tokens
+        
+        global_cfg = self._get_global_config()
+        
+        # Precedência: Chamada Explicativa > Governança > Padrão
+        final_temp = temperature if temperature is not None else global_cfg.get("temperature")
+        if final_temp is None: final_temp = 0.3
+        
+        final_max_tokens = max_tokens or global_cfg.get("max_tokens") or self.max_tokens
+        # Modelos Amazon Nova têm limite máximo de 10000 tokens de output
+        if self._should_use_converse_api():
+            final_max_tokens = min(int(final_max_tokens), 10000)
+        
+        final_top_p = top_p if top_p is not None else global_cfg.get("top_p")
+        if final_top_p is None: final_top_p = 0.9
+        
+        final_top_k = top_k if top_k is not None else global_cfg.get("top_k")
+        if final_top_k is None: final_top_k = 250
+        
+        # Log de segurança para depuração em caso de falha de validação da AWS
+        logger.debug(f"[Bedrock_Converse] Parameters: temp={final_temp}, max={final_max_tokens}, top_p={final_top_p}, top_k={final_top_k}")
         
         # Constrói a lista de mensagens no formato exigido pela Converse API
         converse_messages = []
@@ -325,14 +350,14 @@ class BedrockService:
             "modelId": self.model_id,
             "messages": converse_messages,
             "inferenceConfig": {
-                "temperature": temperature,
-                "maxTokens": max_tokens,
-                "topP": top_p if top_p is not None else 0.9,
+                "temperature": float(final_temp),
+                "maxTokens": int(final_max_tokens),
+                "topP": float(final_top_p),
             },
         }
-        if top_k is not None:
-            # Nem todos os modelos Nova suportam topK via API Converse v1
-            request_kwargs["inferenceConfig"]["topK"] = top_k
+        # Adiciona topK apenas se não for modelo Nova (que não suporta via inferenceConfig)
+        if final_top_k is not None and not self._should_use_converse_api():
+            request_kwargs["inferenceConfig"]["topK"] = int(final_top_k)
             
         if system_prompt:
             request_kwargs["system"] = [{"text": system_prompt}]
