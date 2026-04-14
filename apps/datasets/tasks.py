@@ -71,19 +71,52 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
         trace.end_step("Carregando Dados Brutos", message=f"Formato: {ext.upper()}")
 
         trace.start_step("Conversão para Parquet")
-        logger.info("[DatasetTask] Convertendo %s para parquet", ext.upper())
-        if ext == "csv":
-            parquet_bytes, schema_info = parquet_svc.convert_csv_to_parquet(raw_bytes)
-            df_full = pd.read_csv(io.BytesIO(raw_bytes))
-        else:
-            parquet_bytes, schema_info = parquet_svc.convert_xlsx_to_parquet(raw_bytes)
-            df_full = pd.read_excel(io.BytesIO(raw_bytes))
+        logger.info("[DatasetTask] Processando %s", ext.upper())
+        
+        # 1. Carregamento Único com Limites de Segurança
+        try:
+            if ext == "csv":
+                # Usamos utf-8 por padrão e o bloco except abaixo tentará iso-8859-1 se falhar
+                encoding = "utf-8"
+                # Usamos sep=None com engine='python' para o Pandas detectar o delimitador automaticamente
+                # Testamos primeiro com o encoding sugerido, e tentamos ISO como fallback robusto
+                try:
+                    df_full = pd.read_csv(
+                        io.BytesIO(raw_bytes), 
+                        sep=None, 
+                        engine="python", 
+                        encoding=encoding,
+                        nrows=parquet_svc.MAX_ROWS,
+                        na_values=["NULL", "null", "NaN", "nan", "N/A"],
+                        keep_default_na=True,
+                    )
+                except UnicodeDecodeError:
+                    df_full = pd.read_csv(
+                        io.BytesIO(raw_bytes), 
+                        sep=None, 
+                        engine="python", 
+                        encoding="iso-8859-1",
+                        nrows=parquet_svc.MAX_ROWS,
+                        na_values=["NULL", "null", "NaN", "nan", "N/A"],
+                        keep_default_na=True,
+                    )
+            else:
+                df_full = pd.read_excel(io.BytesIO(raw_bytes), nrows=parquet_svc.MAX_ROWS)
+            
+            # 2. Conversão e Schema
+            parquet_bytes, schema_info = parquet_svc.convert_df_to_parquet(df_full)
+            schema_info = _to_json_compatible(schema_info)
+            
+        except Exception as conv_err:
+            logger.error(f"[DatasetTask] Falha crítica de leitura: {conv_err}")
+            raise ValueError(f"O arquivo {ext.upper()} não pôde ser lido: {conv_err}")
+
         trace.end_step("Conversão para Parquet")
 
         trace.start_step("Data Profiling")
-        schema_info = _to_json_compatible(schema_info)
-        all_rows = _to_json_compatible(df_full.fillna("").to_dict(orient="records"))
-        dataset.sample_json = all_rows[:100]
+        # Gera amostra para a UI (100 linhas)
+        all_rows_sample = _to_json_compatible(df_full.head(100).fillna("").to_dict(orient="records"))
+        dataset.sample_json = all_rows_sample
         dataset.save(update_fields=["sample_json", "updated_at"])
 
         # Gerar perfil estatístico compacto (substitui sample bruto para a LLM)
@@ -141,9 +174,10 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
             )
 
             sqlite_store = LocalSQLiteAnalyticsStoreService()
+            # Ingestão real de todos os dados no SQLite analítico
             sqlite_table = sqlite_store.upsert_dataset_rows(
                 dataset=dataset,
-                rows=all_rows,
+                rows=_to_json_compatible(df_full.fillna("").to_dict(orient="records")),
                 schema_json=schema_info,
             )
 
@@ -163,6 +197,17 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
             "updated_at",
         ])
         trace.end_step("Persistência do Dataset")
+
+        # --- 4. PREPARAÇÃO DE METADADOS DEFAULT ---
+        project = dataset.project
+        if not project.intake_metadata:
+            project.intake_metadata = {}
+        
+        # Garante que todas as colunas detetadas estejam selecionadas por padrão
+        columns = dataset.schema_json.get("columns", [])
+        all_cols = [str(c.get("name", "")) for c in columns]
+        project.intake_metadata["selected_cols"] = all_cols
+        project.save(update_fields=["intake_metadata", "updated_at"])
 
         # --- NOVA ETAPA: INFERÊNCIA SEMÂNTICA E ESTRATÉGICA (LLM) ---
         print(f"\n\n[AI_ENGINE] 🧠 Iniciando interpretação semântica para: {dataset.name}...")
@@ -217,9 +262,11 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
             normalized_mapping = {str(k).lower().strip(): v for k, v in col_mapping.items()}
             
             for col in columns:
-                col_name = str(col.get("name", "")).lower().strip()
-                if col_name in normalized_mapping:
-                    mapping = normalized_mapping[col_name]
+                col_name = str(col.get("name", ""))
+                col_name_lower = col_name.lower().strip()
+                
+                if col_name_lower in normalized_mapping:
+                    mapping = normalized_mapping[col_name_lower]
                     # Só preenche se não houver flag manual já setada
                     col["description"] = mapping.get("business_description") or col.get("description")
                     role = mapping.get("role")
@@ -246,10 +293,6 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
             
             # --- SALVAR PLANO ESTRATÉGICO NO PROJETO ---
             if ai_analysis.get("suggested_widgets"):
-                project = dataset.project
-                if not project.intake_metadata:
-                    project.intake_metadata = {}
-                
                 # Normalização de Widgets: Garantir que todos tenham um ID válido para evitar erros de Integridade
                 widgets = []
                 for idx, w in enumerate(ai_analysis.get("suggested_widgets", [])):

@@ -16,6 +16,7 @@ type ProjectDraft = {
   projectId: string;
   dashboard: string;
   dataDomain: string;
+  domain_id?: string | null;
   domainDataOwner: string;
   confidentiality: string;
   crawlFrequency: string;
@@ -31,6 +32,7 @@ export default function NewProjectWorkspace() {
     projectId: "",
     dashboard: "",
     dataDomain: "",
+    domain_id: null,
     domainDataOwner: "",
     confidentiality: "",
     crawlFrequency: "",
@@ -43,9 +45,19 @@ export default function NewProjectWorkspace() {
   const [domains, setDomains] = useState<any[]>([]);
   const [fetchingDomains, setFetchingDomains] = useState(false);
   const [showAgentPrompt, setShowAgentPrompt] = useState(false);
+  
+  const isFormValid = !!(
+    form.dashboard.trim() && 
+    form.domain_id && 
+    form.domainDataOwner.trim() && 
+    form.confidentiality && 
+    form.specialist_prompt_id
+  );
 
   useEffect(() => {
-    const rawDraft = sessionStorage.getItem(DRAFT_KEY);
+    // SEMPRE LIMPAR ao entrar na tela de novo projeto para evitar confusão com rascunhos anteriores
+    // solicitado pelo usuário: "os campos deveriam estar vazios"
+    sessionStorage.removeItem(DRAFT_KEY);
     
     // Default Owner
     let loggedUser = "Usuário Corporativo";
@@ -57,23 +69,7 @@ export default function NewProjectWorkspace() {
       }
     } catch(e) {}
 
-    if (!rawDraft) {
-       setForm(f => ({ ...f, domainDataOwner: loggedUser }));
-       return;
-    }
-
-    try {
-      const parsed = JSON.parse(rawDraft) as Partial<ProjectDraft>;
-      setForm((current) => ({
-        ...current,
-        ...parsed,
-        projectId: parsed.projectId || current.projectId,
-        domainDataOwner: parsed.domainDataOwner || loggedUser,
-      }));
-    } catch {
-      // Keep defaults if browser draft is invalid.
-      setForm(f => ({ ...f, domainDataOwner: loggedUser }));
-    }
+    setForm(f => ({ ...f, domainDataOwner: "marcelo.maccaferri@nttdata.com" }));
   }, []);
 
   useEffect(() => {
@@ -132,6 +128,10 @@ export default function NewProjectWorkspace() {
 
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (!isFormValid) {
+      setSubmitError("Por favor, preencha todos os campos obrigatórios da governança antes de prosseguir.");
+      return;
+    }
     console.log("🔵 Iniciando persistencia do projeto no backend...");
     setLoading(true);
     setSubmitError(null);
@@ -153,6 +153,7 @@ export default function NewProjectWorkspace() {
           crawlFrequency: form.crawlFrequency,
           objective: form.objective,
           specialist_prompt_id: form.specialist_prompt_id,
+          domain_id: form.domain_id,
         }),
       });
 
@@ -189,8 +190,8 @@ export default function NewProjectWorkspace() {
         prevHref="/projects" 
         prevLabel="Cancelar" 
         nextLabel="Avançar para Ingestão AWS"
-        onNext={() => handleSave()}
-        nextDisabled={loading}
+        onNext={() => isFormValid && handleSave()}
+        nextDisabled={loading || !isFormValid}
       />
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start mt-6">
@@ -231,20 +232,24 @@ export default function NewProjectWorkspace() {
               </label>
               <select
                 required
-                value={form.dataDomain}
-                onChange={(e) => updateField("dataDomain", e.target.value)}
+                value={form.domain_id || ""}
+                onChange={(e) => {
+                   const d = domains.find(dom => dom.id === e.target.value);
+                   setForm(prev => ({ 
+                     ...prev, 
+                     domain_id: e.target.value || null,
+                     dataDomain: d ? d.name : "" 
+                   }));
+                }}
                 className="glass-input w-full p-3 text-sm border border-lux-border/60 bg-lux-card/50 text-lux-text hover:bg-lux-bg transition-colors shadow-inner cursor-pointer appearance-none"
               >
-                <option value="">{fetchingDomains ? "Buscando domínios..." : "Selecione o dominio..."}</option>
+                <option value="">{fetchingDomains ? "Buscando domínios..." : "Selecione o Área de Negócio..."}</option>
                 {domains.length > 0 ? domains.map(d => (
-                   <option key={d.id} value={d.name}>{d.name}</option>
+                   <option key={d.id} value={d.id}>{d.name}</option>
                 )) : (
                   <>
-                    <option>Mesa de Operacoes</option>
-                    <option>Tesouraria Global</option>
-                    <option>Asset Management</option>
-                    <option>Controladoria e Risco</option>
-                    <option>Varejo e Comercial</option>
+                    <option value="Mesa de Operacoes">Mesa de Operacoes</option>
+                    <option value="Tesouraria Global">Tesouraria Global</option>
                   </>
                 )}
               </select>
@@ -260,7 +265,7 @@ export default function NewProjectWorkspace() {
                 value={form.domainDataOwner}
                 onChange={(e) => updateField("domainDataOwner", e.target.value)}
                 placeholder="Ex: Gestor do dominio financeiro"
-                className="glass-input w-full p-3 text-sm border border-lux-border/60 bg-lux-card/50 hover:bg-lux-bg transition-colors shadow-inner"
+                className="glass-input w-full p-3 text-[11px] font-medium border border-lux-border/60 bg-lux-card/50 hover:bg-lux-bg transition-colors shadow-inner"
               />
             </div>
           </div>
@@ -390,14 +395,28 @@ export default function NewProjectWorkspace() {
             <div className="p-5 bg-white dark:bg-white/5 border border-lux-border/20 dark:border-lux-border/60 rounded-[1.75rem] shadow-sm relative border-l-4 border-l-lux-accent">
                <p className="text-[9px] text-lux-muted font-bold uppercase tracking-widest mb-1">Impacto Analítico</p>
                <p className="text-sm font-black text-lux-text dark:text-lux-accent">
-                 {form.dataDomain || "Selecione um domínio..."}
+                 {form.dataDomain || "Selecione uma Área..."}
                </p>
                <div className="mt-4 pt-4 border-t border-lux-border/10">
                   <p className="text-[10px] leading-relaxed text-lux-muted italic">
-                    Ao definir o domínio e a persona, o Agent-BI prepara o catálogo semântico da AWS Glue e ajusta os pesos cognitivos do LLM Bedrock.
+                    Ao definir a área de negócio e a persona, o Agent-BI prepara o catálogo semântico da AWS Glue e ajusta os pesos cognitivos do LLM Bedrock.
                   </p>
                </div>
             </div>
+
+            {form.specialist_prompt_id && (
+              <div className="p-5 bg-lux-accent/5 border border-lux-accent/20 rounded-[1.75rem] shadow-sm relative border-l-4 border-l-lux-accent">
+                <p className="text-[9px] text-lux-accent font-bold uppercase tracking-widest mb-1">Persona Cognitiva</p>
+                <p className="text-sm font-black text-lux-text">
+                  {specialists.find(s => s.id === form.specialist_prompt_id)?.name}
+                </p>
+                <div className="mt-3">
+                  <p className="text-[10px] leading-relaxed text-lux-muted italic line-clamp-3">
+                    {specialists.find(s => s.id === form.specialist_prompt_id)?.description || "Especialista analítico focado em governança."}
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
                <div className="p-4 bg-lux-accent/5 rounded-2xl border border-lux-border/10">

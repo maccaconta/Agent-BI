@@ -149,7 +149,8 @@ class ReportPromptMaterializeAPIView(APIView):
                 dashboard_id=dashboard_id, 
                 widget_prompts=widget_prompts, 
                 trace=trace_id,
-                project_id=project_id
+                project_id=project_id,
+                user=request.user
             )
             return Response(result, status=status.HTTP_200_OK)
         except Exception as exc:

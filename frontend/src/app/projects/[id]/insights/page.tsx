@@ -91,12 +91,31 @@ export default function RelationshipDesigner() {
     [sources],
   );
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     if (isCartesianRisk || sources.length === 0) return;
     setApproving(true);
-    setTimeout(() => {
-      router.push(`/dashboard/generate`);
-    }, 2800);
+    
+    try {
+      // Eleva o status do projeto para BLUEPRINT no backend
+      await fetch(`http://127.0.0.1:8000/api/v1/projects/${projectId}/`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: "BLUEPRINT" }),
+      });
+      
+      // Pequeno timeout para a animação de "Gerando Base Analítica" ser visível
+      setTimeout(() => {
+        router.push(`/dashboard/generate?project_id=${projectId}`);
+      }, 2500);
+    } catch (error) {
+      console.error("Erro ao elevar projeto para Blueprint:", error);
+      // Fallback para garantir a navegação mesmo em caso de erro de rede
+      setTimeout(() => {
+        router.push(`/dashboard/generate?project_id=${projectId}`);
+      }, 2500);
+    }
   };
 
   const removeRel = (id: string) => {

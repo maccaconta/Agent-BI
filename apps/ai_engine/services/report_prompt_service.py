@@ -53,7 +53,7 @@ class ReportPromptService:
             "design": design
         }
 
-    def materialize_dashboard(self, dashboard_id: int = None, widget_prompts: List[Dict[str, Any]] = None, trace=None, project_id=None) -> Dict[str, Any]:
+    def materialize_dashboard(self, dashboard_id: int = None, widget_prompts: List[Dict[str, Any]] = None, trace=None, project_id=None, user=None) -> Dict[str, Any]:
         """
         Para cada widget, gera o SQL/Python e salva no WidgetScriptBinding.
         Pode receber dashboard_id ou criar um novo a partir do project_id.
@@ -91,7 +91,8 @@ class ReportPromptService:
             dashboard = Dashboard.objects.create(
                 project=project,
                 name=f"DRAFT {version_label}",
-                status="DRAFT"
+                status="DRAFT",
+                created_by=user
             )
 
         else:

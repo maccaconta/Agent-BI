@@ -43,6 +43,7 @@ class DataDomain(TimeStampedModel):
 
 class ProjectStatus(models.TextChoices):
     ACTIVE = "ACTIVE", "Ativo"
+    BLUEPRINT = "BLUEPRINT", "Blueprint"
     ARCHIVED = "ARCHIVED", "Arquivado"
     SUSPENDED = "SUSPENDED", "Suspenso"
 

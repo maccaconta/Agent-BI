@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, Suspense } from "react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
 import {
   Loader2,
@@ -37,7 +37,7 @@ import {
   GripVertical
 } from "lucide-react";
 import DevHUD from '@/components/layout/DevHUD';
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getProjectRelationshipsKey, readProjectSources, writeProjectSources } from "@/lib/projectSources";
 import { getBackendJsonHeaders } from "@/lib/backendAuth";
 import { ProjectHeaderStandard } from "@/components/project/ProjectHeaderStandard";
@@ -60,7 +60,7 @@ interface DashboardTab {
   followUpSuggestions?: { label: string; prompt: string }[];
 }
 
-export default function EngineRoom() {
+function DashboardContent() {
   const router = useRouter();
   const [projectId, setProjectId] = useState<string | null>(null);
   const [projectDraft, setProjectDraft] = useState<Record<string, string> | null>(null);
@@ -163,9 +163,17 @@ export default function EngineRoom() {
     }
   }, [projectId]);
 
+  const searchParams = useSearchParams();
+
   useEffect(() => {
-    const pId = sessionStorage.getItem("agent_bi_current_project_id");
+    // Prioridade 1: Query param na URL (vindo da listagem de projetos)
+    // Prioridade 2: sessionStorage (fluxo contínuo do wizard)
+    const urlProjectId = searchParams.get('project_id');
+    const sessionProjectId = sessionStorage.getItem("agent_bi_current_project_id");
+    
+    const pId = urlProjectId || sessionProjectId;
     setProjectId(pId);
+
     const rawDraft = sessionStorage.getItem("agent_bi_project_draft");
     if (!rawDraft) return;
     try {
@@ -173,7 +181,7 @@ export default function EngineRoom() {
       setProjectDraft(parsed);
       if (parsed.aiTemperature !== undefined) setAiTemperature(parsed.aiTemperature);
     } catch { setProjectDraft(null); }
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
     if (!projectId || projectId === "PRJ-TEMP" || dataReady) return;
@@ -194,6 +202,19 @@ export default function EngineRoom() {
 
           if (data.dashboards && data.dashboards.length > 0) {
             setActiveDashboardId(data.dashboards[0].id);
+          }
+
+          // Injetar Blueprint Widgets se o projeto for BLUEPRINT
+          if (data.status === "BLUEPRINT" && data.blueprint_widgets && data.blueprint_widgets.length > 0 && plannedWidgets.length === 0) {
+             console.log("[Studio] 💠 Carregando configuração de BLUEPRINT consolidada.");
+             setPlannedWidgets(data.blueprint_widgets);
+             
+             // Ativar modo SQL para todos os widgets do Blueprint
+             const blueprintModes: Record<string, 'PROMPT' | 'SQL'> = {};
+             data.blueprint_widgets.forEach((w: any) => {
+               blueprintModes[w.id] = 'SQL';
+             });
+             setWidgetViewMode(blueprintModes);
           }
         }
       } catch (err) { console.error("Erro ao checar status do projeto:", err); }
@@ -318,7 +339,15 @@ export default function EngineRoom() {
     try {
       const response = await fetch(`http://127.0.0.1:8000/api/v1/dashboards/${tabId}/promote/`, {
         method: "POST",
-        headers: getBackendJsonHeaders()
+        headers: getBackendJsonHeaders(),
+        body: JSON.stringify({
+          widgets: plannedWidgets.map(w => ({
+            id: w.id,
+            prompt: w.prompt,
+            sql: (w as any).sql || extractWidgetSql(w.id, tabs.find(t => t.id === tabId)?.content),
+            type: w.type
+          }))
+        })
       });
       const data = await response.json();
       if (data.status === "success") {
@@ -1025,4 +1054,17 @@ export default function EngineRoom() {
         </div>
       </div>
     );
+}
+
+export default function EngineRoom() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-lux-bg flex flex-col items-center justify-center p-10">
+        <Loader2 className="animate-spin text-lux-text mb-4" size={48} />
+        <h2 className="text-2xl font-serif font-bold text-lux-text">Iniciando Gerador BI...</h2>
+      </div>
+    }>
+      <DashboardContent />
+    </Suspense>
+  );
 }

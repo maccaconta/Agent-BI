@@ -14,8 +14,8 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "Agent-BI | Executive Platform",
-  description: "AI-Powered Business Intelligence Platform",
+  title: "Agent BI | Executive Platform",
+  description: "Protótipo GenIA para Analytics com AWS Bedrock",
 };
 
 export default function RootLayout({

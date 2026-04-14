@@ -57,8 +57,9 @@ Você DEVE sugerir exatamente **7 widgets**, nem mais, nem menos, seguindo esta 
 
 ### 🏷️ ANCORAGEM AO SCHEMA (CRÍTICO):
 1. **PROIBIDO ALUCINAR COLUNAS**: No campo `prompt` do widget, utilize **ESTRITAMENTE** os nomes de colunas que aparecem no esquema fornecido abaixo.
-2. **MAPEAMENTO DE JARGÃO**: Se o Especialista pedir um indicador (ex: "Rating") que não existe como coluna, mas existe um correlato (ex: "score_serasa"), mapeie o prompt para usar a coluna real: "Qual o saldo por score_serasa?".
-3. **DESCRIÇÃO DE NEGÓCIO**: No `business_rationale`, utilize o jargão do especialista para explicar o valor, mas no `prompt` use o nome técnico da coluna.
+2. **MAPEAMENTO EXAUSTIVO**: Você DEVE fornecer um mapeamento para **TODAS** as colunas fornecidas no schema. Jamais ignore colunas.
+3. **MAPEAMENTO DE JARGÃO**: Se o Especialista pedir um indicador (ex: "Rating") que não existe como coluna, mas existe um correlato (ex: "score_serasa"), mapeie o prompt para usar a coluna real: "Qual o saldo por score_serasa?".
+4. **DESCRIÇÃO DE NEGÓCIO**: No `business_rationale`, utilize o jargão do especialista para explicar o valor, mas no `prompt` use o nome técnico da coluna.
 
 ### 💡 RACIONAL DE NEGÓCIO:
 Para cada widget, você deve fornecer um `business_rationale` curto (máximo 15 palavras) explicando por que essa métrica é vital para um tomador de decisão.
@@ -73,7 +74,8 @@ Para cada widget, você deve fornecer um `business_rationale` curto (máximo 15 
       "role": "PRIMARY_KEY" | "DIMENSION" | "MEASURE" | "TIME",
       "business_description": "Descrição legível",
       "risk_dna_marker": "..." | null,
-      "is_elected_for_risk": true | false
+      "is_elected_for_risk": true | false,
+      "reasoning": "Breve racional da decisão"
     }
   },
   "suggested_widgets": [
@@ -82,7 +84,8 @@ Para cada widget, você deve fornecer um `business_rationale` curto (máximo 15 
       "title": "Título Curto",
       "prompt": "Pergunta analítica usando nomes de colunas reais",
       "type": "BIGNUMBER" | "BAR" | "LINE" | "PIE",
-      "business_rationale": "Por que este KPI é importante..."
+      "business_rationale": "Por que este KPI é importante...",
+      "reasoning": "Por que este widget foi escolhido"
     }
   ]
 }
@@ -166,7 +169,7 @@ Gere o mapeamento semântico, o resumo estratégico e a descrição de negócio 
             result = self.bedrock_service.invoke_with_json_output(
                 system_prompt=system_prompt,
                 user_message=prompt,
-                temperature=0.1,
+                temperature=None,
                 max_tokens=2500
             )
             
@@ -190,9 +193,11 @@ Gere o mapeamento semântico, o resumo estratégico e a descrição de negócio 
             if isinstance(llm_mapping, dict):
                 incorrect_cols = AnalyticsGuardrails.identify_incorrect_measures(llm_mapping)
                 for col in incorrect_cols:
-                    logger.warning(f"[Data_Interpreter] Corrigindo classificação da coluna '{col}': MEASURE -> DIMENSION.")
-                    llm_mapping[col]["role"] = "DIMENSION"
-                    llm_mapping[col]["reasoning"] += " [CORRIGIDO PELO GUARDRAIL]"
+                    if col in llm_mapping:
+                        logger.warning(f"[Data_Interpreter] Corrigindo classificação da coluna '{col}': MEASURE -> DIMENSION.")
+                        llm_mapping[col]["role"] = "DIMENSION"
+                        current_reason = llm_mapping[col].get("reasoning", "")
+                        llm_mapping[col]["reasoning"] = f"{current_reason} [CORRIGIDO PELO GUARDRAIL]".strip()
 
             # --- NOVO: Rigor de Composição (4+3) ---
             suggested = result.get("suggested_widgets", [])
@@ -234,15 +239,15 @@ Gere o mapeamento semântico, o resumo estratégico e a descrição de negócio 
             reason = "Classificação por padrão de nome/tipo."
             
             # 1. Chaves
-            if any(k in name for k in ["id", "uuid", "pk", "key", "codigo", "cod_"]):
+            if any(k in name for k in ["id", "uuid", "pk", "key", "codigo", "cod_", "metadata_"]):
                 role = "PRIMARY_KEY"
                 desc = f"Identificador: {desc}"
             # 2. Tempo
-            elif any(k in name for k in ["data", "date", "dt_", "time", "created", "update", "inicio", "fim"]):
+            elif any(k in name for k in ["data", "date", "dt_", "time", "created", "update", "inicio", "fim", "_at", "período"]):
                 role = "TIME"
                 desc = f"Data/Hora: {desc}"
             # 3. Métricas (Numéricos que não pareçam IDs nem Perfis)
-            elif dtype in ["double", "float", "decimal", "int", "bigint", "long"]:
+            elif dtype in ["double", "float", "decimal", "int", "bigint", "long"] or any(k in name for k in ["nps", "nota", "score", "resposta", "valor", "vlr", "métrica"]):
                 # Proteção contra campos demográficos (Idade, Tempo) serem tratados como métricas somáveis
                 demographic_keywords = ["idade", "age", "anos", "meses", "tempo", "months", "years", "sexo", "gender"]
                 if role != "PRIMARY_KEY" and not any(k in name for k in demographic_keywords):

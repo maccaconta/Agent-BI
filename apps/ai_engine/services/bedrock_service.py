@@ -67,6 +67,42 @@ class BedrockService:
         self._agent_runtime_client = None
         self._kb_client = None
         self.last_invoke_metadata = {}
+        self._global_config_cache = None
+        self._last_config_fetch = 0
+
+    def _get_global_config(self) -> Dict[str, Any]:
+        """
+        Recupera configurações globais do Banco de Dados com cache em memória (60s).
+        Evita sobrecarga no DB em invocações sequenciais.
+        """
+        now = time.time()
+        if self._global_config_cache and (now - self._last_config_fetch < 60):
+            return self._global_config_cache
+            
+        try:
+            from apps.governance.models import GlobalAIConfig
+            config = GlobalAIConfig.objects.filter(is_active=True).first()
+            if config:
+                data = {
+                    "temperature": config.temperature,
+                    "top_p": config.top_p,
+                    "top_k": config.top_k,
+                    "max_tokens": config.max_tokens_limit,
+                    "persona_title": config.persona_title,
+                    "persona_description": config.persona_description
+                }
+                self._global_config_cache = data
+                self._last_config_fetch = now
+                return data
+        except Exception as e:
+            logger.warning(f"[BedrockService] Falha ao carregar GlobalAIConfig: {e}")
+            
+        return {
+            "temperature": 0.3,
+            "top_p": 0.9,
+            "top_k": 250,
+            "max_tokens": self.max_tokens
+        }
 
     def is_operational(self) -> bool:
         """Verifica se há credenciais configuradas (via settings ou ambiente/config AWS)."""
@@ -86,8 +122,10 @@ class BedrockService:
         system_prompt: str,
         user_message: Optional[str] = None,
         messages: Optional[list] = None,
-        temperature: float = 0.3,
+        temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
         stop_sequences: Optional[list] = None,
         trace: Any = None,
     ) -> str:
@@ -95,6 +133,21 @@ class BedrockService:
         Invoca modelo Foundation via bedrock-runtime.
         Suporta user_message unico ou lista de messages (history).
         """
+        global_cfg = self._get_global_config()
+        
+        # Lógica de Precedência:
+        # 1. Se o chamador especificou explicitamente (não é None), usa o valor do chamador.
+        # 2. Caso contrário, usa o valor da Governança Global.
+        # 3. Fallback final para defaults do serviço.
+        
+        # Nota: Chamadores técnicos como NL2SQL enviam temperature=0.0 explicitamente.
+        # Chamadores genéricos que enviam None usarão o valor do Slider da Governança.
+        
+        final_temp = temperature if temperature is not None else global_cfg.get("temperature", 0.3)
+        final_max_tokens = max_tokens or global_cfg.get("max_tokens", self.max_tokens)
+        final_top_p = top_p if top_p is not None else global_cfg.get("top_p", 0.9)
+        final_top_k = top_k if top_k is not None else global_cfg.get("top_k", 250)
+
         if trace and hasattr(trace, "log_thought"):
             trace.log_thought("AWS Bedrock", f"Solicitando inferência ao modelo {self.model_id.split(':')[-1] if ':' in self.model_id else self.model_id}...")
         max_tokens = max_tokens or self.max_tokens
@@ -108,18 +161,26 @@ class BedrockService:
             return self.invoke_converse(
                 system_prompt=system_prompt,
                 messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
+                temperature=final_temp,
+                max_tokens=final_max_tokens,
+                top_p=final_top_p,
+                top_k=final_top_k,
                 trace=trace
             )
 
         body = {
             "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": max_tokens or self.max_tokens,
-            "temperature": temperature,
+            "max_tokens": final_max_tokens,
+            "temperature": final_temp,
             "system": system_prompt,
             "messages": messages,
         }
+        
+        # Parâmetros adicionais para modelos Claude
+        if final_top_p is not None:
+             body["top_p"] = final_top_p
+        if final_top_k is not None:
+             body["top_k"] = final_top_k
 
         if stop_sequences:
             body["stop_sequences"] = stop_sequences
@@ -192,9 +253,26 @@ class BedrockService:
                 else:
                     raise BedrockInvocationError(str(exc)) from exc
 
-    def generate_text(self, system_prompt: str, user_message: str, max_tokens: int = 500) -> str:
+    def generate_text(
+        self, 
+        system_prompt: str, 
+        user_message: str, 
+        max_tokens: int = 500,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
+        trace: Any = None
+    ) -> str:
         """Alias de compatibilidade para o método invoke."""
-        return self.invoke(system_prompt=system_prompt, user_message=user_message, max_tokens=max_tokens)
+        return self.invoke(
+            system_prompt=system_prompt, 
+            user_message=user_message, 
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            trace=trace
+        )
     def invoke_converse(
         self,
         system_prompt: str,
@@ -202,6 +280,8 @@ class BedrockService:
         messages: Optional[list] = None,
         temperature: float = 0.3,
         max_tokens: Optional[int] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
         trace: Any = None,
     ) -> str:
         """
@@ -247,8 +327,13 @@ class BedrockService:
             "inferenceConfig": {
                 "temperature": temperature,
                 "maxTokens": max_tokens,
+                "topP": top_p if top_p is not None else 0.9,
             },
         }
+        if top_k is not None:
+            # Nem todos os modelos Nova suportam topK via API Converse v1
+            request_kwargs["inferenceConfig"]["topK"] = top_k
+            
         if system_prompt:
             request_kwargs["system"] = [{"text": system_prompt}]
 
@@ -399,8 +484,10 @@ class BedrockService:
         system_prompt: str,
         user_message: Optional[str] = None,
         messages: Optional[list] = None,
-        temperature: float = 0.2,
+        temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
         session_id: Optional[str] = None,
         trace: Any = None,
     ) -> dict:
@@ -460,6 +547,8 @@ class BedrockService:
                 messages=current_messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                top_p=top_p,
+                top_k=top_k,
                 trace=trace,
             )
             metadata["model_runtime_api"] = runtime_api
@@ -483,6 +572,8 @@ class BedrockService:
                 messages=current_messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                top_p=top_p,
+                top_k=top_k,
                 trace=trace,
             )
             metadata["model_runtime_api"] = runtime_api
@@ -566,8 +657,10 @@ class BedrockService:
         system_prompt: str,
         user_message: Optional[str] = None,
         messages: Optional[list] = None,
-        temperature: float = 0.2,
+        temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        top_p: Optional[float] = None,
+        top_k: Optional[int] = None,
         trace: Any = None,
     ) -> tuple[str, str]:
         if self._should_use_converse_api():
@@ -579,6 +672,8 @@ class BedrockService:
                     messages=messages,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    top_p=top_p,
+                    top_k=top_k,
                     trace=trace,
                 ),
             )
@@ -590,6 +685,8 @@ class BedrockService:
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                top_p=top_p,
+                top_k=top_k,
                 trace=trace,
             ),
         )

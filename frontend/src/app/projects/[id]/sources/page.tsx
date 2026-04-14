@@ -61,12 +61,20 @@ export default function SourcesPage() {
     }
 
     setUploading(true);
+    const isCsv = file.name.toLowerCase().endsWith(".csv");
 
     const reader = new FileReader();
     reader.onload = async (loadEvent) => {
       try {
         const binary = loadEvent.target?.result;
-        const workbook = XLSX.read(binary, { type: "binary" });
+        let workbook;
+
+        if (isCsv && typeof binary === "string") {
+          workbook = XLSX.read(binary, { type: "string" });
+        } else {
+          workbook = XLSX.read(binary, { type: "binary" });
+        }
+
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
 
@@ -132,7 +140,11 @@ export default function SourcesPage() {
         alert("Erro ao ler o arquivo. Verifique se o formato esta correto (CSV/XLSX).");
       }
     };
-    reader.readAsBinaryString(file);
+    if (isCsv) {
+      reader.readAsText(file);
+    } else {
+      reader.readAsBinaryString(file);
+    }
   };
 
   const removeSource = (id: string) => {

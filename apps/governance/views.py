@@ -7,7 +7,30 @@ from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
 # Remover import temporário do spectacular para evitar conflitos de introspecção
 from apps.shared_models import PromptTemplate
-from apps.governance.serializers import PromptTemplateSerializer
+from apps.governance.models import GlobalAIConfig
+from apps.governance.serializers import PromptTemplateSerializer, GlobalAIConfigSerializer
+
+
+class GlobalAIConfigViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para as diretrizes mestres de IA (Global System Prompt).
+    Centraliza Temperatura, Persona e Limites Técnicos.
+    """
+    queryset = GlobalAIConfig.objects.all()
+    serializer_class = GlobalAIConfigSerializer
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+    pagination_class = None
+
+    def get_queryset(self):
+        # Garante que sempre exista pelo menos uma configuração padrão se solicitado
+        if not GlobalAIConfig.objects.exists():
+            GlobalAIConfig.objects.create(
+                persona_title="Analista Financeiro Sênior",
+                is_active=True
+            )
+        return GlobalAIConfig.objects.all()
+
 
 class PromptTemplateViewSet(viewsets.ModelViewSet):
     """

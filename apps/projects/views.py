@@ -99,20 +99,33 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 )
 
             dashboard_name = payload["dashboard"]
-            domain_name = payload["dataDomain"]
-            domain_defaults = {
-                "description": f"Domínio criado automaticamente para {dashboard_name}",
-                "owner": request.user,
-            }
-            domain, _ = DataDomain.objects.get_or_create(
-                tenant=tenant,
-                name=domain_name,
-                defaults=domain_defaults,
-            )
+            domain_id = payload.get("domain_id")
+            domain_name = payload.get("dataDomain", "Geral")
+            
+            if domain_id:
+                try:
+                    domain = DataDomain.objects.get(id=domain_id, tenant=tenant)
+                    domain_name = domain.name # Sincroniza o nome para o metadata
+                except DataDomain.DoesNotExist:
+                    # Fallback para criação por nome se o ID for inválido
+                    domain, _ = DataDomain.objects.get_or_create(
+                        tenant=tenant,
+                        name=domain_name,
+                        defaults={"owner": request.user}
+                    )
+            else:
+                domain, _ = DataDomain.objects.get_or_create(
+                    tenant=tenant,
+                    name=domain_name,
+                    defaults={
+                        "description": f"Domínio criado automaticamente para {dashboard_name}",
+                        "owner": request.user,
+                    },
+                )
 
             intake_metadata = {
                 "dashboard": payload["dashboard"],
-                "dataDomain": payload["dataDomain"],
+                "dataDomain": domain_name,
                 "domainDataOwner": payload.get("domainDataOwner", ""),
                 "confidentiality": payload.get("confidentiality", ""),
                 "crawlFrequency": payload.get("crawlFrequency", ""),

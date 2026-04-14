@@ -124,3 +124,48 @@ class WidgetScriptBinding(TimeStampedModel):
 
     def __str__(self):
         return f"{self.widget_id} ({self.script_type}) - V{self.version}"
+
+
+class GlobalAIConfig(TimeStampedModel):
+    """
+    Configurações Mestres de IA para o Tenant.
+    Define parâmetros globais de inferência e identidade.
+    """
+    tenant = models.ForeignKey(
+        Tenant, 
+        on_delete=models.CASCADE, 
+        related_name="ai_configs",
+        null=True, blank=True
+    )
+    
+    # Identidade Global
+    persona_title = models.CharField(
+        max_length=255, 
+        default="Analista Financeiro Sênior",
+        verbose_name="Título da Persona"
+    )
+    persona_description = models.TextField(
+        default="Você é um analista financeiro sênior especializado em identificar relações ocultas em dados e gerar insights estratégicos.",
+        verbose_name="Descrição da Persona"
+    )
+    
+    # Parâmetros Técnicos de Inferência
+    temperature = models.FloatField(default=0.3, verbose_name="Temperatura")
+    top_p = models.FloatField(default=0.9, verbose_name="Top P")
+    top_k = models.IntegerField(default=250, verbose_name="Top K")
+    max_tokens_limit = models.IntegerField(default=32000, verbose_name="Limite de Tokens")
+    
+    # Governança de Dados
+    ingestion_row_limit = models.IntegerField(default=5000, verbose_name="Limite de Ingestão (Linhas)")
+    compliance_rules = models.TextField(blank=True, verbose_name="Diretrizes de Compliance")
+    
+    language = models.CharField(max_length=10, default="pt-BR", verbose_name="Idioma")
+    is_active = models.BooleanField(default=True, verbose_name="Ativo")
+
+    class Meta:
+        db_table = "governance_global_config"
+        verbose_name = "Configuração Global de IA"
+        verbose_name_plural = "Configurações Globais de IA"
+
+    def __str__(self):
+        return f"Master Config - {self.persona_title}"

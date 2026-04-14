@@ -11,6 +11,7 @@ from rest_framework.response import Response
 
 from apps.audit.signals import audit_event
 from apps.dashboards.models import Dashboard, GenerationJob
+from apps.governance.models import WidgetScriptBinding
 from apps.dashboards.serializers import (
     DashboardCreateSerializer,
     DashboardSerializer,
@@ -254,10 +255,36 @@ class DashboardViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="promote")
     def promote(self, request, pk=None):
-        """Eleva um dashboard rascunho (DRAFT) para o status de Blueprint (PUBLISHED)."""
+        """Eleva um dashboard rascunho (DRAFT) para o status de Blueprint (PUBLISHED) e salva SQLs."""
         dashboard = self.get_object()
+        widgets = request.data.get("widgets", [])
+        
+        # 1. Salva os SQLs atuais como bindings permanentes do Blueprint
+        for w in widgets:
+            w_id = w.get("id")
+            w_sql = w.get("sql")
+            w_prompt = w.get("prompt", "")
+            w_type = w.get("type", "SQL")
+            
+            if w_id and w_sql:
+                WidgetScriptBinding.objects.update_or_create(
+                    dashboard=dashboard,
+                    widget_id=w_id,
+                    version=dashboard.version_count + 1,
+                    defaults={
+                        "prompt": w_prompt,
+                        "script_type": w_type,
+                        "script_content": w_sql
+                    }
+                )
+
+        # 2. Atualiza status do Dashboard e do Projeto
         dashboard.status = "PUBLISHED"
         dashboard.save()
+        
+        project = dashboard.project
+        project.status = "BLUEPRINT"
+        project.save()
         
         audit_event.send(
             sender=self.__class__,
@@ -266,10 +293,12 @@ class DashboardViewSet(viewsets.ModelViewSet):
             tenant=request.tenant,
             resource_type="Dashboard",
             resource_id=dashboard.id,
+            extra={"widgets_saved": len(widgets)}
         )
         
         return Response({
             "status": "success",
             "dashboard_id": dashboard.id,
-            "new_status": dashboard.status
+            "new_status": dashboard.status,
+            "widgets_saved": len(widgets)
         })

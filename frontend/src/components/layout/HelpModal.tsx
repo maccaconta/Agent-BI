@@ -34,7 +34,7 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
               </div>
               <div className="space-y-1">
                 <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tight">Ajuda do Sistema</h2>
-                <p className="text-[10px] text-gray-500 font-bold tracking-[0.2em] uppercase">Documentação de Arquitetura Agent-BI</p>
+                <p className="text-[10px] text-gray-500 font-bold tracking-[0.2em] uppercase">Documentação de Arquitetura BI Agent</p>
               </div>
             </div>
             <button

@@ -4,73 +4,171 @@ import { motion } from "framer-motion";
 import { ArrowRight, BarChart3, Database, Shield } from "lucide-react";
 import Link from "next/link";
 
+const FloatingSymbols = () => {
+  const symbols = ["Σ", "Δ", "σ", "f(x)", "0", "1", "α", "β", "Ω", "√", "λ", "μ", "π", "∫"];
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-[0.6]">
+      {/* Grupo Esquerdo */}
+      {Array.from({ length: 30 }).map((_, i) => (
+        <motion.span
+          key={`left-${i}`}
+          initial={{ 
+            left: `${Math.random() * 20}%`,
+            y: "110vh",
+            opacity: 0,
+            scale: Math.random() * 0.5 + 0.5
+          }}
+          animate={{ 
+            y: "-10vh",
+            opacity: [0, 1, 0],
+            rotate: Math.random() * 360
+          }}
+          transition={{ 
+            duration: Math.random() * 30 + 30, 
+            repeat: Infinity, 
+            ease: "linear",
+            delay: Math.random() * -60
+          }}
+          className="absolute text-[#1A1A1A] font-serif text-xl md:text-2xl"
+        >
+          {symbols[i % symbols.length]}
+        </motion.span>
+      ))}
+      
+      {/* Grupo Direito */}
+      {Array.from({ length: 30 }).map((_, i) => (
+        <motion.span
+          key={`right-${i}`}
+          initial={{ 
+            right: `${Math.random() * 20}%`,
+            y: "110vh",
+            opacity: 0,
+            scale: Math.random() * 0.5 + 0.5
+          }}
+          animate={{ 
+            y: "-10vh",
+            opacity: [0, 1, 0],
+            rotate: Math.random() * 360
+          }}
+          transition={{ 
+            duration: Math.random() * 30 + 30, 
+            repeat: Infinity, 
+            ease: "linear",
+            delay: Math.random() * -60
+          }}
+          className="absolute text-[#1A1A1A] font-serif text-xl md:text-2xl"
+        >
+          {symbols[i % symbols.length]}
+        </motion.span>
+      ))}
+    </div>
+  );
+}
+
 export default function Home() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 md:p-8 relative overflow-hidden bg-lux-bg">
-      {/* Elementos abstratos de fundo (Ambient lights) */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-lux-card rounded-full mix-blend-multiply blur-3xl opacity-60"></div>
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-lux-border rounded-full mix-blend-multiply blur-3xl opacity-40"></div>
+    <div className="h-screen w-full flex flex-col items-center justify-center p-2 md:p-6 relative overflow-hidden bg-white">
+
+
+      <FloatingSymbols />
+
+      {/* Ornamentos Dourados Superiores */}
+      <div className="absolute top-0 right-0 w-48 h-48 opacity-10 pointer-events-none overflow-hidden">
+        <svg viewBox="0 0 200 200" className="w-full h-full text-[#D4AF37]">
+          <path d="M0,0 L200,0 L200,200 Z" fill="currentColor" fillOpacity="0.1" />
+          <path d="M20,20 L180,20 L180,180 Z" fill="none" stroke="currentColor" strokeWidth="0.5" />
+          <circle cx="180" cy="20" r="10" fill="currentColor" />
+        </svg>
       </div>
 
       <motion.main 
         initial={false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-        className="glass-panel w-full max-w-6xl z-10 p-8 md:p-16 text-center"
+        className="glass-panel w-full max-w-6xl z-10 p-6 md:p-10 text-center flex flex-col items-center justify-between h-[90vh] md:h-auto overflow-hidden bg-white/50 border-white/40"
       >
         <motion.div
-           initial={false}
-           animate={{ scale: 1, opacity: 1 }}
-           transition={{ delay: 0.4, duration: 0.6 }}
-           className="mb-8 inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-lux-muted/20 bg-lux-bg/40 backdrop-blur-sm text-sm font-medium text-lux-muted"
+           initial={{ opacity: 0, y: 20 }}
+           animate={{ opacity: 1, y: 0 }}
+           transition={{ delay: 0.2 }}
+           className="mb-4 flex flex-col items-center gap-2"
         >
-          <span className="w-2 h-2 rounded-full bg-lux-text animate-pulse"></span>
-          Enterprise Intelligence Engine
+          <span className="text-[9px] font-black uppercase tracking-[0.4em] text-[#8C8C8C] mb-2">Strategic Innovation Partners</span>
+          <div className="flex items-center gap-6 md:gap-10 px-10 py-4 rounded-[3rem] bg-white/90 border border-[#F1E9DB]/60 backdrop-blur-2xl shadow-[0_15px_35px_rgba(241,233,219,0.3)] relative overflow-hidden group">
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#D4AF37]/3 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+            
+            <div className="flex flex-col items-center hover:scale-105 transition-transform duration-300">
+               <img src="/logos/ntt-data-black.png" alt="NTT DATA" className="h-5 md:h-7 w-auto object-contain" />
+            </div>
+
+            <div className="w-px h-6 bg-[#F1E9DB]" />
+
+            <div className="flex flex-col items-center hover:scale-105 transition-transform duration-300">
+               <img src="/logos/aws-partner.png" alt="AWS" className="h-4 md:h-6 w-auto object-contain" />
+            </div>
+
+            <div className="w-px h-6 bg-[#F1E9DB]" />
+
+            <div className="flex items-center gap-3 hover:scale-105 transition-transform duration-300">
+               <span className="text-[7px] font-black uppercase tracking-widest text-[#8C8C8C] hidden sm:block italic opacity-40">para</span>
+               <img src="/logos/bwgi.png" alt="BWGI" className="h-6 md:h-8 w-auto object-contain" />
+            </div>
+          </div>
         </motion.div>
 
-        <h1 className="font-serif text-5xl md:text-8xl font-bold tracking-tight text-lux-text mb-6">
-          Agent<span className="opacity-80 mix-blend-multiply">-BI</span>
-        </h1>
-        
-        <p className="text-lg md:text-2xl text-lux-muted max-w-2xl mx-auto mb-12 font-light leading-relaxed">
-          Decisões estratégicas guiadas por Inteligência Artificial autônoma. 
-          A arquitetura high-end dos seus dados corporativos.
-        </p>
+        <div className="mb-6">
+          <h1 className="font-serif text-4xl md:text-7xl font-black tracking-tighter text-lux-text mb-4 relative inline-block">
+            Agent BI
+            <span className="absolute -top-3 -right-6 text-[8px] md:text-[9px] bg-[#1A1A1A] text-[#D4AF37] px-2.5 py-1 rounded-full font-black uppercase tracking-widest shadow-xl rotate-12 border border-[#D4AF37]/20">
+              Protótipo
+            </span>
+          </h1>
+          
+          <p className="text-lg md:text-2xl text-lux-muted max-w-4xl mx-auto font-light leading-snug">
+            Uma iniciativa estratégica de <span className="text-[#1A1A1A] font-bold">inovação NTT DATA & AWS</span> desenvolvida exclusivamente para a excelência do ecossistema <span className="text-[#D4AF37] font-serif italic font-bold text-3xl align-middle mx-1">BWGI</span>.
+          </p>
+        </div>
 
         <motion.div 
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          className="flex justify-center mb-24"
+          className="mb-8"
         >
-          <Link href="/projects" className="glass-button flex items-center justify-center gap-3 text-lg px-8 py-4 tracking-wide shadow-xl">
-            Acessar Plataforma <ArrowRight size={20} className="opacity-80" />
+          <Link href="/projects" className="group relative px-10 py-4 bg-[#1A1A1A] text-white rounded-full text-lg md:text-xl font-bold tracking-wide shadow-xl hover:shadow-[0_20px_40px_rgba(212,175,55,0.2)] transition-all overflow-hidden flex items-center gap-4">
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+            Iniciar Experiência <ArrowRight size={22} className="text-[#D4AF37] group-hover:translate-x-1 transition-transform" />
           </Link>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left mt-12 border-t border-lux-border/30 pt-16">
-          <motion.div whileHover={{ y: -5 }} className="glass-panel p-8 bg-lux-bg/40 border-lux-border/20 transition-all hover:bg-lux-bg/70 shadow-none">
-            <div className="w-12 h-12 bg-lux-text rounded-xl flex items-center justify-center mb-6 shadow-md">
-              <Database className="text-lux-bg" size={22} strokeWidth={1.5} />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6 text-left bg-white/40 p-6 md:p-8 rounded-[3rem] border border-[#F1E9DB] backdrop-blur-md">
+          <motion.div whileHover={{ y: -4 }} className="space-y-4">
+            <div className="w-10 h-10 bg-[#1A1A1A] text-[#D4AF37] rounded-xl flex items-center justify-center shadow-lg">
+              <Database size={20} strokeWidth={1.5} />
             </div>
-            <h3 className="text-xl font-bold mb-3 font-serif text-lux-text">Data Lake Nativo</h3>
-            <p className="text-lux-muted text-sm leading-relaxed">Conecte seus dados em escala na AWS com Athena e Glue.</p>
+            <div>
+              <h3 className="text-lg font-black font-serif text-lux-text tracking-tight">Multi-Agentes GenIA</h3>
+              <p className="text-lux-muted text-[10px] leading-tight font-medium">Plataforma de inteligência corporativa baseada na orquestração de múltiplos agentes de IA: consulta em linguagem natural (NL2SQL), compliance e design de BI.</p>
+            </div>
           </motion.div>
 
-          <motion.div whileHover={{ y: -5 }} className="glass-panel p-8 bg-lux-bg/40 border-lux-border/20 transition-all hover:bg-lux-bg/70 shadow-none">
-            <div className="w-12 h-12 bg-lux-text rounded-xl flex items-center justify-center mb-6 shadow-md">
-              <BarChart3 className="text-lux-bg" size={22} strokeWidth={1.5} />
+          <motion.div whileHover={{ y: -4 }} className="space-y-4">
+            <div className="w-10 h-10 bg-[#1A1A1A] rounded-xl flex items-center justify-center shadow-lg overflow-hidden border border-white/20">
+              <img src="/logos/AWS-Bedrock.png" alt="Bedrock" className="w-full h-full object-cover scale-110" />
             </div>
-            <h3 className="text-xl font-bold mb-3 font-serif text-lux-text">Auto-Dashboards</h3>
-            <p className="text-lux-muted text-sm leading-relaxed">Geração de visões complexas em segundos, através de linguagem natural.</p>
+            <div>
+              <h3 className="text-lg font-black font-serif text-lux-text tracking-tight">Amazon Bedrock</h3>
+              <p className="text-lux-muted text-xs leading-tight font-medium">O motor de modelos de fundação mais avançado da AWS aplicado ao negócio.</p>
+            </div>
           </motion.div>
 
-          <motion.div whileHover={{ y: -5 }} className="glass-panel p-8 bg-lux-bg/40 border-lux-border/20 transition-all hover:bg-lux-bg/70 shadow-none">
-            <div className="w-12 h-12 bg-lux-text rounded-xl flex items-center justify-center mb-6 shadow-md">
-              <Shield className="text-lux-bg" size={22} strokeWidth={1.5} />
+          <motion.div whileHover={{ y: -4 }} className="space-y-4">
+            <div className="w-10 h-10 bg-[#1A1A1A] text-[#D4AF37] rounded-xl flex items-center justify-center shadow-lg">
+              <Shield size={20} strokeWidth={1.5} />
             </div>
-            <h3 className="text-xl font-bold mb-3 font-serif text-lux-text">Governança Auditável</h3>
-            <p className="text-lux-muted text-sm leading-relaxed">Audit-trails imutáveis e checkpoints de aprovação humana para publicações.</p>
+            <div>
+              <h3 className="text-lg font-black font-serif text-lux-text tracking-tight">Governança Tier-1</h3>
+              <p className="text-lux-muted text-xs leading-tight font-medium">Controle institucional absoluto com trilhas de auditoria imutáveis e segurança nativa.</p>
+            </div>
           </motion.div>
         </div>
       </motion.main>

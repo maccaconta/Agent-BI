@@ -81,7 +81,7 @@ Gere o SQL e a descrição técnica.
             result = self.bedrock_service.invoke_with_json_output(
                 system_prompt=base_system_prompt,
                 user_message=user_message,
-                temperature=0.1,
+                temperature=0.0,
                 trace=trace
             )
             

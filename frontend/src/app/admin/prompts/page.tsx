@@ -15,6 +15,9 @@ import {
   BarChart3,
   Zap,
   Activity,
+  ArrowLeft,
+  Trash2,
+  Settings2,
   ChevronRight,
   ShieldCheck
 } from "lucide-react";
@@ -56,6 +59,9 @@ export default function AdminPromptsPage() {
     enable_anomaly_detection: false,
     enable_clustering_profile: false,
     enable_forecasting_profile: false,
+    temperature: 0.3,
+    top_p: 0.9,
+    top_k: 250,
     max_tokens_limit: 32000,
     ingestion_row_limit: 5000,
     is_active: true
@@ -124,6 +130,9 @@ export default function AdminPromptsPage() {
             enable_anomaly_detection: p.enable_anomaly_detection ?? false,
             enable_clustering_profile: p.enable_clustering_profile ?? false,
             enable_forecasting_profile: p.enable_forecasting_profile ?? false,
+            temperature: p.temperature ?? 0.3,
+            top_p: p.top_p ?? 0.9,
+            top_k: p.top_k ?? 250,
             max_tokens_limit: p.max_tokens_limit ?? 32000,
             ingestion_row_limit: p.ingestion_row_limit ?? 5000,
             is_active: p.is_active
@@ -184,6 +193,28 @@ export default function AdminPromptsPage() {
     }
   };
 
+  const handleDeleteSpecialist = async (id: string) => {
+    if (!window.confirm("Tem certeza que deseja remover este especialista? Esta ação é irreversível.")) return;
+    
+    try {
+      setSaving(true);
+      const res = await fetch(`${BACKEND_URL}/api/v1/governance/prompt-templates/${id}/`, {
+        method: "DELETE",
+        headers: getHeaders()
+      });
+      if (!res.ok) throw new Error("Erro ao excluir especialista.");
+      
+      setSelectedSpecialist(null);
+      fetchSpecialists();
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) return (
     <div className="h-[60vh] flex flex-col items-center justify-center gap-4 text-[#D4AF37]">
        <RefreshCw className="animate-spin" size={32} />
@@ -207,12 +238,12 @@ export default function AdminPromptsPage() {
              <button 
                 onClick={() => setActiveTab("MASTER")}
                 className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "MASTER" ? "bg-[#1A1A1A] text-white shadow-lg" : "text-[#8C8C8C] hover:bg-white"}`}>
-                Identidade Master
+                Configurações Master
              </button>
              <button 
                 onClick={() => setActiveTab("SPECIALISTS")}
                 className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "SPECIALISTS" ? "bg-[#1A1A1A] text-white shadow-lg" : "text-[#8C8C8C] hover:bg-white"}`}>
-                Biblioteca de Especialistas
+                Especialistas
              </button>
           </div>
         </div>
@@ -229,16 +260,16 @@ export default function AdminPromptsPage() {
           <button 
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-3 px-10 py-5 bg-[#1A1A1A] text-white rounded-[2rem] font-black text-sm hover:scale-[1.02] hover:shadow-[0_20px_40px_rgba(212,175,55,0.2)] transition-all disabled:opacity-50 active:scale-95 group shadow-xl"
+            className="flex items-center gap-2 px-6 py-3 bg-[#1A1A1A] text-white rounded-full font-black text-[11px] uppercase tracking-widest hover:scale-[1.02] hover:shadow-[0_10px_20px_rgba(212,175,55,0.15)] transition-all disabled:opacity-50 active:scale-95 group shadow-lg"
           >
-            {saving ? <RefreshCw className="animate-spin" size={18} /> : <Zap size={18} className="text-[#D4AF37] group-hover:animate-pulse" />}
-            {saving ? "Sincronizando..." : `Salvar Configurações de ${activeTab === "MASTER" ? "Persona" : "Especialista"}`}
+            {saving ? <RefreshCw className="animate-spin" size={14} /> : <Save size={14} className="text-[#D4AF37] group-hover:scale-110 transition-transform" />}
+            {saving ? "Salvando..." : "Salvar Alterações"}
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-        <div className="lg:col-span-8 space-y-10">
+        <div className="lg:col-span-12 space-y-10">
           {activeTab === "MASTER" ? (
             <>
               {/* Persona Master */}
@@ -248,7 +279,7 @@ export default function AdminPromptsPage() {
                     <MessageSquareQuote size={28} />
                   </div>
                   <div>
-                    <h2 className="text-2xl font-black tracking-tight text-[#1A1A1A]">Identidade & Persona da IA</h2>
+                    <h2 className="text-2xl font-black tracking-tight text-[#1A1A1A]">Configurações de Identidade Global</h2>
                     <p className="text-[10px] text-[#8C8C8C] font-black tracking-[0.2em] uppercase">Configurações Globais de Persona</p>
                   </div>
                 </div>
@@ -332,41 +363,77 @@ export default function AdminPromptsPage() {
                     </div>
                   </div>
 
-                  {/* Statistical Switches */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {[
-                      { id: 'temporal', label: 'Perfil Temporal', key: 'enable_temporal_profile', icon: <Activity size={20} />, desc: 'Mapeia ciclos sazonais e tendências históricas em datas.' },
-                      { id: 'correlation', label: 'Correlação', key: 'enable_correlation_profile', icon: <BarChart3 size={20} />, desc: 'Descobre relações matemáticas ocultas entre colunas.' },
-                      { id: 'anomaly', label: 'Anomalias', key: 'enable_anomaly_detection', icon: <ShieldAlert size={20} />, desc: 'Identifica automaticamente outliers e desvios críticos.' }
-                    ].map(stat => (
-                      <div key={stat.id} className="p-8 bg-[#F9F9F9] border border-transparent hover:border-[#F1E9DB] rounded-[2rem] transition-all group/stat flex flex-col justify-between h-full relative">
-                        <div>
-                          <div className="flex items-center justify-between mb-4">
-                            <div className={`p-3 rounded-2xl shadow-sm group-hover/stat:scale-110 transition-transform ${(prompt as any)[stat.key] ? 'bg-[#1A1A1A] text-[#D4AF37]' : 'bg-white text-[#8C8C8C]'}`}>
-                              {stat.icon}
-                            </div>
-                            <div className="relative inline-flex items-center gap-2">
-                               <span className={`text-[9px] font-black uppercase tracking-tighter transition-colors ${(prompt as any)[stat.key] ? 'text-emerald-500' : 'text-slate-400'}`}>
-                                  {(prompt as any)[stat.key] ? 'LIGADO' : 'DESLIGADO'}
-                               </span>
-                               <label className="relative inline-flex items-center cursor-pointer">
-                                <input 
-                                  type="checkbox" 
-                                  checked={(prompt as any)[stat.key]}
-                                  onChange={(e) => setPrompt({...prompt, [stat.key]: e.target.checked})}
-                                  className="sr-only peer"
-                                />
-                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-                              </label>
-                            </div>
-                          </div>
-                          <span className="text-sm font-black uppercase tracking-tight block mb-2">
-                            {stat.label}
-                          </span>
+                  {/* Detailed Inference Parameters */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-[#F9F9F9] p-8 rounded-[2.5rem] border border-[#F1E9DB]">
+                    
+                    {/* Temperature Slider */}
+                    <div className="space-y-6">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] uppercase tracking-[0.2em] font-black text-[#1A1A1A] flex items-center gap-2">
+                           Temperatura (Criatividade) <Info size={12} className="text-[#D4AF37]" />
+                        </label>
+                        <div className="text-sm font-mono font-black text-[#D4AF37] bg-white border border-[#F1E9DB] p-2 px-4 rounded-xl shadow-sm">
+                           {prompt.temperature.toFixed(2)}
                         </div>
-                        <p className="text-xs text-[#8C8C8C] leading-snug italic font-serif">{stat.desc}</p>
                       </div>
-                    ))}
+                      <input 
+                        type="range" 
+                        min="0" 
+                        max="1" 
+                        step="0.05"
+                        value={prompt.temperature}
+                        onChange={(e) => setPrompt({...prompt, temperature: parseFloat(e.target.value)})}
+                        className="w-full h-2 bg-white border border-[#F1E9DB] rounded-full appearance-none cursor-pointer accent-[#D4AF37]"
+                      />
+                      <div className="flex justify-between text-[8px] text-[#8C8C8C] font-black uppercase tracking-tight">
+                        <span>Preciso (0.0)</span>
+                        <span>Equilibrado</span>
+                        <span>Criativo (1.0)</span>
+                      </div>
+                    </div>
+
+                    {/* Top P Slider */}
+                    <div className="space-y-6">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] uppercase tracking-[0.2em] font-black text-[#1A1A1A] flex items-center gap-2">
+                           Top P (Amostragem) <Info size={12} className="text-[#D4AF37]" />
+                        </label>
+                        <div className="text-sm font-mono font-black text-[#D4AF37] bg-white border border-[#F1E9DB] p-2 px-4 rounded-xl shadow-sm">
+                           {prompt.top_p.toFixed(2)}
+                        </div>
+                      </div>
+                      <input 
+                        type="range" 
+                        min="0" 
+                        max="1" 
+                        step="0.05"
+                        value={prompt.top_p}
+                        onChange={(e) => setPrompt({...prompt, top_p: parseFloat(e.target.value)})}
+                        className="w-full h-2 bg-white border border-[#F1E9DB] rounded-full appearance-none cursor-pointer accent-[#1A1A1A]"
+                      />
+                      <div className="flex justify-between text-[8px] text-[#8C8C8C] font-black uppercase tracking-tight">
+                        <span>Focado</span>
+                        <span>Diversificado</span>
+                      </div>
+                    </div>
+
+                    {/* Top K Control */}
+                    <div className="space-y-6 md:col-span-2 pt-4 border-t border-[#F1E9DB]/50">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] uppercase tracking-[0.2em] font-black text-[#1A1A1A] flex items-center gap-2">
+                           Top K (Diversidade Técnica)
+                        </label>
+                        <div className="flex items-center gap-2 text-sm font-mono font-black text-[#D4AF37] bg-white border border-[#F1E9DB] p-2 px-4 rounded-xl shadow-sm">
+                           <input 
+                            type="number" 
+                            value={prompt.top_k}
+                            onChange={(e) => setPrompt({...prompt, top_k: parseInt(e.target.value)})}
+                            className="bg-transparent text-right outline-none w-16"
+                           />
+                        </div>
+                      </div>
+                    </div>
+
                   </div>
                 </div>
               </section>
@@ -383,16 +450,40 @@ export default function AdminPromptsPage() {
                     </div>
                 </div>
                 
-                <div className="relative group/input mb-6">
-                  <label className="text-[10px] uppercase tracking-[0.15em] font-black text-[#8C8C8C] mb-2 block">Limite de Linhas para Ingestão (Global)</label>
-                  <input 
-                    type="number" 
-                    value={prompt.ingestion_row_limit || 5000}
-                    onChange={(e) => setPrompt({...prompt, ingestion_row_limit: parseInt(e.target.value) || 0})}
-                    className="w-full md:w-1/3 p-4 bg-[#F9F9F9] border-2 border-transparent focus:border-[#F1E9DB] focus:bg-white rounded-2xl text-md font-bold transition-all outline-none shadow-sm"
-                    placeholder="Ex: 5000"
-                  />
-                  <p className="text-[9px] text-[#8C8C8C] mt-2 italic">* Este parâmetro define o teto de processamento para novos datasets do Tenant.</p>
+                <div className="space-y-8 bg-[#FDF9F0]/30 p-8 rounded-[2.5rem] border border-[#F1E9DB]/50 mb-8 mt-6">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div>
+                      <label className="text-xs uppercase tracking-[0.2em] font-black text-[#1A1A1A] block mb-2 flex items-center gap-2">
+                        Limite de Linhas para Ingestão (Global) <Info size={14} className="text-[#D4AF37]" />
+                      </label>
+                      <p className="text-xs text-[#8C8C8C] leading-relaxed max-w-md italic">
+                        Este parâmetro define o teto de processamento para novos datasets do Tenant.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-4 bg-white border border-[#F1E9DB] p-4 px-6 rounded-2xl shadow-sm text-[#1A1A1A]">
+                      <BarChart3 size={20} className="text-[#D4AF37]" />
+                      <span className="text-lg font-mono font-black tracking-tighter">
+                        {prompt.ingestion_row_limit.toLocaleString()} <span className="text-[#8C8C8C] text-xs">Linhas</span>
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="relative pt-4">
+                    <input 
+                      type="range" 
+                      min="500" 
+                      max="100000" 
+                      step="500"
+                      value={prompt.ingestion_row_limit}
+                      onChange={(e) => setPrompt({...prompt, ingestion_row_limit: parseInt(e.target.value)})}
+                      className="w-full h-3 bg-white border border-[#F1E9DB] rounded-full appearance-none cursor-pointer accent-[#1A1A1A] hover:scale-[1.01] transition-transform"
+                    />
+                    <div className="flex justify-between mt-4 text-[9px] text-[#8C8C8C] font-black uppercase tracking-[0.2em]">
+                      <span className="opacity-50">Experimental (500)</span>
+                      <span className="text-[#D4AF37] font-black border-b-2 border-[#D4AF37]">Batch Corporativo (5k)</span>
+                      <span className="opacity-50">Big Data (100k)</span>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="border-t border-[#F1E9DB] pt-8">
@@ -409,168 +500,100 @@ export default function AdminPromptsPage() {
             </>
           ) : (
             <>
-              {/* Specialist Library */}
-              <div className="flex flex-col lg:flex-row gap-10">
-                {/* Lista Lateral - Aumentada para ocupar mais espaço se necessário */}
-                <div className="w-full lg:w-1/3 space-y-4">
-                  <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-[10px] font-black uppercase tracking-widest text-[#D4AF37]">Capacidades de Domínio</h3>
-                    <span className="px-3 py-1 bg-[#FDF9F0] text-[#D4AF37] text-[8px] font-black rounded-full border border-[#F1E9DB]">
-                      {specialists.length} TOTAL
-                    </span>
-                  </div>
-                  
-                  <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-                    {specialists.length > 0 ? (
-                      specialists.map((s) => (
-                        <button
-                          key={s.id}
-                          onClick={() => setSelectedSpecialist(s)}
-                          className={`w-full p-6 rounded-[1.5rem] text-left border-2 transition-all flex items-center justify-between group shadow-sm ${selectedSpecialist?.id === s.id ? "bg-[#1A1A1A] border-[#D4AF37] text-white ring-4 ring-[#D4AF37]/5" : "bg-white border-[#F1E9DB] text-[#1A1A1A] hover:border-[#D4AF37]/50 hover:bg-[#FDF9F0]/30"}`}
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className={`p-3 rounded-xl ${selectedSpecialist?.id === s.id ? "bg-[#D4AF37] text-[#1A1A1A]" : "bg-[#F9F9F9] text-[#8C8C8C]"}`}>
-                               <Cpu size={16} />
-                            </div>
-                            <div>
-                              <p className="font-black text-xs uppercase tracking-tight">{s.name}</p>
-                              <p className={`text-[9px] font-medium mt-0.5 opacity-60`}>{s.category}</p>
-                            </div>
-                          </div>
-                          <ChevronRight size={14} className={`group-hover:translate-x-1 transition-transform ${selectedSpecialist?.id === s.id ? "text-[#D4AF37]" : "text-[#F1E9DB]"}`} />
-                        </button>
-                      ))
-                    ) : (
-                      <div className="p-10 text-center border-2 border-dashed border-[#F1E9DB] rounded-[2rem] bg-[#FDF9F0]/10">
-                         <p className="text-[10px] font-black text-[#8C8C8C] uppercase tracking-widest">Nenhum Especialista Disponível</p>
-                         <p className="text-[10px] text-[#D4AF37] mt-2 italic font-serif">Selecione um módulo na biblioteca</p>
+              <div className="w-full">
+                {!selectedSpecialist ? (
+                   <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+                      <div className="flex items-center justify-between mb-10 border-b border-[#F1E9DB] pb-6">
+                        <div>
+                          <h3 className="text-2xl font-serif font-black text-[#1A1A1A] tracking-tight">Especialistas</h3>
+                          <p className="text-[10px] text-[#8C8C8C] font-black tracking-[0.2em] uppercase mt-1">Biblioteca de Capacidades Disponíveis</p>
+                        </div>
+                        <span className="px-5 py-2 bg-[#FDF9F0] text-[#D4AF37] text-[10px] font-black rounded-full border border-[#F1E9DB] shadow-sm">
+                           {specialists.length} TOTAL
+                        </span>
                       </div>
-                    )}
-                  </div>
-                </div>
 
-                {/* Área de Edição - Agora mais robusta e isolada */}
-                <div className="w-full lg:w-2/3">
-                  {selectedSpecialist ? (
-                    <section className="bg-white border border-[#F1E9DB] p-10 rounded-[3rem] shadow-[0_30px_60px_rgba(0,0,0,0.03)] animate-in fade-in zoom-in-95 duration-500 relative overflow-hidden">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                        {specialists.map((s) => (
+                          <button
+                            key={s.id}
+                            onClick={() => setSelectedSpecialist(s)}
+                            className="bg-white border border-[#F1E9DB] p-8 rounded-[2.5rem] flex flex-col items-center text-center group hover:bg-[#FDF9F0]/30 hover:border-[#D4AF37]/50 hover:shadow-xl hover:-translate-y-1 transition-all"
+                          >
+                            <div className="p-5 bg-[#F9F9F9] text-[#8C8C8C] rounded-[1.75rem] mb-6 group-hover:bg-[#1A1A1A] group-hover:text-[#D4AF37] transition-all shadow-sm">
+                               <Cpu size={32} />
+                            </div>
+                            <h4 className="font-black text-sm uppercase tracking-tight text-[#1A1A1A] group-hover:text-[#1A1A1A] transition-colors">{s.name}</h4>
+                            <p className="text-[9px] font-black uppercase tracking-widest text-[#8C8C8C] mt-2 opacity-60 group-hover:opacity-100">{s.category}</p>
+                            <div className="mt-6 w-full h-[1px] bg-[#F1E9DB] opacity-40" />
+                            <div className="mt-4 text-[10px] font-bold text-[#D4AF37] opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
+                               Editar Parâmetros →
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                   </section>
+                ) : (
+                    <section className="bg-white border border-[#F1E9DB] p-8 rounded-[2.5rem] shadow-[0_30px_60px_rgba(0,0,0,0.03)] animate-in fade-in zoom-in-95 duration-500 relative overflow-hidden h-fit">
                       <div className="absolute top-0 right-0 p-8 opacity-[0.03] rotate-12">
                          <Sparkles size={180} />
                       </div>
 
-                      <div className="flex items-center gap-4 mb-10 relative z-10">
-                        <div className="p-4 bg-[#1A1A1A] text-[#D4AF37] rounded-3xl shadow-lg ring-4 ring-[#D4AF37]/10">
-                          <Sparkles size={28} />
+                      <div className="flex flex-col md:flex-row items-center gap-6 mb-8 relative z-10 border-b border-[#F1E9DB] pb-8">
+                        <button 
+                          onClick={() => setSelectedSpecialist(null)}
+                          className="p-3 bg-[#F9F9F9] text-[#8C8C8C] hover:bg-[#1A1A1A] hover:text-white rounded-2xl transition-all shadow-sm group/back"
+                        >
+                          <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+                        </button>
+
+                        <div className="p-4 bg-[#1A1A1A] text-[#D4AF37] rounded-3xl shadow-lg ring-4 ring-[#D4AF37]/10 flex-shrink-0">
+                          <Sparkles size={24} />
                         </div>
-                        <div>
-                          <h2 className="text-2xl font-black tracking-tighter text-[#1A1A1A] uppercase">{selectedSpecialist.name}</h2>
-                          <div className="flex items-center gap-2 mt-1">
-                             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                             <p className="text-[9px] text-[#8C8C8C] font-black tracking-[0.2em] uppercase">Módulo de Especialidade Ativo</p>
+                        <div className="flex-1 min-w-0">
+                          <h2 className="text-xl font-black tracking-tighter text-[#1A1A1A] uppercase truncate">{selectedSpecialist.name}</h2>
+                          <div className="group/field mt-2 relative">
+                            <input 
+                              type="text" 
+                              value={selectedSpecialist.description}
+                              onChange={(e) => setSelectedSpecialist({...selectedSpecialist, description: e.target.value})}
+                              className="w-full bg-transparent border-none p-0 text-[11px] font-bold text-[#8C8C8C] uppercase tracking-widest outline-none focus:text-[#1A1A1A] transition-colors"
+                              placeholder="Defina o propósito deste especialista..."
+                            />
+                            <div className="absolute -bottom-1 left-0 w-0 h-[1px] bg-[#D4AF37] transition-all group-focus-within/field:w-20" />
                           </div>
                         </div>
+
+                        <div className="flex gap-2">
+                           <button 
+                             onClick={() => handleDeleteSpecialist(selectedSpecialist.id)}
+                             disabled={saving}
+                             className="p-4 bg-red-50 text-red-400 hover:bg-red-500 hover:text-white rounded-2xl transition-all shadow-sm disabled:opacity-50"
+                           >
+                             <Trash2 size={18} />
+                           </button>
+                        </div>
                       </div>
 
-                      <div className="space-y-10 relative z-10">
-                        <div className="group/field">
-                          <label className="text-[10px] uppercase tracking-[0.25em] font-black text-[#D4AF37] mb-4 block">Definição do Especialista</label>
-                          <input 
-                            type="text" 
-                            value={selectedSpecialist.description}
-                            onChange={(e) => setSelectedSpecialist({...selectedSpecialist, description: e.target.value})}
-                            className="w-full p-6 bg-[#F9F9F9] border-2 border-transparent focus:border-[#F1E9DB] focus:bg-white rounded-[1.5rem] text-sm font-bold transition-all outline-none shadow-sm"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="text-[10px] uppercase tracking-[0.25em] font-black text-[#D4AF37] mb-4 block">Lógica de Raciocínio (Prompt Context)</label>
-                          <textarea 
-                            rows={12}
-                            value={selectedSpecialist.content}
-                            onChange={(e) => setSelectedSpecialist({...selectedSpecialist, content: e.target.value})}
-                            className="w-full p-8 bg-[#F9F9F9] border-2 border-transparent focus:border-[#F1E9DB] focus:bg-white rounded-[2.5rem] text-sm leading-relaxed font-serif text-[#333] shadow-inner outline-none transition-all resize-none"
-                            placeholder="Descreva as regras que este especialista deve seguir..."
-                          />
-                        </div>
+                      <div className="relative z-10">
+                        <label className="text-[10px] uppercase tracking-[0.25em] font-black text-[#D4AF37] mb-3 block flex items-center gap-2">
+                           <Cpu size={12} /> Lógica de Raciocínio (Prompt Context)
+                        </label>
+                        <textarea 
+                          rows={14}
+                          value={selectedSpecialist.content}
+                          onChange={(e) => setSelectedSpecialist({...selectedSpecialist, content: e.target.value})}
+                          className="w-full p-6 bg-[#F9F9F9] border-2 border-transparent focus:border-[#F1E9DB] focus:bg-white rounded-[2rem] text-[13px] leading-relaxed font-serif text-[#333] shadow-inner outline-none transition-all resize-none custom-scrollbar"
+                          placeholder="Descreva as regras que este especialista deve seguir..."
+                        />
                       </div>
                     </section>
-                  ) : (
-                    <div className="h-[500px] flex flex-col items-center justify-center border-4 border-dashed border-[#F1E9DB] rounded-[4rem] text-[#8C8C8C] p-10 bg-[#FDF9F0]/5">
-                        <div className="p-6 bg-white rounded-full shadow-lg mb-6 text-[#D4AF37] animate-bounce">
-                           <ChevronRight size={32} />
-                        </div>
-                        <p className="font-black uppercase tracking-[0.2em] text-xs">Selecione um módulo na biblioteca</p>
-                        <p className="text-[10px] mt-2 italic">A configuração será injetada no motor de BI.</p>
-                    </div>
-                  )}
+                )}
                 </div>
-              </div>
             </>
           )}
         </div>
 
-        {/* Painel Lateral de Preview */}
-        <div className="lg:col-span-4 space-y-8 h-fit lg:sticky lg:top-28">
-           <div className="bg-white border-2 border-[#F1E9DB] p-8 rounded-[3rem] shadow-xl relative overflow-hidden group/preview">
-              <div className="absolute top-0 right-0 p-6">
-                 <Sparkles className="text-[#D4AF37] opacity-40 group-hover/preview:scale-125 transition-transform duration-500" size={24} />
-              </div>
-
-              <h3 className="text-xs uppercase tracking-[0.2em] font-black text-[#D4AF37] mb-10">Preview em Tempo Real</h3>
-              
-              <div className="space-y-6">
-                 {activeTab === "MASTER" ? (
-                   <>
-                     <div className="p-5 bg-[#F9F9F9] rounded-2xl border-l-[6px] border-l-[#D4AF37] shadow-sm">
-                        <span className="text-[#8C8C8C] block mb-2 font-black uppercase text-[9px] tracking-widest">Identidade Master</span>
-                        <p className="font-black text-[#1A1A1A] text-lg">{prompt.persona_title || "Sem Título"}</p>
-                     </div>
-
-                     <div className="p-6 bg-[#FDF9F0] rounded-2xl shadow-inner border border-[#F1E9DB]/40">
-                        <span className="text-[#8C8C8C] block mb-3 font-black uppercase text-[9px] tracking-widest">Contexto Master</span>
-                        <p className="text-[12px] leading-relaxed text-[#444] italic line-clamp-6 font-serif">
-                          "{prompt.persona_description || "Aguardando definição..."}"
-                        </p>
-                     </div>
-                   </>
-                 ) : (
-                    <>
-                     <div className="p-5 bg-[#F9F9F9] rounded-2xl border-l-[6px] border-l-[#D4AF37] shadow-sm">
-                        <span className="text-[#8C8C8C] block mb-2 font-black uppercase text-[9px] tracking-widest">Especialista Selecionado</span>
-                        <p className="font-black text-[#1A1A1A] text-lg">{selectedSpecialist?.name || "Nenhum"}</p>
-                     </div>
-
-                     <div className="p-6 bg-[#FDF9F0] rounded-2xl shadow-inner border border-[#F1E9DB]/40">
-                        <span className="text-[#8C8C8C] block mb-3 font-black uppercase text-[9px] tracking-widest">Visão do Domínio</span>
-                        <p className="text-[12px] leading-relaxed text-[#444] italic line-clamp-6 font-serif">
-                          "{selectedSpecialist?.description || "Selecione uma persona para visualizar..."}"
-                        </p>
-                     </div>
-                    </>
-                 )}
-
-                <div className="mt-10 pt-8 border-t-2 border-[#FDF9F0] flex items-center justify-between">
-                   <div className="flex -space-x-3">
-                      <div className="w-10 h-10 rounded-full border-4 border-white bg-[#1A1A1A] text-white flex items-center justify-center text-[10px] font-black shadow-lg">NTT</div>
-                      <div className="w-10 h-10 rounded-full border-4 border-white bg-[#D4AF37] text-white flex items-center justify-center text-[10px] font-black shadow-lg">A-BI</div>
-                   </div>
-                   <span className="text-[9px] font-black text-[#8C8C8C] uppercase tracking-[0.2em] animate-pulse">Pronto para Injeção</span>
-                </div>
-              </div>
-           </div>
-
-           <div className="bg-[#1A1A1A] p-8 rounded-[2.5rem] shadow-2xl border-t border-white/10 group overflow-hidden">
-              <div className="flex items-center gap-3 text-[#D4AF37] mb-6">
-                <Info size={18} strokeWidth={3} className="group-hover:rotate-12 transition-transform" />
-                <span className="text-[10px] uppercase font-black tracking-[0.25em]">Nota de Autoridade</span>
-              </div>
-              <p className="text-[12px] text-white/70 leading-relaxed font-serif italic mb-6">
-                "Estas diretrizes formam a camada fundamental (Master Prompt) que rege todas as células de IA deste tenant."
-              </p>
-              <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                 <div className="w-1/3 h-full bg-[#D4AF37] opacity-50" />
-              </div>
-           </div>
-        </div>
       </div>
     </div>
   );

@@ -24,35 +24,10 @@ export default function ProjectWorkspace() {
   const [showDictionaryModal, setShowDictionaryModal] = useState(false);
   const [selectedSource, setSelectedSource] = useState<any>(null);
 
-  // Mocks Inteligentes de Metadados de Versões
-  const oficialDash = { 
-    id: "dash-1", 
-    name: "Cockpit Executivo Financeiro", 
-    author: "Diretoria LATAM", 
-    version: "v2.5 (Oficial)", 
-    date: "Hoje, 09:12" 
-  };
-
-  const drafts = [
-    { id: "dash-2", name: "Heatmap Regional de Margens", author: "Agente BI", version: "Rascunho-v1.0", date: "Ontem, 18:40" },
-    { id: "dash-3", name: "Testes Anomalias Logísticas", author: "Marcio L.", version: "Rascunho-v1.2", date: "02/Abr, 14:20" },
-  ];
-
-  // Mocks para demonstração do Dicionário (Em produção viriam da API enriquecida)
-  const sources = [
-    { 
-      name: "fato_mensal_credito.csv", 
-      status: "Validado IA", 
-      size: "1.2M",
-      granularity: "HISTORICAL",
-      keys: ["ID_CLIENTE", "DATA_REF"],
-      columns: [
-        { name: "ID_CLIENTE", desc: "Identificador único do cliente", instr: "Chave primária; não somar." },
-        { name: "VL_EXPOSICAO", desc: "Valor total da exposição financeira", instr: "Campo de cálculo (MEASURE); usar para soma total." },
-        { name: "VL_INADIMPLENCIA", desc: "Valor em atraso", instr: "Indicador de risco; base para cálculo de PD." }
-      ]
-    }
-  ];
+  // Estados de Dados Reais (Substituindo Mocks por estados iniciais vazios)
+  const [oficialDash, setOficialDash] = useState<any>(null);
+  const [drafts, setDrafts] = useState<any[]>([]);
+  const [sources, setSources] = useState<any[]>([]);
 
   const openDictionary = (src: any) => {
     setSelectedSource(src);
@@ -115,46 +90,57 @@ export default function ProjectWorkspace() {
         {/* Córtex Central de Dashboards */}
         <div className="lg:col-span-3 space-y-12">
           
-          {/* Sessão Blueprint (Oficial Premium) */}
           <section>
             <h2 className="text-sm uppercase tracking-widest font-bold text-lux-text flex items-center gap-2 mb-4 opacity-80">
                <ShieldCheck size={18} className="text-lux-muted"/> Painel Oficial de Produção (Público)
             </h2>
-            <div className="glass-panel relative p-6 bg-lux-bg hover:bg-lux-card/40 border border-[#b29a8a]/40 shadow-[0_10px_35px_rgba(81,56,48,0.12)] flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all duration-500 overflow-hidden group hover:-translate-y-1 rounded-[2rem]">
-               {/* Glow interno vivo do blueprint */}
-               <div className="absolute top-0 right-0 w-80 h-full bg-gradient-to-l from-lux-text/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000 blur-xl pointer-events-none"></div>
+            
+            {!oficialDash ? (
+               <div className="glass-panel p-10 bg-lux-bg/30 border-dashed border-lux-border/30 flex flex-col items-center justify-center text-center rounded-[2rem]">
+                  <div className="w-12 h-12 rounded-full border border-lux-border/20 flex items-center justify-center mb-4 text-lux-muted/40">
+                    <ShieldCheck size={24} />
+                  </div>
+                  <p className="text-sm font-serif italic text-lux-muted text-balance max-w-sm">
+                    Nenhum relatório foi promovido ao Blueprint oficial para este projeto ainda.
+                  </p>
+               </div>
+            ) : (
+              <div className="glass-panel relative p-6 bg-lux-bg hover:bg-lux-card/40 border border-[#b29a8a]/40 shadow-[0_10px_35px_rgba(81,56,48,0.12)] flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all duration-500 overflow-hidden group hover:-translate-y-1 rounded-[2rem]">
+                 {/* Glow interno vivo do blueprint */}
+                 <div className="absolute top-0 right-0 w-80 h-full bg-gradient-to-l from-lux-text/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-1000 blur-xl pointer-events-none"></div>
 
-               <div className="flex items-center gap-5 relative z-10">
-                  <div className="w-16 h-16 rounded-xl bg-lux-text text-lux-bg flex items-center justify-center shadow-xl transform group-hover:scale-105 transition-transform duration-500">
-                    <Star size={28} className="fill-current opacity-80" />
-                  </div>
-                  <div>
-                    <h3 className="font-serif font-bold text-lux-text text-2xl flex items-center gap-3">
-                       {oficialDash.name}
-                       <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded shadow-sm border bg-lux-text text-lux-bg border-lux-text">
-                         Blueprint Ativo
-                       </span>
-                    </h3>
-                    <p className="text-sm text-lux-muted flex items-center gap-2 mt-2">
-                      Aprovação C-Level: <strong className="text-lux-text">{oficialDash.author}</strong> <span className="opacity-50">•</span> {oficialDash.date}
-                    </p>
-                  </div>
-               </div>
-               
-               <div className="flex flex-col items-end gap-3 relative z-10">
-                  <span className="font-mono text-xs bg-transparent px-3 py-1 rounded text-lux-muted font-bold border border-solid border-lux-border/50 shadow-sm">
-                    {oficialDash.version}
-                  </span>
-                  <div className="flex gap-2">
-                    <button className="text-lux-muted hover:text-lux-text p-2 hover:bg-lux-border/20 rounded-lg transition-colors">
-                      <MoreVertical size={20} />
-                    </button>
-                    <button className="bg-lux-text text-lux-bg px-6 py-2 rounded-lg text-sm font-bold shadow-xl hover:scale-105 transition-transform">
-                      Analisar Dashboard
-                    </button>
-                  </div>
-               </div>
-            </div>
+                 <div className="flex items-center gap-5 relative z-10">
+                    <div className="w-16 h-16 rounded-xl bg-lux-text text-lux-bg flex items-center justify-center shadow-xl transform group-hover:scale-105 transition-transform duration-500">
+                      <Star size={28} className="fill-current opacity-80" />
+                    </div>
+                    <div>
+                      <h3 className="font-serif font-bold text-lux-text text-2xl flex items-center gap-3">
+                         {oficialDash.name}
+                         <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded shadow-sm border bg-lux-text text-lux-bg border-lux-text">
+                           Blueprint Ativo
+                         </span>
+                      </h3>
+                      <p className="text-sm text-lux-muted flex items-center gap-2 mt-2">
+                        Autor: <strong className="text-lux-text">{oficialDash.author}</strong> <span className="opacity-50">•</span> {oficialDash.date}
+                      </p>
+                    </div>
+                 </div>
+                 
+                 <div className="flex flex-col items-end gap-3 relative z-10">
+                    <span className="font-mono text-xs bg-transparent px-3 py-1 rounded text-lux-muted font-bold border border-solid border-lux-border/50 shadow-sm">
+                      {oficialDash.version}
+                    </span>
+                    <div className="flex gap-2">
+                      <button className="text-lux-muted hover:text-lux-text p-2 hover:bg-lux-border/20 rounded-lg transition-colors">
+                        <MoreVertical size={20} />
+                      </button>
+                      <button className="bg-lux-text text-lux-bg px-6 py-2 rounded-lg text-sm font-bold shadow-xl hover:scale-105 transition-transform">
+                        Analisar Dashboard
+                      </button>
+                    </div>
+                 </div>
+              </div>
+            )}
           </section>
 
           {/* Sessão Rascunhos (Draft) */}
@@ -170,36 +156,45 @@ export default function ProjectWorkspace() {
             </div>
 
             <div className="space-y-4">
-              {drafts.map((dash, idx) => (
-                <div key={idx} className="glass-panel p-5 bg-lux-bg/20 backdrop-blur-md hover:bg-lux-card/40 border border-lux-border/30 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer transition-colors group rounded-[1.5rem]">
-                   <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-lg bg-lux-bg border border-lux-border/50 flex flex-shrink-0 items-center justify-center text-lux-muted group-hover:text-lux-text group-hover:border-lux-border transition-all shadow-sm">
-                        <BarChart3 size={20} />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-lux-text text-lg flex items-center gap-3">
-                           {dash.name}
-                        </h3>
-                        <p className="text-xs text-lux-muted flex items-center gap-2 mt-1">
-                          Desenvolvido por {dash.author} <span className="opacity-50">•</span> Última iteração: {dash.date}
-                        </p>
-                      </div>
-                   </div>
-                   
-                   <div className="flex items-center gap-4">
-                      <span className="font-mono text-[11px] bg-lux-border/10 px-2 py-1 rounded text-lux-muted/70 font-bold border border-dashed border-lux-border/40">
-                        {dash.version}
-                      </span>
-                      {/* Botão de Promover a Oficial com ícone explicativo */}
-                      <button className="text-lux-text bg-lux-border/10 hover:bg-lux-border/30 border border-lux-border/20 px-3 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition-colors opacity-0 group-hover:opacity-100" title="Promover a Oficial">
-                        <ArrowUpCircle size={14}/> Tornar Público
-                      </button>
-                      <button className="text-lux-muted hover:text-lux-text p-2 hover:bg-lux-border/20 rounded-full transition-colors opacity-0 group-hover:opacity-100">
-                        <MoreVertical size={18} />
-                      </button>
-                   </div>
-                </div>
-              ))}
+              {drafts.length === 0 ? (
+                 <div className="p-8 border border-dashed border-lux-border/20 rounded-[1.5rem] bg-lux-bg/5 flex flex-col items-center justify-center text-center">
+                    <div className="w-10 h-10 rounded-full border border-lux-border/10 flex items-center justify-center mb-3 text-lux-muted/30">
+                      <BarChart3 size={20} />
+                    </div>
+                    <p className="text-[11px] font-bold text-lux-muted/60 uppercase tracking-widest">Aguardando proposição da IA Gen...</p>
+                 </div>
+              ) : (
+                drafts.map((dash, idx) => (
+                  <div key={idx} className="glass-panel p-5 bg-lux-bg/20 backdrop-blur-md hover:bg-lux-card/40 border border-lux-border/30 flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer transition-colors group rounded-[1.5rem]">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-lg bg-lux-bg border border-lux-border/50 flex flex-shrink-0 items-center justify-center text-lux-muted group-hover:text-lux-text group-hover:border-lux-border transition-all shadow-sm">
+                          <BarChart3 size={20} />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-lux-text text-lg flex items-center gap-3">
+                            {dash.name}
+                          </h3>
+                          <p className="text-xs text-lux-muted flex items-center gap-2 mt-1">
+                            Desenvolvido por {dash.author} <span className="opacity-50">•</span> Última iteração: {dash.date}
+                          </p>
+                        </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-4">
+                        <span className="font-mono text-[11px] bg-lux-border/10 px-2 py-1 rounded text-lux-muted/70 font-bold border border-dashed border-lux-border/40">
+                          {dash.version}
+                        </span>
+                        {/* Botão de Promover a Oficial com ícone explicativo */}
+                        <button className="text-lux-text bg-lux-border/10 hover:bg-lux-border/30 border border-lux-border/20 px-3 py-1.5 rounded flex items-center gap-2 text-xs font-bold transition-colors opacity-0 group-hover:opacity-100" title="Promover a Oficial">
+                          <ArrowUpCircle size={14}/> Tornar Público
+                        </button>
+                        <button className="text-lux-muted hover:text-lux-text p-2 hover:bg-lux-border/20 rounded-full transition-colors opacity-0 group-hover:opacity-100">
+                          <MoreVertical size={18} />
+                        </button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </section>
 

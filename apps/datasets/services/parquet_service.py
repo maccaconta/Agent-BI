@@ -24,28 +24,50 @@ class ParquetService:
     DEFAULT_COMPRESSION = "snappy"
     MAX_ROWS = settings.MAX_FILE_ROWS
 
+    def _detect_delimiter(self, csv_bytes: bytes, encoding: str) -> str:
+        """Detecta delimitador usando csv.Sniffer."""
+        try:
+            content = csv_bytes[:4096].decode(encoding)
+            import csv
+            sniffer = csv.Sniffer()
+            dialect = sniffer.sniff(content, delimiters=[",", ";", "\t", "|"])
+            return dialect.delimiter
+        except Exception:
+            return ","
+
     def convert_csv_to_parquet(
         self,
         csv_bytes: bytes,
         encoding: str = "utf-8",
-        delimiter: str = ",",
+        delimiter: str | None = None,
     ) -> tuple[bytes, dict]:
         """
-        Converte CSV para Parquet.
-        Retorna (parquet_bytes, schema_info).
+        Converte CSV para Parquet com suporte a múltiplas encodings e delimitadores.
         """
-        try:
-            df = pd.read_csv(
-                io.BytesIO(csv_bytes),
-                encoding=encoding,
-                sep=delimiter,
-                low_memory=False,
-                nrows=self.MAX_ROWS,
-            )
-            return self._dataframe_to_parquet(df)
-        except Exception as e:
-            logger.error(f"Erro ao converter CSV para Parquet: {e}")
-            raise
+        encodings_to_try = [encoding, "latin-1", "cp1252"]
+        last_err = None
+        
+        for enc in encodings_to_try:
+            try:
+                # Se não houver delimitador explícito, tenta detectar
+                current_sep = delimiter or self._detect_delimiter(csv_bytes, enc)
+                
+                df = pd.read_csv(
+                    io.BytesIO(csv_bytes),
+                    encoding=enc,
+                    sep=current_sep,
+                    engine="python",
+                    na_values=["NULL", "null", "NaN", "nan", "N/A"],
+                    keep_default_na=True,
+                    nrows=self.MAX_ROWS,
+                )
+                return self._dataframe_to_parquet(df)
+            except (UnicodeDecodeError, Exception) as e:
+                last_err = e
+                continue
+        
+        logger.error(f"Falha total ao converter CSV: {last_err}")
+        raise last_err if last_err else ValueError("Falha na conversão do CSV")
 
     def convert_xlsx_to_parquet(
         self,
@@ -54,7 +76,6 @@ class ParquetService:
     ) -> tuple[bytes, dict]:
         """
         Converte XLSX para Parquet.
-        Retorna (parquet_bytes, schema_info).
         """
         try:
             sheet = sheet_name or 0
@@ -63,10 +84,17 @@ class ParquetService:
                 sheet_name=sheet,
                 nrows=self.MAX_ROWS,
             )
-            return self._dataframe_to_parquet(df)
+            return self.convert_df_to_parquet(df)
         except Exception as e:
             logger.error(f"Erro ao converter XLSX para Parquet: {e}")
             raise
+
+    def convert_df_to_parquet(self, df: pd.DataFrame) -> tuple[bytes, dict]:
+        """
+        Converte um DataFrame existente para bytes Parquet + extrai schema.
+        Este é o método mais eficiente se o DF já estiver na memória.
+        """
+        return self._dataframe_to_parquet(df)
 
     def _dataframe_to_parquet(self, df: pd.DataFrame) -> tuple[bytes, dict]:
         """Converte DataFrame para bytes Parquet + extrai schema."""
@@ -216,14 +244,31 @@ class ParquetService:
         """Infere schema sem converter (apenas amostra)."""
         try:
             if file_extension.lower() == "csv":
-                df = pd.read_csv(io.BytesIO(file_bytes), nrows=100)
+                encodings_to_try = ["utf-8", "latin-1", "cp1252"]
+                last_err = None
+                for enc in encodings_to_try:
+                    try:
+                        sep = self._detect_delimiter(file_bytes, enc)
+                        df = pd.read_csv(
+                            io.BytesIO(file_bytes),
+                            encoding=enc,
+                            sep=sep,
+                            engine="python",
+                            na_values=["NULL", "null", "NaN", "nan", "N/A"],
+                            nrows=100
+                        )
+                        _, schema_info = self._dataframe_to_parquet(df.head(10))
+                        return schema_info
+                    except Exception as e:
+                        last_err = e
+                        continue
+                raise last_err or ValueError("Falha ao ler CSV para inferência")
             elif file_extension.lower() in ["xlsx", "xls"]:
                 df = pd.read_excel(io.BytesIO(file_bytes), nrows=100)
+                _, schema_info = self._dataframe_to_parquet(df.head(10))
+                return schema_info
             else:
                 raise ValueError(f"Extensão não suportada: {file_extension}")
-
-            _, schema_info = self._dataframe_to_parquet(df.head(10))
-            return schema_info
         except Exception as e:
             logger.error(f"Erro ao inferir schema: {e}")
             raise

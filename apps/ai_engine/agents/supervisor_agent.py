@@ -143,7 +143,7 @@ Gere o fragmento de layout chamando renderWidget para cada widget listado acima.
             html = self.bedrock_service.invoke(
                 system_prompt=system_prompt,
                 user_message=user_message,
-                temperature=0.2,
+                temperature=None,
                 trace=trace
             )
             

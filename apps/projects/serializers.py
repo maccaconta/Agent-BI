@@ -53,6 +53,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             "updated_at",
             "data_ready",
             "pending_datasets_count",
+            "blueprint_widgets",
         ]
         read_only_fields = [
             "id",
@@ -68,10 +69,38 @@ class ProjectSerializer(serializers.ModelSerializer):
             "updated_at",
             "data_ready",
             "pending_datasets_count",
+            "blueprint_widgets",
         ]
 
     data_ready = serializers.SerializerMethodField()
     pending_datasets_count = serializers.SerializerMethodField()
+    blueprint_widgets = serializers.SerializerMethodField()
+
+    def get_blueprint_widgets(self, obj) -> list:
+        """Retorna a configuração de widgets e SQLs caso o projeto seja um BLUEPRINT."""
+        if obj.status != "BLUEPRINT":
+            return []
+        
+        # Busca o último dashboard publicado (Blueprint) do projeto
+        from apps.dashboards.models import Dashboard
+        from apps.governance.models import WidgetScriptBinding
+        
+        blueprint_dash = obj.dashboards.filter(status="PUBLISHED").order_by("-created_at").first()
+        if not blueprint_dash:
+            return []
+            
+        bindings = WidgetScriptBinding.objects.filter(dashboard=blueprint_dash).order_by("widget_id")
+        
+        widgets = []
+        for b in bindings:
+            widgets.append({
+                "id": b.widget_id,
+                "prompt": b.prompt,
+                "sql": b.script_content,
+                "type": b.script_type, # Pode precisar mapear de volta para CHART/BIGNUMBER se necessário
+                "title": b.widget_id # Fallback se não houver título salvo
+            })
+        return widgets
 
     def get_data_ready(self, obj) -> bool:
         from apps.datasets.models import DatasetStatus
@@ -90,6 +119,7 @@ class ProjectIntakeCreateSerializer(serializers.Serializer):
     crawlFrequency = serializers.CharField(required=False, allow_blank=True, default="")
     objective = serializers.CharField(required=False, allow_blank=True, default="")
     specialist_prompt_id = serializers.UUIDField(required=False, allow_null=True)
+    domain_id = serializers.UUIDField(required=False, allow_null=True)
     analysis_max_rows = serializers.IntegerField(required=False, default=5000)
 
     def validate_dashboard(self, value: str) -> str:
