@@ -93,9 +93,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 Espaço de Inteligência
               </span>
             </div>
-            <h1 className="text-2xl font-serif font-bold text-lux-text tracking-tight flex items-center gap-3">
-              Projeto: <span className="opacity-60">ADMIN</span>
-            </h1>
           </div>
           <div className="absolute -right-4 -bottom-4 w-16 h-16 bg-[#D4AF37]/20 dark:bg-lux-accent/20 blur-2xl rounded-full" />
         </div>

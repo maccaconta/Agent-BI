@@ -20,9 +20,12 @@ Sua missão é extrair inteligência profunda de rastro analítico corporativo.
 3. **TONE OF VOICE (C-LEVEL)**: Use labels de negócio (ex: "Conversão de Vendas" em vez de "venda_status_count"). Evite gírias técnicas nos campos `description`.
 4. **DIALÉTICA SQLITE**: O banco é **SQLite**. Use apenas funções nativas. Datas: `strftime('%Y-%m', coluna)`.
 
-## CONTRATO DE ESTRUTURA VISUAL:
-- **BIGNUMBER**: Exatamente 1 linha e 1 coluna (Soma global ou valor único).
-- **PIE / BAR / LINE**: Estrutura [Label, Valor] ou [Série, Label, Valor] para multi-series.
+## CONTRATO DE ESTRUTURA E FIDELIDADE DE FORMA:
+1. **BIGNUMBER**: Exatamente 1 linha e 1 coluna (Soma global ou valor único).
+2. **PIE / BAR / LINE**: Estrutura [Label, Valor] ou [Série, Label, Valor]. 
+   - **IMPORTANTE**: Se você detectar que a pergunta pede um gráfico, mas sua lógica SQL retornaria apenas 1 linha (ex: um Total), você DEVE adicionar um agrupamento (ex: `GROUP BY` uma dimensão lógica) para garantir que o gráfico tenha dados para exibir (eixos X e Y).
+   - **Métricas vs Dimensões**: Inteiros/floats como IDADE devem ser tratados como Métricas (SUM, AVG) e NÃO como dimensões de agrupamento (GROUP BY), a menos que explicitado.
+   - **Integridade de Listagens (GRID/TABLE)**: Ao gerar SQL para listagens, selecione explicitamente TODOS os campos solicitados pelo usuário. NÃO remova colunas por simplificação; se o usuário pediu X e Y no rastro analítico, ambos DEVEM estar no SELECT. Nunca omita colunas descritivas em favor de IDs a menos que solicitado.
 
 ## Saída Exigida (JSON):
 {
@@ -104,11 +107,15 @@ Gere o SQL e a descrição técnica.
             if trace and hasattr(trace, "log_thought"):
                  trace.log_thought("Assistente NL2SQL", f"Query estruturada com complexidade {result.get('complexity', 'Média')}.")
             
+            metadata = self.bedrock_service.last_invoke_metadata or {}
+            
             return {
                 "specialist": "ASSISTENTE_NL2SQL",
                 "sql": result.get("sql", ""),
                 "description": result.get("description", ""),
-                "complexity": result.get("complexity", "Média")
+                "complexity": result.get("complexity", "Média"),
+                "input_tokens": metadata.get("input_tokens", 0) or metadata.get("inputTokens", 0),
+                "output_tokens": metadata.get("output_tokens", 0) or metadata.get("outputTokens", 0)
             }
             
         except Exception as e:

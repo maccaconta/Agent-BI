@@ -13,9 +13,12 @@ from apps.audit.models import ExecutionTrace
 logger = logging.getLogger(__name__)
 
 class TraceService:
-    def __init__(self, trace_id: Optional[uuid.UUID] = None, job_type: str = "GENERIC"):
+    def __init__(self, trace_id: Optional[uuid.UUID] = None, job_type: str = "GENERIC", user_id=None, project_id=None, dashboard_id=None):
         self.trace_id = trace_id or uuid.uuid4()
         self.job_type = job_type
+        self.user_id = user_id
+        self.project_id = project_id
+        self.dashboard_id = dashboard_id
         self._start_times = {}
 
     def start_step(self, step_name: str, message: str = None):
@@ -43,7 +46,10 @@ class TraceService:
                 step_name=step_name,
                 message=display_message,
                 status="IN_PROGRESS",
-                duration_ms=0
+                duration_ms=0,
+                user_id=self.user_id,
+                project_id=self.project_id,
+                dashboard_id=self.dashboard_id
             )
         except Exception as e:
             # Blindagem: se o banco estiver locked, logamos no console mas não quebramos o fluxo
@@ -56,11 +62,17 @@ class TraceService:
         status: str = "SUCCESS", 
         metadata: dict = None,
         input_tokens: int = 0,
-        output_tokens: int = 0
+        output_tokens: int = 0,
+        model_id: str = ""
     ):
-        """Finaliza um passo, calcula a duração e persiste o log."""
+        """Finaliza um passo, calcula a duração e persiste o log com custo."""
+        from apps.audit.services.cost_calculator import CostCalculator
+        
         start_time = self._start_times.pop(step_name, time.perf_counter())
         duration_ms = int((time.perf_counter() - start_time) * 1000)
+        
+        # Cálculo de custo se houver tokens
+        estimated_cost = CostCalculator.calculate_cost(model_id, input_tokens, output_tokens)
         
         try:
             ExecutionTrace.objects.create(
@@ -72,9 +84,14 @@ class TraceService:
                 status=status,
                 metadata=metadata or {},
                 input_tokens=input_tokens,
-                output_tokens=output_tokens
+                output_tokens=output_tokens,
+                model_id=model_id,
+                estimated_cost_usd=estimated_cost,
+                user_id=self.user_id,
+                project_id=self.project_id,
+                dashboard_id=self.dashboard_id
             )
-            logger.info(f"[Tracer] Concluido: {step_name} em {duration_ms}ms")
+            logger.info(f"[Tracer] Concluido: {step_name} em {duration_ms}ms (Custo: ${estimated_cost})")
         except Exception as e:
             logger.warning(f"[Tracer] ⚠️ Falha ao salvar fim de step (banco ocupado): {e}")
 

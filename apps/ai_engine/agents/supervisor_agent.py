@@ -114,12 +114,14 @@ Sua missão é criar o LAYOUT de um Dashboard Executivo, Limpo e Elegante com fo
         <p class="text-[10px] text-gray-400 uppercase tracking-widest mt-1">Intelligence Report Room</p>
       </div>
     </div>`.
-2. **KPI Line (GRID ROBUSTO)**: Para widgets 'BIGNUMBER', use obrigatoriamente:
-   `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">`
-   - Cada card KPI DEVE ser auto-ajustável com `w-full min-w-0 overflow-hidden`.
-3. **Seções de Gráficos**: Grid responsivo `grid grid-cols-1 md:grid-cols-2 gap-10 mb-12`.
-4. **Diagnóstico Estratégico (RODAPÉ)**: Procure pelo container `<div id="dashboard_insights" class="mt-16 p-10 bg-white rounded-[2.5rem] shadow-xl border border-gray-100 relative overflow-hidden"></div>`. 
-   - **MANTENHA A FIDELIDADE**: Use o texto fornecido em 'DIAGNÓSTICO CONSOLIDADO DA INGESTÃO' para preencher esta seção. Não invente novos insights se já houver dados no contexto.
+2. **KPI & Component Flow (GRID DINÂMICO)**: 
+   - Você deve renderizar os widgets na **EXATA ORDEM** em que eles aparecem no JSON de entrada. 
+   - Use um layout de grid de **2 COLUNAS** (`grid-cols-1 md:grid-cols-2`).
+   - Ícones e métricas (BIGNUMBER) ocupam `col-span-1` (2 por linha).
+   - Tabelas e gráficos (CHART/TABLE) ocupam `col-span-1 md:col-span-2` (largura total).
+   - NÃO agrupe todos os BIGNUMBER no topo se eles não estiverem no topo da lista.
+3. **Diagnóstico Estratégico (POSIÇÃO FLEXÍVEL)**: Procure pelo container `<div id="dashboard_insights" class="mt-16 p-10 bg-white rounded-[2.5rem] shadow-xl border border-gray-100 relative overflow-hidden"></div>`. 
+   - **MANTENHA A FIDELIDADE**: Use o texto fornecido em 'PARECER ESTRATÉGICO FINAL' para preencher esta seção. Não invente novos insights se já houver dados no contexto.
 
 ## ESTILO PREMIUM LIGHT (MANDATÓRIO):
 - TODOS os widgets DEVEM usar `.kpi-card`.
@@ -161,3 +163,46 @@ Gere o fragmento de layout chamando renderWidget para cada widget listado acima.
         except Exception as e:
             logger.error(f"[Supervisor] Erro ao montar HTML: {e}")
             return f"<div class='p-10 border border-red-500 bg-red-50 text-red-900 rounded-xl'><h1>Falha na Montagem</h1><p>{str(e)}</p></div>"
+
+    def generate_executive_synthesis(self, datasets_metadata: List[Dict[str, Any]], trace=None) -> str:
+        """
+        Gera um Parecer Executivo de alto nível (Strategic Diagnosis) focado em conclusões.
+        Diferente do resumo individual, este método faz a correlação entre os dados.
+        """
+        system_prompt = """Você é o Diretor de Estratégia e Análise de Risco da NTT DATA. 
+Sua missão é entregar um PARECER EXECUTIVO FINAL baseado nos dados ingeridos.
+
+## DIRETRIZES DE COMUNICAÇÃO (MANDATÓRIAS):
+1. **FOCO EM CONCLUSÕES**: Não liste os nomes dos arquivos ou descreva colunas. Vá direto aos pontos de interesse para a diretoria.
+2. **TOM EXECUTIVO**: Use linguagem sóbria, direta e profissional.
+3. **SÍNTESE ATIVA**: Conecte os datasets. Se um dataset fala de NPS e outro de Crédito, fale sobre como a satisfação impacta a adimplência.
+4. **FORMATO**: Texto fluído, sem cabeçalhos repetitivos como "RESUMO" ou "INSIGHTS". Use parágrafos curtos e impactantes.
+5. **PROIBIDO**: Mencionar "Dataset", "Arquivo CSV", "Ingestão" ou "Processamento". O usuário quer ver o RESULTADO da inteligência.
+
+Sua resposta deve ser o parecer final que será lido pelo CEO."""
+
+        user_message = f"""
+### CONTEXTO ANALÍTICO DOS DADOS:
+{json.dumps(datasets_metadata, indent=2, ensure_ascii=False)}
+
+Gere o Parecer Estratégico Final agora."""
+
+        try:
+            if trace:
+                tracer = trace
+                tracer.start_step("IA: Parecer Estratégico")
+                
+            synthesis = self.bedrock_service.invoke(
+                system_prompt=system_prompt,
+                user_message=user_message,
+                temperature=0.4, # Ligeiramente mais criativo para síntese estratégica
+                trace=trace
+            )
+            
+            if trace:
+                tracer.end_step("IA: Parecer Estratégico", message="Parecer Executivo sintetizado com sucesso.")
+            
+            return synthesis
+        except Exception as e:
+            logger.error(f"[Supervisor] Erro ao gerar síntese: {e}")
+            return "O diagnóstico estratégico foi consolidado e está pronto para análise detalhada via drill-down nos widgets acima."

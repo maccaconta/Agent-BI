@@ -222,7 +222,8 @@ class BedrockService:
                             "temperature": temperature
                         },
                         input_tokens=usage.get("input_tokens", 0),
-                        output_tokens=usage.get("output_tokens", 0)
+                        output_tokens=usage.get("output_tokens", 0),
+                        model_id=self.model_id
                     )
 
                 logger.info(
@@ -395,7 +396,8 @@ class BedrockService:
                             "temperature": temperature
                         },
                         input_tokens=usage.get("inputTokens", 0),
-                        output_tokens=usage.get("outputTokens", 0)
+                        output_tokens=usage.get("outputTokens", 0),
+                        model_id=self.model_id
                     )
 
                 logger.info(
@@ -795,6 +797,21 @@ class BedrockService:
                 return json.loads(json_part)
         except (json.JSONDecodeError, ValueError):
             pass
+
+        # 4. Tentativa 4: REPARO DE TRUNCAMENTO (NOVO)
+        # Se o JSON parece ter sido cortado no meio (ex: atingiu max_tokens)
+        if text.startswith("{") and not text.endswith("}"):
+            logger.warning("[BedrockService] Detectado JSON truncado. Tentando reparo de emergência...")
+            temp_text = text
+            if temp_text.endswith(","): temp_text = temp_text[:-1]
+            for _ in range(5):
+                try:
+                    return json.loads(temp_text + "}")
+                except:
+                    try:
+                        return json.loads(temp_text + "]}")
+                    except:
+                        temp_text += "}"
             
         logger.error("Falha total ao processar JSON do Bedrock. response=%s", (response_text or "")[:500])
         return None

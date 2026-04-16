@@ -57,8 +57,13 @@ export default function NewProjectWorkspace() {
 
   useEffect(() => {
     // SEMPRE LIMPAR ao entrar na tela de novo projeto para evitar confusão com rascunhos anteriores
-    // solicitado pelo usuário: "os campos deveriam estar vazios"
+    // solicitado pelo usuário: "os campos deveriam estar vazios e o painel de ingestão zerado"
     sessionStorage.removeItem(DRAFT_KEY);
+    sessionStorage.removeItem("agent_bi_current_project_id");
+    sessionStorage.removeItem("agent_bi_last_project_create_response");
+    localStorage.removeItem("agent_bi_current_project_id");
+    localStorage.removeItem("agent_bi_last_project_create_response");
+    localStorage.removeItem("ingested_datasets_cache"); // Limpa cache de datasets se houver
     
     // Default Owner
     let loggedUser = "Usuário Corporativo";

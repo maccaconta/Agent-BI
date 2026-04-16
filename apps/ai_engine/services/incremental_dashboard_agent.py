@@ -56,7 +56,13 @@ class IncrementalDashboardAgentService:
         else:
             trace_id = uuid.uuid4()
             
-        trace = TraceService(trace_id=trace_id, job_type="AI_GENERATION")
+        trace = TraceService(
+            trace_id=trace_id, 
+            job_type="AI_GENERATION",
+            project_id=request_data.get("projectId") or request_data.get("project_id"),
+            dashboard_id=dashboard_id,
+            user_id=getattr(request_user, "id", None)
+        )
 
         # Verificação de Prontidão de Dados (Data Readiness)
         project_id = request_data.get("projectId")
@@ -351,7 +357,7 @@ class IncrementalDashboardAgentService:
                 dashboard=context.get("dashboard"),
                 widget_results=raw_widgets,
                 dataset_ids=[str(ds.get("id")) for ds in context.get("datasets", [])],
-                specialist_context=candidate_result.get("analyticalThoughtProcess", ""),
+                specialist_context=f"PARECER ESTRATÉGICO FINAL:\n{candidate_result.get('analyticalThoughtProcess', '')}",
                 trace=trace
             )
             

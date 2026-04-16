@@ -101,7 +101,7 @@ class DataInterpreterAgent:
     def __init__(self):
         self.bedrock_service = BedrockService()
 
-    def interpret_schema(self, columns: List[Dict[str, Any]], sample_data: List[Dict[str, Any]], domain_name: str = "", specialist_context: str = "") -> Dict[str, Any]:
+    def interpret_schema(self, columns: List[Dict[str, Any]], sample_data: List[Dict[str, Any]], domain_name: str = "", specialist_context: str = "", trace: Any = None) -> Dict[str, Any]:
         """
         Analisa as colunas e dados para gerar o mapeamento semântico e instruções de uso.
         """
@@ -163,33 +163,40 @@ class DataInterpreterAgent:
             
             columns_to_infer.append(col)
 
-        # 3. Poda de Metadados para a IA
-        # Envia o DNA das colunas + Amostras Reais para que a IA entenda o CONCEITO
+        # 3. Poda de Metadados para a IA (Otimização de Tokens)
+        # Removemos os samples por coluna se vamos enviar a amostra completa mais abaixo
         columns_minimal = []
         for col in columns_to_infer:
-            col_name = col.get("name")
-            # Extrai até 5 valores únicos da amostra para dar contexto à IA
-            unique_samples = list(set([str(row.get(col_name)) for row in sample_data if row.get(col_name) is not None]))[:5]
-            
             columns_minimal.append({
-                "name": col_name,
-                "type": col.get("type"),
-                "sample_values": unique_samples
+                "name": col.get("name"),
+                "type": col.get("type")
             })
+
+        # 4. Amostragem Inteligente (Smart Sampling)
+        # Limitamos a 5 linhas e truncamos strings longas para economizar tokens
+        optimized_sample = []
+        for row in sample_data[:5]:
+            clean_row = {}
+            for k, v in row.items():
+                if isinstance(v, str) and len(v) > 50:
+                    clean_row[k] = v[:47] + "..."
+                else:
+                    clean_row[k] = v
+            optimized_sample.append(clean_row)
 
         # 2. Invocação Bedrock
         prompt = f"""
 === SCHEMA DAS COLUNAS PARA ANÁLISE (CONCEITUAL) ===
 {json.dumps(columns_minimal, indent=2, ensure_ascii=False)}
 
-=== AMOSTRA COMPLETA (LINHAS REAIS) ===
-{json.dumps(sample_data, indent=2, ensure_ascii=False)}
+=== AMOSTRA REDUZIDA (LINHAS REAIS - TOP 5) ===
+{json.dumps(optimized_sample, indent=2, ensure_ascii=False)}
 
 Gere o mapeamento semântico seguindo estas regras de OURO:
 1. **DESCRIÇÃO DE NEGÓCIO**: O campo 'business_description' DEVE ser uma explicação amigável para executivos. 
    - Proibido: "Vlr Fatur"
    - Obrigatório: "Volume total de faturamento bruto da transação"
-2. **CONTEXTO**: Use as 'sample_values' para entender se uma coluna 'STATUS' é de 'Vendas', 'Qualidade' ou 'Entrega'.
+2. **CONTEXTO**: Use a amostra para entender se uma coluna 'STATUS' é de 'Vendas', 'Qualidade' ou 'Entrega'.
 """
         
         try:
@@ -197,7 +204,8 @@ Gere o mapeamento semântico seguindo estas regras de OURO:
             result = self.bedrock_service.invoke_with_json_output(
                 system_prompt=system_prompt,
                 user_message=prompt,
-                max_tokens=1500
+                max_tokens=4000,
+                trace=trace
             )
             
             if not result or "column_mapping" not in result:

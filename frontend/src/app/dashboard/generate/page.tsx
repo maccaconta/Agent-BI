@@ -161,7 +161,7 @@ function DashboardContent() {
           setProjectDatasets(data.results);
         }
       })
-      .catch(err => console.error("Erro ao carregar datasets do projeto:", err));
+      .catch(err => { /* erro silenciado para producao */ });
     }
   }, [projectId]);
 
@@ -204,22 +204,27 @@ function DashboardContent() {
 
           if (data.dashboards && data.dashboards.length > 0) {
             setActiveDashboardId(data.dashboards[0].id);
-          }
-
-          // Injetar Blueprint Widgets se o projeto for BLUEPRINT
-          if (data.status === "BLUEPRINT" && data.blueprint_widgets && data.blueprint_widgets.length > 0 && plannedWidgets.length === 0) {
-             console.log("[Studio] 💠 Carregando configuração de BLUEPRINT consolidada.");
-             setPlannedWidgets(data.blueprint_widgets);
-             
-             // Ativar modo SQL para todos os widgets do Blueprint
-             const blueprintModes: Record<string, 'PROMPT' | 'SQL'> = {};
-             data.blueprint_widgets.forEach((w: any) => {
-               blueprintModes[w.id] = 'SQL';
-             });
-             setWidgetViewMode(blueprintModes);
+            // Injetar Blueprint Widgets se o projeto for BLUEPRINT
+            if (data.status === "BLUEPRINT" && data.blueprint_widgets && data.blueprint_widgets.length > 0 && plannedWidgets.length === 0) {
+               // Blueprint carregado
+               // Ordenação padronizada: KPIs primeiro
+               const sortedWidgets = [...data.blueprint_widgets].sort((a: any, b: any) => {
+                 if (a.type === 'BIGNUMBER' && b.type !== 'BIGNUMBER') return -1;
+                 if (a.type !== 'BIGNUMBER' && b.type === 'BIGNUMBER') return 1;
+                 return 0;
+               });
+               setPlannedWidgets(sortedWidgets);
+               
+               // Ativar modo SQL para todos os widgets do Blueprint
+               const blueprintModes: Record<string, 'PROMPT' | 'SQL'> = {};
+               sortedWidgets.forEach((w: any) => {
+                 blueprintModes[w.id] = 'SQL';
+               });
+               setWidgetViewMode(blueprintModes);
+            }
           }
         }
-      } catch (err) { console.error("Erro ao checar status do projeto:", err); }
+      } catch (err) { /* erro silenciado para producao */ }
     };
     checkStatus();
     const interval = setInterval(checkStatus, 1500); // Polling mais agressivo para ROI de tempo
@@ -263,7 +268,7 @@ function DashboardContent() {
     // ATALHO: Cache Estratégico (Pre-Planning)
     // Se a IA já desenhou o plano durante a ingestão, carregamos instantaneamente
     if (projectMetadata?.initial_strategic_plan && Array.isArray(projectMetadata.initial_strategic_plan)) {
-       console.log("[Studio] 🎯 Carregando plano estratégico pré-gerado do cache inteligente.");
+       // Plano estrategico carregado
        setPlannedWidgets(projectMetadata.initial_strategic_plan);
        return; 
     }
@@ -282,9 +287,17 @@ function DashboardContent() {
       });
       if (response.ok) {
         const data = await response.json();
-        if (data.design && data.design.widgets) setPlannedWidgets(data.design.widgets);
+        if (data.design && data.design.widgets) {
+          // Ordenação estratégica: KPIs primeiro
+          const sorted = [...data.design.widgets].sort((a: any, b: any) => {
+            if (a.type === 'BIGNUMBER' && b.type !== 'BIGNUMBER') return -1;
+            if (a.type !== 'BIGNUMBER' && b.type === 'BIGNUMBER') return 1;
+            return 0;
+          });
+          setPlannedWidgets(sorted);
+        }
       }
-    } catch (err) { console.error("Erro no auto-planejamento:", err); }
+    } catch (err) { /* erro silenciado para producao */ }
     finally { setIsPlanning(false); }
   };
 
@@ -337,7 +350,7 @@ function DashboardContent() {
         data = await response.json();
       } else {
         const text = await response.text();
-        console.error("[Frontend] Resposta não-JSON recebida:", text);
+        // erro silenciado para producao
         throw new Error("O servidor retornou um erro inesperado (Non-JSON). Verifique os logs do backend.");
       }
 
@@ -353,6 +366,11 @@ function DashboardContent() {
                 return w;
             }));
         }
+
+        // --- UX: Abrir abas SQL automaticamente ---
+        const newModeMap: Record<string, 'PROMPT' | 'SQL'> = {};
+        plannedWidgets.forEach(w => { newModeMap[w.id] = 'SQL'; });
+        setWidgetViewMode(newModeMap);
         
         const dashboardIdStr = String(data.dashboard_id);
         const newTab = {
@@ -369,7 +387,7 @@ function DashboardContent() {
         }, 100); 
       }
     } catch (err: any) { 
-      console.error("Erro ao materializar:", err);
+      // erro silenciado para producao
       // Feedback visual simples para o usuário
       alert(`Falha na Materialização: ${err.message}`);
     } finally { 
@@ -394,8 +412,14 @@ function DashboardContent() {
       const data = await response.json();
       if (data.status === "success") {
         setTabs(prev => prev.map(t => t.id === tabId ? { ...t, isBlueprint: true } : t));
+        // Feedback visual de prestígio imediato
+        const activeContainer = document.querySelector('.dashboard-shell-active');
+        if (activeContainer) {
+          activeContainer.classList.add('animate-blueprint-elevate');
+          setTimeout(() => activeContainer.classList.remove('animate-blueprint-elevate'), 2000);
+        }
       }
-    } catch (err) { console.error("Erro ao elevar para Blueprint:", err); }
+    } catch (err) { /* erro silenciado para producao */ }
   };
 
   const handleExportStreamlit = async () => {
@@ -417,7 +441,7 @@ function DashboardContent() {
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      console.error("Erro ao exportar:", err);
+      // erro silenciado para producao
       alert("Erro ao exportar dashboard. Verifique sua conexão.");
     }
   };
@@ -521,6 +545,32 @@ function DashboardContent() {
                                 }
                                 
                                 container.innerText = formatValue(val);
+                            } else if (type === 'TABLE') {
+                                // Prioriza colunas oficiais do backend para garantir integridade (Zero perda de campos)
+                                const actualCols = (data.columns && data.columns.length > 0) ? data.columns : cols;
+                                
+                                const tableHtml = \`
+                                    <div class="overflow-hidden border border-gray-100 rounded-xl bg-white shadow-inner">
+                                        <div class="overflow-x-auto custom-scrollbar">
+                                            <table class="w-full text-left border-collapse">
+                                                <thead>
+                                                    <tr class="bg-gray-50 border-b border-gray-100">
+                                                        \${actualCols.map(c => \`<th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-[#D4AF37] shadow-sm">\${c}</th>\`).join('')}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    \${rows.map((row, i) => \`
+                                                        <tr class="\${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                                                            \${actualCols.map(col => \`<td class="px-6 py-4 text-[11px] text-gray-700 font-medium">\${row[col] !== undefined && row[col] !== null ? row[col] : '-'}</td>\`).join('')}
+                                                        </tr>
+                                                    \`).join('')}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                \`;
+                                container.innerHTML = tableHtml;
+                                container.style.minHeight = 'auto';
                             } else {
                                 const chart = echarts.init(container, 'light');
                                 let xAxisData = [];
@@ -582,7 +632,7 @@ function DashboardContent() {
                                 </div>\`;
                         }
                     } catch (e) {
-                        console.error('Widget Error:', e);
+                        // erro silenciado para producao
                         container.innerHTML = \`
                             <div class="kpi-card p-6 border-red-200 bg-red-50 flex flex-col items-center justify-center text-center shadow-inner h-full overflow-hidden">
                                 <svg class="w-8 h-8 text-red-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
@@ -604,7 +654,7 @@ function DashboardContent() {
             </div>
 
             <div class="text-center max-w-4xl mx-auto space-y-3">
-              ${isBlueprint ? `<div class="inline-flex items-center gap-2 px-4 py-1.5 bg-[#D4AF37]/10 border border-[#D4AF37]/40 rounded-full mb-6 animate-fade-in"><span class="w-2 h-2 rounded-full bg-[#D4AF37] shadow-[0_0_8px_#D4AF37]"></span><span class="text-[9px] font-black text-[#D4AF37] uppercase tracking-[0.2em]">Certified Analytics Blueprint</span></div>` : ''}
+              ${isBlueprint ? `<div class="inline-flex items-center gap-2 px-4 py-1.5 bg-[#3B82F6] border border-[#2563EB] rounded-full mb-6 animate-fade-in shadow-[0_0_20px_rgba(59,130,246,0.5)]"><span class="w-2 h-2 rounded-full bg-white shadow-[0_0_8px_#FFF] animate-pulse"></span><span class="text-[9px] font-black text-white uppercase tracking-[0.2em]">Certified Analytics Blueprint</span></div>` : ''}
               <h1 class="text-4xl md:text-5xl lg:text-6xl font-black tracking-tightest text-gray-900 leading-none">${title}</h1>
               <div class="flex items-center justify-center gap-4 mt-6">
                 <span class="h-[1px] w-12 bg-gray-200"></span>
@@ -802,9 +852,11 @@ function DashboardContent() {
                               <GripVertical size={14} />
                            </div>
 
-                           <div className={`p-2 rounded-xl shrink-0 ${isBigNumber ? 'bg-lux-text/10 text-lux-text' : 'bg-lux-accent/20 text-lux-accent'}`}>
+                           <div className={`p-2 rounded-xl shrink-0 ${isBigNumber ? 'bg-lux-text/10 text-lux-text' : (widget.type === 'TABLE' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-lux-accent/20 text-lux-accent')}`}>
                              {isBigNumber ? <Activity size={15} /> : (
-                               widget.subType === 'PIE' ? <PieChartIcon size={15} /> : (widget.subType === 'LINE' ? <LineChartIcon size={15} /> : <BarChart3 size={15} />)
+                               widget.type === 'TABLE' ? <Table size={15} /> : (
+                                 widget.subType === 'PIE' ? <PieChartIcon size={15} /> : (widget.subType === 'LINE' ? <LineChartIcon size={15} /> : <BarChart3 size={15} />)
+                               )
                              )}
                            </div>
                            <input 
@@ -820,8 +872,8 @@ function DashboardContent() {
                            />
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                           <div className={`hidden sm:inline-block px-2 py-0.5 rounded-full text-[7px] font-black uppercase ${isBigNumber ? 'bg-emerald-500 text-white' : 'bg-blue-500 text-white shadow-[0_2px_8px_rgba(59,130,246,0.5)]'}`}>
-                              {isBigNumber ? 'KPI' : 'Chrt'}
+                           <div className={`hidden sm:inline-block px-2 py-0.5 rounded-full text-[7px] font-black uppercase ${isBigNumber ? 'bg-emerald-500 text-white' : (widget.type === 'TABLE' ? 'bg-lux-text text-white' : 'bg-blue-500 text-white shadow-[0_2px_8px_rgba(59,130,246,0.5)]')}`}>
+                              {isBigNumber ? 'KPI' : (widget.type === 'TABLE' ? 'GRID' : 'Chrt')}
                            </div>
                            <div className="flex items-center gap-0.5 bg-black/5 p-0.5 rounded-xl border border-black/5">
                               <button onClick={() => setWidgetViewMode(prev => ({ ...prev, [widget.id]: 'PROMPT' }))} className={`px-2.5 py-1 rounded-lg text-[8px] font-black transition-all ${viewMode === 'PROMPT' ? 'bg-lux-text text-white shadow-md' : 'text-lux-muted hover:text-lux-text'}`}>PROMPT</button>
@@ -829,10 +881,12 @@ function DashboardContent() {
                            </div>
                         </div>
                       </div>
+                      
                       <div className="p-4 relative min-h-[140px] flex flex-col">
-                        {/* Conteúdo do Card (Omitido para brevidade no diff se possível, mas vou manter para garantir integridade) */}
-                        {viewMode === 'PROMPT' ? (
-                          <div className="flex-1 flex flex-col">
+                        
+                        {/* Container Simétrico Unificado para Editores (Fix para Diferença de Altura) */}
+                        <div className="flex-1 w-full h-[340px] bg-black/5 dark:bg-white/5 border border-lux-border/20 rounded-2xl overflow-hidden shadow-inner flex flex-col relative transition-all p-5">
+                          {viewMode === 'PROMPT' ? (
                             <textarea 
                               value={widget.prompt}
                               onChange={(e) => {
@@ -841,45 +895,85 @@ function DashboardContent() {
                                 next[idx].prompt = e.target.value;
                                 setPlannedWidgets(next);
                               }}
-                              className="w-full bg-transparent text-xs text-lux-text font-medium leading-relaxed resize-none outline-none flex-1 min-h-[80px] overflow-y-auto custom-scrollbar"
+                              className="w-full h-full bg-transparent text-[13px] text-lux-text font-medium leading-relaxed resize-none outline-none focus:bg-lux-accent/[0.02] transition-all overflow-y-auto custom-scrollbar"
                               placeholder="Descreva a regra de negócio..."
                             />
-                            {!isBigNumber && (
-                              <div className="mt-2 flex gap-1.5 border-t border-lux-border/5 pt-2">
-                                {['BAR', 'LINE', 'PIE'].map((type) => (
-                                  <button key={type} onClick={() => {
+                          ) : (
+                            <div className="w-full h-full bg-black relative group/terminal flex flex-col -m-5 p-5">
+                              <div className="absolute top-2 right-4 flex gap-1.5 z-10">
+                                <div className="w-1.5 h-1.5 rounded-full bg-red-500/30" />
+                                <div className="w-1.5 h-1.5 rounded-full bg-amber-500/30" />
+                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/30" />
+                              </div>
+                               <textarea 
+                                  value={(widget as any).sql !== undefined ? (widget as any).sql : extractWidgetSql(widget.id, activeTab?.content)}
+                                  onChange={(e) => {
                                     const next = [...plannedWidgets];
                                     const idx = next.findIndex(w => w.id === widget.id);
-                                    next[idx].subType = type;
+                                    (next[idx] as any).sql = e.target.value;
                                     setPlannedWidgets(next);
-                                  }} className={`px-1.5 py-0.5 rounded border text-[7px] font-black ${widget.subType === type ? 'bg-lux-accent text-black border-lux-accent' : 'border-lux-border/10 text-lux-muted'}`}>{type}</button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex-1 bg-black rounded-2xl p-4 overflow-hidden border border-white/10 shadow-inner group/terminal relative">
-                            <div className="absolute top-2 right-4 flex gap-1.5">
-                              <div className="w-1.5 h-1.5 rounded-full bg-red-500/30" />
-                              <div className="w-1.5 h-1.5 rounded-full bg-amber-500/30" />
-                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/30" />
+                                  }}
+                                  spellCheck={false}
+                                  className="flex-1 w-full bg-transparent border-none outline-none resize-none text-[12px] font-mono text-[#00FF41] custom-scrollbar whitespace-pre-wrap break-words leading-relaxed drop-shadow-[0_0_5px_rgba(0,255,65,0.4)] overflow-y-auto"
+                               />
                             </div>
-                             <textarea 
-                                value={(widget as any).sql !== undefined ? (widget as any).sql : extractWidgetSql(widget.id, activeTab?.content)}
-                                onChange={(e) => {
-                                  const next = [...plannedWidgets];
-                                  const idx = next.findIndex(w => w.id === widget.id);
-                                  (next[idx] as any).sql = e.target.value;
-                                  setPlannedWidgets(next);
-                                }}
-                                spellCheck={false}
-                                className="w-full h-full bg-transparent border-none outline-none resize-none text-[11px] font-mono text-[#00FF41] custom-scrollbar whitespace-pre-wrap break-words leading-relaxed drop-shadow-[0_0_5px_rgba(0,255,65,0.4)] mt-2 pt-1 overflow-y-auto"
-                             />
-                          </div>
-                        )}
-                        <button onClick={() => removeWidget(widget.id)} className="absolute top-2 right-2 p-1 text-red-500 opacity-0 group-hover:opacity-100 transition-all font-bold">✕</button>
+                          )}
+                        </div>
                       </div>
-                    </Reorder.Item>
+                        
+                        {/* Unified Widget Toolbar */}
+                        <div className="mt-4 pt-4 border-t border-lux-border/5 flex items-center justify-between">
+                           {!isBigNumber ? (
+                             <div className="flex gap-2">
+                                {[
+                                  { id: 'BAR', icon: <BarChart3 size={11} />, label: 'Barras' },
+                                  { id: 'LINE', icon: <LineChartIcon size={11} />, label: 'Linhas' },
+                                  { id: 'PIE', icon: <PieChartIcon size={11} />, label: 'Pizza' },
+                                  { id: 'GRID', icon: <Table size={11} />, label: 'Grade' }
+                                ].map((tool) => {
+                                  const vType = tool.id;
+                                  let isActive = false;
+                                  if (vType === 'GRID') isActive = widget.type === 'TABLE';
+                                  else isActive = widget.type === 'CHART' && widget.subType === vType;
+
+                                  return (
+                                    <button 
+                                      key={vType} 
+                                      title={tool.label}
+                                      onClick={() => {
+                                        const next = [...plannedWidgets];
+                                        const idx = next.findIndex(w => w.id === widget.id);
+                                        if (vType === 'GRID') {
+                                          next[idx].type = 'TABLE';
+                                          if ('subType' in next[idx]) delete (next[idx] as any).subType;
+                                        } else {
+                                          next[idx].type = 'CHART';
+                                          next[idx].subType = vType;
+                                        }
+                                        setPlannedWidgets(next);
+                                      }} 
+                                      className={`p-2.5 rounded-xl border flex items-center justify-center transition-all ${isActive ? 'bg-lux-accent text-black border-lux-accent shadow-lg shadow-lux-accent/10' : 'border-lux-border/10 text-lux-muted hover:border-lux-accent/30 hover:bg-lux-accent/5'}`}
+                                    >
+                                      {tool.icon}
+                                    </button>
+                                  );
+                                })}
+                             </div>
+                           ) : (
+                             <div className="bg-lux-text/5 px-3 py-1.5 rounded-xl border border-lux-border/5 text-[9px] font-black uppercase tracking-widest text-lux-text/60">KPI Metric</div>
+                           )}
+
+                           <div className="flex items-center gap-3">
+                              <button 
+                                onClick={() => removeWidget(widget.id)} 
+                                className="p-2.5 text-lux-muted hover:text-red-500 transition-all hover:bg-red-500/10 rounded-xl"
+                                title="Remover Widget"
+                              >
+                                <Trash size={14} />
+                              </button>
+                           </div>
+                        </div>
+                      </Reorder.Item>
                   );
                 })}
               </Reorder.Group>
@@ -898,6 +992,22 @@ function DashboardContent() {
               >
                  <Plus size={16} className="group-hover:rotate-90 transition-transform" />
                  <span className="text-[8px] font-black uppercase tracking-widest">Novo Gráfico</span>
+              </button>
+            </div>
+
+            <div className="mt-12 pt-12 border-t border-lux-border/10 flex flex-col items-center gap-6">
+              <div className="text-center space-y-2">
+                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-lux-muted">Finalização de Blueprint</p>
+                 <p className="text-[9px] text-lux-muted/60 italic">Clique para materializar todos os componentes acima em rastro analítico</p>
+              </div>
+              <button 
+                onClick={handleMaterialize}
+                disabled={isWorking}
+                className="w-full py-4 bg-lux-text text-lux-bg rounded-[2rem] text-[11px] font-black uppercase tracking-[0.2em] hover:bg-lux-accent hover:scale-[1.02] hover:shadow-2xl transition-all flex items-center justify-center gap-3 group relative overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+                <Zap size={16} className={isWorking ? 'animate-pulse' : ''} fill="currentColor" /> 
+                {isWorking ? 'Processando Inteligência...' : 'Materializar Dashboard'}
               </button>
             </div>
           </div>
@@ -1003,12 +1113,12 @@ function DashboardContent() {
                   <div className="flex-1 h-7 bg-white/40 dark:bg-white/5 rounded-xl border border-lux-border/10 flex items-center px-4 justify-between group overflow-hidden">
                      <div className="flex items-center gap-2 opacity-60 group-hover:opacity-100 transition-opacity overflow-hidden">
                        <span className="text-[9px] text-lux-muted font-bold tracking-widest uppercase shrink-0">secure.agent-bi.studio /</span> 
-                       <span className={`text-[9px] font-black uppercase truncate ${activeTab?.isBlueprint ? 'text-lux-accent drop-shadow-[0_0_10px_rgba(212,175,55,0.6)] animate-pulse' : 'text-lux-accent'}`}>{activeTab?.name || 'pipeline-active'}</span>
+                       <span className={`text-[9px] font-black uppercase truncate ${activeTab?.isBlueprint ? 'text-blue-600 drop-shadow-[0_0_10px_rgba(37,99,235,0.6)] animate-pulse' : 'text-lux-accent'}`}>{activeTab?.name || 'pipeline-active'}</span>
                      </div>
                      {activeTab?.isBlueprint ? (
-                       <div className="flex items-center gap-2 bg-lux-accent/20 border border-lux-accent/30 px-3 py-1 rounded-lg">
-                          <Star size={10} className="text-lux-accent fill-current drop-shadow-[0_0_8px_rgba(212,175,55,0.8)]" />
-                          <span className="text-[8px] font-black text-lux-accent uppercase tracking-tighter">Certified Blueprint</span>
+                       <div className="flex items-center gap-2 bg-blue-600 border border-blue-400 px-3 py-1 rounded-lg shadow-[0_0_15px_rgba(37,99,235,0.4)]">
+                          <Star size={10} className="text-white fill-current animate-pulse" />
+                          <span className="text-[8px] font-black text-white uppercase tracking-tighter">Certified Blueprint</span>
                        </div>
                      ) : (
                        <div className="flex items-center gap-2 px-3 py-1 bg-amber-500/10 rounded-lg">
@@ -1029,9 +1139,9 @@ function DashboardContent() {
 
                         <button 
                           onClick={() => handlePromote(activeTab.id)}
-                          className="h-8 px-4 bg-lux-accent text-black rounded-xl text-[9px] font-black uppercase tracking-widest hover:scale-105 hover:shadow-lg hover:shadow-lux-accent/20 transition-all flex items-center gap-2"
+                          className="h-8 px-4 bg-blue-600 border border-blue-400 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-blue-700 hover:scale-105 hover:shadow-lg hover:shadow-blue-500/30 transition-all flex items-center gap-2"
                         >
-                          <Zap size={12} fill="currentColor" /> Elevate to Blueprint
+                          <Star size={12} fill="currentColor" /> Elevate to Blueprint
                         </button>
                     </div>
                   )}

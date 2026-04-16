@@ -79,7 +79,23 @@ class ReportPromptService:
             t_id = uuid.uuid4()
             
         start_time = time.time()
-        tracer = TraceService(trace_id=t_id, job_type="DASHBOARD_MATERIALIZE")
+        
+        # Determina o projeto para contexto de rastreamento
+        p_id = None
+        if dashboard_id:
+            try:
+                dash = Dashboard.objects.get(id=dashboard_id)
+                p_id = dash.project_id
+            except: pass
+        elif project_id and project_id != "PRJ-TEMP":
+            p_id = project_id
+
+        tracer = TraceService(
+            trace_id=t_id, 
+            job_type="DASHBOARD_MATERIALIZE",
+            user_id=user.id if user else None,
+            project_id=p_id
+        )
         if dashboard_id:
             dashboard = Dashboard.objects.get(id=dashboard_id)
             project = dashboard.project
@@ -148,7 +164,29 @@ class ReportPromptService:
             w_id = widget.get("id") or f"widget_{widget.get('type', 'generic').lower()}_{i}"
             prompt = widget.get("prompt")
             
+            # --- MÁQUINA DE OVERRIDE (GOVERNANÇA) ---
+            override_sql = widget.get("override_sql")
+            view_mode = widget.get("view_mode", "PROMPT")
+            
             try:
+                # Caso o usuário tenha ajustado o SQL manualmente, honramos o ajuste e pulamos a IA
+                if view_mode == "SQL" and override_sql and override_sql.strip():
+                    logger.info(f"[ReportPrompt] 🛠️ [Override] Usando SQL manual para: {w_id}")
+                    visual_type = widget.get("subType") if widget.get("type", "") == "CHART" else widget.get("type", "BIGNUMBER")
+                    return {
+                        "widget_id": w_id,
+                        "title": widget.get("title", w_id),
+                        "script_type": "SQL",
+                        "visual_type": visual_type,
+                        "script_content": override_sql,
+                        "thought": "Executado via SQL manual (Override de Governança)",
+                        "business_rationale": "Ajuste manual realizado pelo usuário no dashboard.",
+                        "prompt": prompt,
+                        "success": True,
+                        "input_tokens": 0,
+                        "output_tokens": 0
+                    }
+
                 logger.info(f"[ReportPrompt] 🤖 [Thread] Iniciando geração para: {w_id}")
                 
                 # Chamada de IA Paralela (SEM TRACER e com Prompt pré-carregado)
@@ -161,6 +199,11 @@ class ReportPromptService:
                 )
                 
                 visual_type = widget.get("subType") if widget.get("type", "") == "CHART" else widget.get("type", "BIGNUMBER")
+                
+                # Extraindo tokens da resposta do especialista
+                in_tokens = source.get("input_tokens", 0)
+                out_tokens = source.get("output_tokens", 0)
+
                 return {
                     "widget_id": w_id,
                     "title": widget.get("title", w_id),
@@ -170,7 +213,9 @@ class ReportPromptService:
                     "thought": source.get("description"),
                     "business_rationale": widget.get("business_rationale", ""),
                     "prompt": prompt,
-                    "success": not source.get("error", False)
+                    "success": not source.get("error", False),
+                    "input_tokens": in_tokens,
+                    "output_tokens": out_tokens
                 }
             except Exception as e:
                 import traceback
@@ -179,25 +224,48 @@ class ReportPromptService:
                 return {"widget_id": w_id, "success": False, "error": str(e), "prompt": prompt}
 
         # Execução Paralela da Rede (IA)
-        with ThreadPoolExecutor(max_workers=len(widget_prompts)) as executor:
+        with ThreadPoolExecutor(max_workers=min(len(widget_prompts), 10)) as executor:
             batch_results = list(executor.map(process_widget, enumerate(widget_prompts)))
             
-        results = batch_results # Mantemos todos agora (incluindo falhas)
+        results = []
+        for r in batch_results:
+            # Sanitização de campos para garantir serialização JSON sem erros de buffer
+            sanitized = {
+                "widget_id": str(r.get("widget_id", "")),
+                "title": str(r.get("title", "")),
+                "script_type": str(r.get("script_type", "SQL")),
+                "visual_type": str(r.get("visual_type", "BIGNUMBER")),
+                "script_content": str(r.get("script_content", "")).strip(),
+                "thought": str(r.get("thought", "")),
+                "business_rationale": str(r.get("business_rationale", "")),
+                "prompt": str(r.get("prompt", "")),
+                "success": bool(r.get("success")),
+                "input_tokens": int(r.get("input_tokens", 0)),
+                "output_tokens": int(r.get("output_tokens", 0)),
+                "error": str(r.get("error", "")) if not r.get("success") else None
+            }
+            results.append(sanitized)
+
         success_count = len([r for r in results if r.get("success")])
-        logger.info("[ReportPrompt] ✅ %s de %s widgets concluídos (incluindo falhas tratadas).", success_count, len(widget_prompts))
+        logger.info("[ReportPrompt] ✅ %s de %s widgets concluídos (incluindo falhas tratadas). Tempo IA: %.2fs", success_count, len(widget_prompts), time.time() - start_time)
 
         # Sincronização Final: Salvamento no Banco (Atômico para performance e segurança)
         from django.db import transaction
+        
+        # Calculamos o número da próxima versão uma única vez para consistência atômica
+        next_version_v = dashboard.version_count + 1
+        logger.info(f"[ReportPromptService] 📦 Preparando materialização da Versão V{next_version_v}")
+
         try:
             with transaction.atomic():
                 for result in results:
                     w_id = result["widget_id"]
-                    # Só persistimos o ScriptBinding se houve sucesso na geração do SQL
+                    # Só persistimos o ScriptBinding se houve sucesso na geração do SQL ou se for override manual
                     if result.get("success"):
                         WidgetScriptBinding.objects.update_or_create(
                             dashboard=dashboard,
                             widget_id=w_id,
-                            version=dashboard.version_count + 1,
+                            version=next_version_v,
                             defaults={
                                 "prompt": result["prompt"],
                                 "script_type": "SQL",
@@ -207,24 +275,45 @@ class ReportPromptService:
                     else:
                         logger.warning(f"[ReportPromptService] Widget {w_id} falhou na LLM e não gerou script.")
         except Exception as e:
-            logger.error(f"[ReportPromptService] Falha crítica na transação de salvamento: {e}")
+            logger.error(f"[ReportPromptService] Falha crítica na transação de salvamento de bindings: {e}")
+            raise  # Re-raise para ser capturado pela View
 
-        # Geração de HTML DETERMINÍSTICO (Sem Supervisor)
+        # Geração de HTML DETERMINÍSTICO (Sem Supervisor para o Layout, mas com Supervisor para a Síntese)
         tracer.start_step("UI Designer: Layout Determinístico")
         logger.info(f"[ReportPrompt] Renderizando dashboard via template local...")
         
-        # Extraindo o Resumo da Ingestão e Insights Estratégicos
-        diagnostico_consolidado = ""
+        # --- ELEVAÇÃO ANALÍTICA: Geração de Síntese Executiva via IA ---
+        # Em vez de listar metadados técnicos, pedimos um Parecer Conclusivo ao Supervisor
+        datasets_metadata = []
         for ds in project.datasets.filter(is_deleted=False):
-            diagnostico_consolidado += f"\n- DATASET: {ds.name}\n"
-            if getattr(ds, 'description', None):
-                diagnostico_consolidado += f"  RESUMO ORIGINAL: {ds.description}\n"
-            if getattr(ds, 'data_profile_json', None):
-                insights = ds.data_profile_json.get("ai_strategic_insights", [])
-                if insights:
-                    diagnostico_consolidado += f"  INSIGHTS: {', '.join(insights)}\n"
+             datasets_metadata.append({
+                 "name": ds.name,
+                 "description": ds.description,
+                 "insights": ds.data_profile_json.get("ai_strategic_insights", []) if ds.data_profile_json else []
+             })
+        
+        render_start = time.time()
+        # Chama o Supervisor para gerar o Parecer Estratégico Real (Synthesis)
+        try:
+            diagnostico_consolidado = self.supervisor.generate_executive_synthesis(
+                datasets_metadata=datasets_metadata,
+                trace=tracer
+            )
+        except Exception as e:
+            logger.warning(f"[ReportPromptService] Falha ao gerar diagnóstico estratégico: {e}")
+            diagnostico_consolidado = "Diagnóstico indisponível para esta versão."
+
+        diagnostico_consolidated_safe = str(diagnostico_consolidado)
         
         from apps.dashboards.models import DashboardStatus
+        # Registro de consumo real de tokens (Governança)
+        total_in = sum(r.get("input_tokens", 0) for r in (results or []))
+        total_out = sum(r.get("output_tokens", 0) for r in (results or []))
+        
+        if (total_in + total_out) > 0:
+            logger.info(f"[ReportPromptService] Debitando {total_in + total_out} tokens reais para {user.email if user else 'desconhecido'}")
+            self.quota_service.log_token_usage(user, total_in, total_out)
+        
         render_start = time.time()
         html = self.renderer.render_premium_deterministic_dashboard(
             dashboard=dashboard, 
@@ -239,14 +328,13 @@ class ReportPromptService:
 
         try:
             pers_start = time.time()
-            new_version_number = dashboard.version_count + 1
             version = Version.objects.create(
                 dashboard=dashboard,
-                version_number=new_version_number,
+                version_number=next_version_v,
                 state=VersionState.DRAFT,
                 html_content=html,
                 sql_queries=[r.get("script_content") for r in results if r.get("script_content")],
-                ai_insights=diagnostico_consolidado,
+                ai_insights=diagnostico_consolidated_safe,
                 full_prompt=f"Materialização de {len(results)} widgets via ReportPromptService.",
                 created_by=user
             )
@@ -257,7 +345,7 @@ class ReportPromptService:
             dashboard.config["last_materialized_at"] = str(timezone.now())
             dashboard.save()
             
-            logger.info(f"[ReportPromptService] 💾 Dashboard salvo (Versão V{new_version_number}) em {time.time() - pers_start:.2f}s.")
+            logger.info(f"[ReportPromptService] 💾 Dashboard salvo (Versão V{next_version_v}) em {time.time() - pers_start:.2f}s.")
             total_time = time.time() - start_time
             logger.info(f"[ReportPromptService] ✔️ Materialização total finalizada em {total_time:.2f}s.")
 
@@ -276,6 +364,15 @@ class ReportPromptService:
             total_time = time.time() - start_time
             logger.info(f"[ReportPromptService] ✔️ Materialização total finalizada em {total_time:.2f}s. Enviando {len(lean_results)} resultados enxutos.")
 
+            # Registrar consumo de tokens no QuotaService
+            try:
+                from apps.users.services.quota_service import QuotaService
+                total_in = sum(r.get("input_tokens", 0) for r in (results or []))
+                total_out = sum(r.get("output_tokens", 0) for r in (results or []))
+                QuotaService().log_token_usage(user, total_in, total_out)
+            except Exception as q_err:
+                logger.warning(f"[ReportPromptService] Falha ao registrar tokens: {q_err}")
+
             return {
                 "status": "success", 
                 "dashboard_id": str(dashboard.id),
@@ -286,6 +383,14 @@ class ReportPromptService:
                 "total_time": total_time
             }
         except Exception as e:
+            # Em caso de erro, ainda tentamos logar o que consumiu até aqui
+            try:
+                from apps.users.services.quota_service import QuotaService
+                total_in = sum(r.get("input_tokens", 0) for r in (results or []))
+                total_out = sum(r.get("output_tokens", 0) for r in (results or []))
+                QuotaService().log_token_usage(user, total_in, total_out)
+            except: pass
+
             logger.error(f"[ReportPromptService] ❌ Erro ao salvar versão no banco: {e}")
             
             # Mesmo em erro de persistência, enviamos o payload enxuto

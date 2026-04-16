@@ -46,7 +46,12 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
     from apps.audit.services.trace_service import TraceService
     import uuid
     t_id = uuid.UUID(trace_id) if trace_id else dataset.id
-    trace = TraceService(trace_id=t_id, job_type="INGESTION")
+    trace = TraceService(
+        trace_id=t_id, 
+        job_type="INGESTION",
+        user_id=dataset.created_by_id,
+        project_id=dataset.project_id
+    )
     
     try:
         from apps.datasets.services.parquet_service import ParquetService
@@ -72,7 +77,7 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
             
         trace.end_step("Carregando Dados Brutos", message=f"Formato: {ext.upper()}")
 
-        dataset.processing_step = "Limpando Datas e Números (Vetorizado)..."
+        dataset.processing_step = "Normalizando Formatos e Enriquecendo Tipos de Dados..."
         dataset.save(update_fields=["processing_step"])
         trace.start_step("Conversão para Parquet")
         logger.info("[DatasetTask] Processando %s", ext.upper())
@@ -263,7 +268,8 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
                 columns, 
                 sample, 
                 domain_name=domain_name,
-                specialist_context=specialist_context
+                specialist_context=specialist_context,
+                trace=trace
             )
             
             # 1. Atualiza Descrição do Dataset (Resumo Executivo)
@@ -393,7 +399,30 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
         )
         if 'trace' in locals():
             trace.end_step("Erro de Processamento", status="ERROR", message=str(exc))
+        
+        # Registrar consumo parcial em caso de erro
+        _finalize_quota_usage(dataset, t_id)
+        
         raise self.retry(exc=exc, countdown=60 * (self.request.retries + 1))
+    finally:
+        # Registrar consumo final (se bem sucedido ou erro fatal)
+        if 'dataset' in locals() and 't_id' in locals():
+            _finalize_quota_usage(dataset, t_id)
+
+def _finalize_quota_usage(dataset, trace_id):
+    """Agrega e persiste o consumo de tokens da task no QuotaService."""
+    try:
+        from apps.audit.models import ExecutionTrace
+        from apps.users.services.quota_service import QuotaService
+        
+        traces = ExecutionTrace.objects.filter(trace_id=trace_id)
+        total_in = sum(t.input_tokens for t in traces)
+        total_out = sum(t.output_tokens for t in traces)
+        
+        if total_in > 0 or total_out > 0:
+            QuotaService().log_token_usage(dataset.created_by, total_in, total_out)
+    except Exception as e:
+        logger.warning(f"[DatasetTask] Falha ao finalizar quota: {e}")
 
 
 def _load_raw_bytes(dataset, use_aws_data: bool, s3_service=None) -> bytes:

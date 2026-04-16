@@ -85,7 +85,7 @@ export default function ProjectsList() {
           <input 
             type="text" 
             placeholder="Buscar projetos..." 
-            className="glass-input pl-12 h-12 w-full text-lg shadow-sm"
+            className="glass-input !pl-16 h-12 w-full text-lg shadow-sm"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -96,7 +96,7 @@ export default function ProjectsList() {
           <select
             value={selectedDomain}
             onChange={(e) => setSelectedDomain(e.target.value)}
-            className="glass-input pl-12 h-12 w-full text-md shadow-sm appearance-none cursor-pointer"
+            className="glass-input !pl-16 h-12 w-full text-md shadow-sm appearance-none cursor-pointer"
           >
             <option value="all">Todos os Domínios</option>
             {domains.map(d => (
@@ -155,13 +155,15 @@ export default function ProjectsList() {
                             <FolderKanban size={24} />
                           </div>
                           <div className="flex flex-col items-end gap-2">
-                            <span className={`text-xs font-medium px-3 py-1.5 rounded-full border shadow-sm ${
-                              isBlueprint 
-                                ? 'border-green-200 bg-green-50 text-green-700' 
-                                : 'border-[#CBB26A]/30 bg-[#CBB26A]/5 text-[#CBB26A]'
-                            }`}>
-                              {isBlueprint ? "Ativo" : "Rascunho"}
-                            </span>
+                            {isBlueprint ? (
+                              <span className="text-[10px] font-black px-3 py-1.5 rounded-full bg-blue-600 text-white border border-blue-400 shadow-[0_0_12px_rgba(37,99,235,0.3)] uppercase tracking-widest animate-in fade-in zoom-in">
+                                Certified Blueprint
+                              </span>
+                            ) : (
+                              <span className="text-xs font-medium px-3 py-1.5 rounded-full border border-[#CBB26A]/30 bg-[#CBB26A]/5 text-[#CBB26A]">
+                                Rascunho
+                              </span>
+                            )}
                           </div>
                         </div>
                         

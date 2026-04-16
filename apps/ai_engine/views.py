@@ -1,7 +1,8 @@
 import logging
+import time
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.http import FileResponse
@@ -126,25 +127,35 @@ class ReportPromptPlanAPIView(APIView):
 
 class ReportPromptMaterializeAPIView(APIView):
 
+    permission_classes = [IsAuthenticated]
+
     @extend_schema(
         tags=["ai"],
         summary="Materializar widgets do dashboard (SQL/Python)",
         request=ReportPromptMaterializeSerializer,
     )
     def post(self, request):
+        trace_id = None
         print(f"[DEBUG] Materialize Request Data: {request.data}")
-        serializer = ReportPromptMaterializeSerializer(data=request.data)
-        if not serializer.is_valid():
-            print(f"[ERROR] Serialization errors: {serializer.errors}")
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        dashboard_id = serializer.validated_data.get("dashboard_id")
-        project_id = serializer.validated_data.get("project_id")
-        widget_prompts = serializer.validated_data["widget_prompts"]
-        trace_id = serializer.validated_data.get("trace_id")
-
-        service = ReportPromptService()
         try:
+            serializer = ReportPromptMaterializeSerializer(data=request.data)
+            if not serializer.is_valid():
+                print(f"[ERROR] Serialization errors: {serializer.errors}")
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+            dashboard_id = serializer.validated_data.get("dashboard_id")
+            project_id = serializer.validated_data.get("project_id")
+            widget_prompts = serializer.validated_data["widget_prompts"]
+            trace_id = serializer.validated_data.get("trace_id")
+            # Validação de Quota de Tokens (Bloqueio de Governança)
+            from apps.users.services.quota_service import QuotaService
+            if not QuotaService().check_token_quota(request.user):
+                return Response({
+                    "error": "LIMITE_EXCEDIDO", 
+                    "message": "Você atingiu seu limite mensal de tokens de IA. Entre em contato com o administrador."
+                }, status=status.HTTP_403_FORBIDDEN)
+
+            service = ReportPromptService()
             result = service.materialize_dashboard(
                 dashboard_id=dashboard_id, 
                 widget_prompts=widget_prompts, 
@@ -174,16 +185,18 @@ class ReportPromptMaterializeAPIView(APIView):
         except Exception as exc:
             import traceback
             error_details = traceback.format_exc()
-            logger.error(f"[ReportPromptView] Falha crítica na materialização: {exc}\n{error_details}")
+            logger.error(f"[ReportPromptView] !!! FALHA CRÍTICA !!!: {exc}\n{error_details}")
             
-            # Retorno JSON garantido com detalhamento técnico para o desenvolvedor
+            # Garantia absoluta de retorno JSON para evitar que o Next.js receba HTML 500 default do Django
             return Response(
                 {
-                    "detail": f"Erro interno na materialização: {str(exc)}", 
+                    "status": "error",
+                    "detail": f"Falha na materialização: {str(exc)}", 
                     "trace_id": trace_id,
-                    "debug_info": error_details if settings.DEBUG else None
+                    "error_type": exc.__class__.__name__
                 }, 
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content_type="application/json"
             )
 
 class StreamlitExportAPIView(APIView):

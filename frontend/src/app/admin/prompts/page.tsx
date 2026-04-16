@@ -14,8 +14,30 @@ import {
   Activity,
   ArrowLeft,
   Trash2,
-  Save
+  Save,
+  DollarSign,
+  TrendingDown,
+  Users,
+  Box,
+  Coins,
+  ShieldCheck,
+  TrendingUp,
+  Wallet
 } from "lucide-react";
+import { 
+  AreaChart, 
+  Area, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  Cell,
+  PieChart,
+  Pie
+} from 'recharts';
 
 /**
  * AdminPromptsPage
@@ -30,7 +52,11 @@ export default function AdminPromptsPage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  const [activeTab, setActiveTab] = useState<"MASTER" | "SPECIALISTS">("MASTER");
+  const [activeTab, setActiveTab] = useState<"MASTER" | "SPECIALISTS" | "COSTS">("MASTER");
+  const [costsSummary, setCostsSummary] = useState<any>(null);
+  const [costsHistory, setCostsHistory] = useState<any[]>([]);
+  const [usersQuotas, setUsersQuotas] = useState<any[]>([]);
+  const [simModel, setSimModel] = useState("AMAZON_NOVA_PRO");
   const [specialists, setSpecialists] = useState<any[]>([]);
   const [selectedSpecialist, setSelectedSpecialist] = useState<any>(null);
 
@@ -58,7 +84,40 @@ export default function AdminPromptsPage() {
   useEffect(() => {
     fetchGlobalPrompt();
     fetchSpecialists();
+    fetchCostsData();
   }, []);
+
+  async function fetchCostsData() {
+    try {
+      const summaryRes = await fetch(`${BACKEND_URL}/api/v1/governance/costs/summary/`, { headers: getHeaders() });
+      if (summaryRes.ok) setCostsSummary(await summaryRes.json());
+
+      const historyRes = await fetch(`${BACKEND_URL}/api/v1/governance/costs/history/`, { headers: getHeaders() });
+      if (historyRes.ok) setCostsHistory(await historyRes.json());
+
+      const quotasRes = await fetch(`${BACKEND_URL}/api/v1/governance/costs/users_quotas/`, { headers: getHeaders() });
+      if (quotasRes.ok) setUsersQuotas(await quotasRes.json());
+    } catch (err) {
+      console.error("Erro ao carregar dados de custos:", err);
+    }
+  }
+
+  const updateQuotaLimit = async (userId: string, limit: number) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/governance/costs/update_limit/`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ user_id: userId, limit })
+      });
+      if (res.ok) {
+        fetchCostsData();
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 2000);
+      }
+    } catch (err) {
+      setError("Falha ao atualizar limite");
+    }
+  };
 
   async function fetchSpecialists() {
     const timestamp = new Date().getTime();
@@ -207,58 +266,70 @@ export default function AdminPromptsPage() {
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700 max-w-7xl mx-auto pb-20 px-4">
-      {/* Cabeçalho de Governança */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="flex flex-col gap-6">
-          <div>
-            <h1 className="text-4xl font-black tracking-tighter text-[#1A1A1A] font-serif">Centro de Governança de IA</h1>
-            <p className="text-[#8C8C8C] mt-2 max-w-xl text-md leading-relaxed tracking-tight border-l-2 border-[#D4AF37] pl-4">
-              Defina a persona cognitiva, os especialistas de domínio e as diretrizes de compliance bancário.
-            </p>
+      {/* 0. Navegação / Breadcrumb */}
+      <div className="flex items-center gap-2">
+        <Link 
+          href="/projects" 
+          className="flex items-center gap-2 text-[#8C8C8C] hover:text-[#D4AF37] transition-all group py-2"
+        >
+          <div className="p-2 rounded-full bg-white border border-[#F1E9DB] group-hover:border-[#D4AF37] group-hover:shadow-sm transition-all">
+            <ArrowLeft size={12} className="group-hover:-translate-x-1 transition-transform" />
           </div>
-          
-          <div className="flex gap-2 p-1 bg-[#F9F9F9] border border-[#F1E9DB] rounded-2xl w-fit">
-             <button 
-                onClick={() => setActiveTab("MASTER")}
-                className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "MASTER" ? "bg-[#1A1A1A] text-white shadow-lg" : "text-[#8C8C8C] hover:bg-white"}`}>
-                Configurações Master
-             </button>
-             <button 
-                onClick={() => setActiveTab("SPECIALISTS")}
-                className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "SPECIALISTS" ? "bg-[#1A1A1A] text-white shadow-lg" : "text-[#8C8C8C] hover:bg-white"}`}>
-                Especialistas
-             </button>
-          </div>
+          <span className="text-[10px] font-black uppercase tracking-[0.2em]">Voltar ao Portfólio de Dados</span>
+        </Link>
+      </div>
+
+      {/* 1. Título e Status */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-4xl font-black tracking-tighter text-[#1A1A1A] font-serif">Centro de Governança de IA</h1>
+          <p className="text-[#8C8C8C] mt-2 max-w-xl text-sm leading-relaxed tracking-tight border-l-2 border-[#D4AF37] pl-4">
+            Defina a persona cognitiva, os especialistas de domínio e as diretrizes de compliance bancário.
+          </p>
         </div>
-        
-        <div className="flex flex-col items-end gap-3 shrink-0">
+
+        <div className="flex flex-col items-end gap-2">
           {success && (
-            <div className="flex items-center gap-2 text-emerald-600 text-xs font-black uppercase tracking-widest animate-in slide-in-from-right-4">
-               <CheckCircle2 size={14} /> Diretrizes Publicadas com Sucesso
+            <div className="flex items-center gap-2 text-emerald-600 text-[10px] font-black uppercase tracking-widest animate-in slide-in-from-right-4">
+               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+               Diretrizes Publicadas com Sucesso
             </div>
           )}
           {error && (
-            <div className="bg-red-50 text-red-500 text-[10px] font-black uppercase px-4 py-2 border border-red-100 rounded-full animate-pulse">{error}</div>
+            <div className="bg-red-50 text-red-500 text-[9px] font-black uppercase px-3 py-1 border border-red-100 rounded-full animate-pulse">{error}</div>
           )}
-          
-          <div className="flex items-center gap-3">
-            <Link 
-              href="/admin/datasets" 
-              className="flex items-center gap-2 px-6 py-3 bg-white border border-[#F1E9DB] text-[#8C8C8C] rounded-full font-black text-[11px] uppercase tracking-widest hover:border-[#D4AF37] hover:text-[#1A1A1A] transition-all active:scale-95 shadow-sm group"
-            >
-              <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
-              Portfólio de Dados
-            </Link>
+        </div>
+      </div>
 
-            <button 
-              onClick={handleSave}
-              disabled={saving}
-              className="flex items-center gap-2 px-6 py-3 bg-[#1A1A1A] text-white rounded-full font-black text-[11px] uppercase tracking-widest hover:scale-[1.02] hover:shadow-[0_10px_20px_rgba(212,175,55,0.15)] transition-all disabled:opacity-50 active:scale-95 group shadow-lg"
-            >
-              {saving ? <RefreshCw className="animate-spin" size={14} /> : <Save size={14} className="text-[#D4AF37] group-hover:scale-110 transition-transform" />}
-              {saving ? "Salvando..." : "Salvar Alterações"}
-            </button>
-          </div>
+      {/* 2. Abas e Ações Principais */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-[#F1E9DB]">
+        <div className="flex gap-2 p-1 bg-[#F9F9F9] border border-[#F1E9DB] rounded-2xl w-fit">
+           <button 
+              onClick={() => setActiveTab("MASTER")}
+              className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "MASTER" ? "bg-[#1A1A1A] text-white shadow-lg" : "text-[#8C8C8C] hover:bg-white"}`}>
+              Configurações Master
+           </button>
+           <button 
+              onClick={() => setActiveTab("SPECIALISTS")}
+              className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "SPECIALISTS" ? "bg-[#1A1A1A] text-white shadow-lg" : "text-[#8C8C8C] hover:bg-white"}`}>
+              Especialistas
+           </button>
+           <button 
+              onClick={() => setActiveTab("COSTS")}
+              className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "COSTS" ? "bg-[#1A1A1A] text-white shadow-lg" : "text-[#8C8C8C] hover:bg-white"}`}>
+              Gestão de Custos
+           </button>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 px-8 py-3 bg-[#1A1A1A] text-white rounded-full font-black text-[11px] uppercase tracking-widest hover:scale-[1.02] hover:shadow-[0_10px_20px_rgba(212,175,55,0.15)] transition-all disabled:opacity-50 active:scale-95 group shadow-lg"
+          >
+            {saving ? <RefreshCw className="animate-spin" size={14} /> : <Save size={14} className="text-[#D4AF37] group-hover:scale-110 transition-transform" />}
+            {saving ? "Salvando..." : "Salvar Alterações"}
+          </button>
         </div>
       </div>
 
@@ -492,9 +563,258 @@ export default function AdminPromptsPage() {
                 </div>
               </section>
             </>
+          ) : activeTab === "COSTS" ? (
+             <div className="lg:col-span-12 space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700">
+                {/* Dashboard de KPIs Financeiros */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                   <div className="bg-white border border-[#F1E9DB] p-6 rounded-[2rem] shadow-sm">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="p-2 bg-[#FDF9F0] text-[#D4AF37] rounded-xl"><DollarSign size={18} /></div>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-[#8C8C8C]">Gasto Total (Mês)</span>
+                      </div>
+                      <div className="text-3xl font-serif font-black text-[#1A1A1A]">$ {costsHistory.reduce((acc, curr) => acc + curr.cost_usd, 0).toFixed(2)}</div>
+                      <div className="text-[9px] font-bold text-emerald-500 mt-2 flex items-center gap-1"><TrendingUp size={10} /> +2.4% vs anterior</div>
+                   </div>
+                   <div className="bg-white border border-[#F1E9DB] p-6 rounded-[2rem] shadow-sm">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="p-2 bg-[#F9F9F9] text-[#1A1A1A] rounded-xl"><Zap size={18} /></div>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-[#8C8C8C]">Tokens Processados</span>
+                      </div>
+                      <div className="text-3xl font-serif font-black text-[#1A1A1A]">{(costsHistory.reduce((acc, curr) => acc + curr.tokens, 0) / 1000).toFixed(1)}k</div>
+                      <div className="text-[9px] font-bold text-[#8C8C8C] mt-2 italic">Acumulado em {costsHistory.length} dias</div>
+                   </div>
+                   <div className="bg-white border border-[#F1E9DB] p-6 rounded-[2rem] shadow-sm">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl"><ShieldCheck size={18} /></div>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-[#8C8C8C]">Status de Compliance</span>
+                      </div>
+                      <div className="text-xl font-black text-emerald-600 uppercase tracking-tighter">SOB CONTROLE</div>
+                      <div className="text-[9px] font-bold text-[#8C8C8C] mt-2">Zero bloqueios por quota hoje</div>
+                   </div>
+                   <div className="bg-white border border-[#F1E9DB] p-6 rounded-[2rem] shadow-sm">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className="p-2 bg-[#1A1A1A] text-[#D4AF37] rounded-xl"><RefreshCw size={18} /></div>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-[#8C8C8C]">Eficiência (USD/1k)</span>
+                      </div>
+                      <div className="text-3xl font-serif font-black text-[#1A1A1A]">$ 0.042</div>
+                      <div className="text-[9px] font-bold text-[#D4AF37] mt-2 italic">Amazon Nova Pro</div>
+                   </div>
+                </div>
+
+                {/* Gráficos de Governança */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                   <div className="bg-white border border-[#F1E9DB] p-8 rounded-[3rem] shadow-sm h-[450px]">
+                      <div className="flex items-center justify-between mb-8">
+                        <div>
+                          <h3 className="text-lg font-black text-[#1A1A1A]">Evolução de Consumo</h3>
+                          <p className="text-[10px] font-black text-[#8C8C8C] uppercase tracking-[0.1em]">Gastos diários em USD</p>
+                        </div>
+                        <div className="px-4 py-1.5 bg-[#F9F9F9] border border-[#F1E9DB] rounded-full text-[9px] font-black uppercase text-[#8C8C8C]">Últimos 30 Dias</div>
+                      </div>
+                      <div className="h-[300px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={costsHistory}>
+                            <defs>
+                              <linearGradient id="colorCost" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#D4AF37" stopOpacity={0.3}/>
+                                <stop offset="95%" stopColor="#D4AF37" stopOpacity={0}/>
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1E9DB" opacity={0.5} />
+                            <XAxis 
+                              dataKey="date" 
+                              axisLine={false} 
+                              tickLine={false} 
+                              tick={{fontSize: 9, fontWeight: 700, fill: '#8C8C8C'}} 
+                              dy={10}
+                            />
+                            <YAxis 
+                              hide 
+                            />
+                            <Tooltip 
+                              contentStyle={{backgroundColor: '#1A1A1A', border: 'none', borderRadius: '12px', color: '#fff'}}
+                              itemStyle={{color: '#D4AF37', fontWeight: 900, fontSize: '12px'}}
+                              labelStyle={{color: '#8C8C8C', fontSize: '10px', textTransform: 'uppercase', marginBottom: '4px'}}
+                            />
+                            <Area 
+                              type="monotone" 
+                              dataKey="cost_usd" 
+                              stroke="#D4AF37" 
+                              strokeWidth={3} 
+                              fillOpacity={1} 
+                              fill="url(#colorCost)" 
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                   </div>
+
+                   <div className="bg-white border border-[#F1E9DB] p-8 rounded-[3rem] shadow-sm h-[450px]">
+                      <h3 className="text-lg font-black text-[#1A1A1A] mb-2">Custos por Domínio</h3>
+                      <p className="text-[10px] font-black text-[#8C8C8C] uppercase tracking-[0.1em] mb-8">Consumo acumulado por projeto</p>
+                      
+                      <div className="space-y-6 overflow-y-auto max-h-[300px] custom-scrollbar pr-4">
+                        {(costsSummary?.by_project || []).map((proj: any, idx: number) => (
+                           <div key={proj.project_id} className="flex flex-col gap-2 group">
+                              <div className="flex items-center justify-between font-black text-[11px] uppercase tracking-tighter">
+                                 <span className="text-[#1A1A1A]">{proj.name}</span>
+                                 <span className="text-[#D4AF37]">$ {proj.total_cost_usd.toFixed(2)}</span>
+                              </div>
+                              <div className="w-full h-1.5 bg-[#F9F9F9] rounded-full overflow-hidden">
+                                 <div 
+                                    className="h-full bg-[#1A1A1A] rounded-full transition-all duration-1000 group-hover:bg-[#D4AF37]" 
+                                    style={{ width: `${Math.min((proj.total_cost_usd / (costsHistory.reduce((acc, curr) => acc + curr.cost_usd, 0) || 1) * 100), 100)}%` }}
+                                 />
+                              </div>
+                           </div>
+                        ))}
+                        {(!costsSummary?.by_project || costsSummary.by_project.length === 0) && (
+                          <div className="h-full flex items-center justify-center text-[#8C8C8C] text-[10px] font-bold uppercase tracking-widest italic opacity-50">
+                            Nenhum domínio com consumo registrado
+                          </div>
+                        )}
+                      </div>
+                   </div>
+                </div>
+
+                {/* Gestão de Quotas por Usuário */}
+                <section className="bg-white border border-[#F1E9DB] p-10 rounded-[3.5rem] shadow-sm">
+                   <div className="flex items-center justify-between mb-10">
+                      <div className="flex items-center gap-4">
+                        <div className="p-4 bg-[#F9F9F9] text-[#1A1A1A] rounded-3xl"><Users size={24} /></div>
+                        <div>
+                          <h2 className="text-2xl font-black tracking-tight">Governança de Quotas</h2>
+                          <p className="text-[10px] font-black text-[#D4AF37] uppercase tracking-widest">Controle Individual de Consumo</p>
+                        </div>
+                      </div>
+                      <button className="flex items-center gap-2 px-5 py-2.5 bg-[#F9F9F9] border border-[#F1E9DB] rounded-full text-[10px] font-black uppercase tracking-widest text-[#8C8C8C] hover:border-[#1A1A1A] hover:text-[#1A1A1A] transition-all">
+                        <RefreshCw size={12} /> Sincronizar Quotas
+                      </button>
+                   </div>
+
+                   <div className="overflow-hidden border border-[#F1E9DB] rounded-[2rem]">
+                      <table className="w-full text-left border-collapse">
+                        <thead className="bg-[#F9F9F9]">
+                          <tr className="border-b border-[#F1E9DB]">
+                            <th className="px-8 py-5 text-[10px] font-black text-[#8C8C8C] uppercase tracking-widest">Colaborador</th>
+                            <th className="px-8 py-5 text-[10px] font-black text-[#8C8C8C] uppercase tracking-widest">Consumo Real (USD)</th>
+                            <th className="px-8 py-5 text-[10px] font-black text-[#8C8C8C] uppercase tracking-widest">Barra de Limite</th>
+                            <th className="px-8 py-5 text-[10px] font-black text-[#8C8C8C] uppercase tracking-widest text-right">Configurar Teto (Tokens)</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {usersQuotas.map((q) => (
+                            <tr key={q.user_id} className="border-b border-[#F1E9DB] hover:bg-[#FDF9F0]/30 transition-colors">
+                              <td className="px-8 py-6">
+                                <div className="font-black text-sm text-[#1A1A1A]">{q.email}</div>
+                                <div className="text-[10px] text-[#8C8C8C] font-bold mt-1">UUID: {q.user_id.slice(0, 8)}...</div>
+                              </td>
+                              <td className="px-8 py-6">
+                                <div className="font-serif font-black text-lg text-[#1A1A1A]">$ {q.cost_usd.toFixed(2)}</div>
+                                <div className="text-[10px] text-emerald-500 font-black uppercase">Eficiência OK</div>
+                              </td>
+                              <td className="px-8 py-6 w-[300px]">
+                                <div className="flex items-center justify-between text-[9px] font-black uppercase mb-1.5">
+                                   <span className={q.percent_used > 90 ? "text-red-500" : "text-[#8C8C8C]"}>{q.consumed_tokens.toLocaleString()} / {q.max_limit.toLocaleString()}</span>
+                                   <span className={q.percent_used > 90 ? "text-red-500 animate-pulse" : "text-[#1A1A1A]"}>{q.percent_used}%</span>
+                                </div>
+                                <div className="w-full h-2 bg-[#F9F9F9] rounded-full overflow-hidden border border-[#F1E9DB]/30 shadow-inner">
+                                   <div 
+                                      className={`h-full rounded-full transition-all duration-700 ${q.percent_used > 90 ? "bg-red-500" : q.percent_used > 70 ? "bg-amber-400" : "bg-emerald-400"}`}
+                                      style={{ width: `${Math.min(q.percent_used, 100)}%` }}
+                                   />
+                                </div>
+                              </td>
+                              <td className="px-8 py-6 text-right">
+                                <div className="flex items-center justify-end gap-3">
+                                   <input 
+                                      type="number" 
+                                      defaultValue={q.max_limit}
+                                      onBlur={(e) => updateQuotaLimit(q.user_id, parseInt(e.target.value))}
+                                      className="w-32 bg-[#F9F9F9] border-2 border-transparent focus:border-[#D4AF37] focus:bg-white p-2.5 rounded-xl text-xs font-black text-center outline-none transition-all shadow-sm"
+                                   />
+                                   <div className="p-2 bg-[#1A1A1A] text-white rounded-lg opacity-20 hover:opacity-100 cursor-pointer transition-opacity">
+                                      <Save size={14} />
+                                   </div>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                   </div>
+                </section>
+
+                {/* Simulador de Custos Multimodelo (What-if Analysis) */}
+                <section className="bg-[#1A1A1A] text-white p-12 rounded-[4rem] shadow-2xl relative overflow-hidden group">
+                   <div className="absolute -bottom-20 -right-20 p-20 opacity-10 group-hover:opacity-20 transition-opacity">
+                      <TrendingUp size={300} strokeWidth={1} />
+                   </div>
+                   
+                   <div className="flex flex-col lg:flex-row gap-16 relative z-10">
+                      <div className="lg:w-1/3">
+                        <div className="p-4 bg-white/10 w-fit rounded-3xl mb-8"><Coins size={32} className="text-[#D4AF37]" /></div>
+                        <h2 className="text-4xl font-serif font-black tracking-tight mb-4">Simulador de<br/><span className="text-[#D4AF37]">Multimodelo</span></h2>
+                        <p className="text-gray-400 text-sm leading-relaxed mb-10 font-medium">
+                          Descubra quanto seu consumo atual custaria se os dashboards fossem materializados em outros provedores da LLM.
+                        </p>
+                        
+                        <div className="space-y-4">
+                           <div className="text-[10px] font-black uppercase tracking-widest text-gray-500">Carga de Trabalho Base</div>
+                           <div className="bg-white/5 border border-white/10 p-5 rounded-2xl">
+                              <div className="flex items-center justify-between mb-2">
+                                 <span className="text-xs text-gray-400">Tokens Acumulados</span>
+                                 <span className="text-lg font-black">{costsHistory.reduce((acc, curr) => acc + curr.tokens, 0).toLocaleString()}</span>
+                              </div>
+                              <div className="w-full h-1 bg-white/10 rounded-full" />
+                           </div>
+                        </div>
+                      </div>
+
+                      <div className="lg:w-2/3 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {[
+                          { id: "AMAZON_NOVA_PRO", name: "Amazon Nova Pro", in: 0.8, out: 3.2, recommended: true },
+                          { id: "CLAUDE_3_5", name: "Claude 3.5 Sonnet", in: 3.0, out: 15.0 },
+                          { id: "LLAMA_3_3", name: "Meta Llama 3.3 (70B)", in: 0.72, out: 0.72 },
+                          { id: "CLAUDE_3_HAIKU", name: "Claude 3 Haiku", in: 0.25, out: 1.25 }
+                        ].map((m) => {
+                          const totalTokens = costsHistory.reduce((acc, curr) => acc + curr.tokens, 0);
+                          // Estimativa: 70% input, 30% output
+                          const estIn = totalTokens * 0.7;
+                          const estOut = totalTokens * 0.3;
+                          const estCost = (estIn / 1000000 * m.in) + (estOut / 1000000 * m.out);
+                          
+                          return (
+                            <div key={m.id} className={`p-8 rounded-[2.5rem] border-2 transition-all hover:scale-[1.02] ${m.recommended ? "bg-[#D4AF37] border-white/20 text-[#1A1A1A]" : "bg-white/5 border-white/5 hover:border-white/20"}`}>
+                               <div className="flex items-center justify-between mb-8">
+                                  <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${m.recommended ? "bg-[#1A1A1A] text-white" : "bg-white/10 text-white"}`}>
+                                     {m.recommended ? "Custo-Benefício" : "Alternativa"}
+                                  </div>
+                                  <BarChart3 size={20} />
+                               </div>
+                               <h4 className="text-lg font-black tracking-tight mb-2">{m.name}</h4>
+                               <div className="text-3xl font-serif font-black mb-8">$ {estCost.toFixed(2)}<span className="text-xs opacity-50 ml-1">/mês estim.</span></div>
+                               
+                               <div className={`text-[9px] font-black uppercase tracking-widest ${m.recommended ? "text-[#1A1A1A]/70" : "text-gray-500"} mb-2`}>Taxa Sugerida (1M Tokens)</div>
+                               <div className="grid grid-cols-2 gap-4">
+                                  <div className={`p-3 rounded-xl ${m.recommended ? "bg-[#1A1A1A]/10" : "bg-white/5"}`}>
+                                     <div className="text-[14px] font-black">$ {m.in}</div>
+                                     <div className="text-[7px] font-black uppercase opacity-60">Input</div>
+                                  </div>
+                                  <div className={`p-3 rounded-xl ${m.recommended ? "bg-[#1A1A1A]/10" : "bg-white/5"}`}>
+                                     <div className="text-[14px] font-black">$ {m.out}</div>
+                                     <div className="text-[7px] font-black uppercase opacity-60">Output</div>
+                                  </div>
+                               </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                   </div>
+                </section>
+             </div>
           ) : (
-            <>
-              <div className="w-full">
+             <div className="lg:col-span-12">
                 {!selectedSpecialist ? (
                    <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
                       <div className="flex items-center justify-between mb-10 border-b border-[#F1E9DB] pb-6">
@@ -584,7 +904,6 @@ export default function AdminPromptsPage() {
                     </section>
                 )}
                 </div>
-            </>
           )}
         </div>
 

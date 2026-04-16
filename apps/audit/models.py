@@ -175,10 +175,17 @@ class ExecutionTrace(models.Model):
     step_name = models.CharField(max_length=255)
     message = models.TextField(blank=True)
     
+    # Identificação do Contexto (para Gestão de Custos e Governança)
+    user_id = models.UUIDField(null=True, blank=True, db_index=True, help_text="ID do usuário que iniciou a tarefa")
+    project_id = models.UUIDField(null=True, blank=True, db_index=True, help_text="ID do domínio de dados (Projeto)")
+    dashboard_id = models.UUIDField(null=True, blank=True, db_index=True, help_text="ID do relatório vinculado")
+    
     # Métricas de Performance e Consumo
     duration_ms = models.IntegerField(default=0, help_text="Duração da etapa em milissegundos")
     input_tokens = models.IntegerField(default=0, help_text="Tokens enviados (se IA)")
     output_tokens = models.IntegerField(default=0, help_text="Tokens recebidos (se IA)")
+    model_id = models.CharField(max_length=100, blank=True, help_text="ID do modelo utilizado")
+    estimated_cost_usd = models.DecimalField(max_digits=12, decimal_places=6, default=0, help_text="Custo estimado em USD")
     
     status = models.CharField(max_length=20, default="SUCCESS") # SUCCESS, WARNING, ERROR
     

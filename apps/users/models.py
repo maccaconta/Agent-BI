@@ -253,6 +253,21 @@ class UsageQuota(TimeStampedModel):
         default=10,
         verbose_name="Limite de Relatórios/Mês"
     )
+    
+    # Contadores de Tokens (IA)
+    input_tokens_count = models.BigIntegerField(
+        default=0,
+        verbose_name="Tokens de Entrada (Mês Atual)"
+    )
+    output_tokens_count = models.BigIntegerField(
+        default=0,
+        verbose_name="Tokens de Saída (Mês Atual)"
+    )
+    max_tokens_monthly_limit = models.BigIntegerField(
+        default=500000, # 500k tokens por padrão
+        verbose_name="Limite mensal de Tokens"
+    )
+    
     reset_date = models.DateField(
         auto_now_add=True,
         verbose_name="Data de Reinício"
@@ -276,3 +291,13 @@ class UsageQuota(TimeStampedModel):
         """Incrementa o contador de uso."""
         self.reports_generated_count += 1
         self.save(update_fields=["reports_generated_count", "updated_at"])
+
+# Signals para automação de governança
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+@receiver(post_save, sender=User)
+def create_user_quota(sender, instance, created, **kwargs):
+    """Garante que todo novo usuário tenha uma quota inicial configurada."""
+    if created:
+        UsageQuota.objects.get_or_create(user=instance)

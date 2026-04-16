@@ -15,7 +15,10 @@ class QuotaService:
         Verifica se o usuário tem saldo e, se sim, incrementa o uso de forma atômica.
         Retorna True se autorizado, False caso contrário.
         """
-        if user.is_super_admin:
+        if not user or not user.is_authenticated:
+            return False
+
+        if getattr(user, "is_super_admin", False):
             logger.info(f"[QuotaService] Bypass de quota para admin: {user.email}")
             return True
 
@@ -30,9 +33,47 @@ class QuotaService:
             logger.info(f"[QuotaService] Consumo registrado para {user.email}: {quota.reports_generated_count}/{quota.max_reports_per_month}")
             return True
 
+    def check_token_quota(self, user: User) -> bool:
+        """
+        Verifica se o usuário ainda tem saldo de tokens no mês.
+        Retorna True se autorizado, False se bloqueado.
+        """
+        if not user or not user.is_authenticated:
+            return False
+
+        if getattr(user, "is_super_admin", False):
+            return True
+            
+        quota, _ = UsageQuota.objects.get_or_create(user=user)
+        is_authorized = (quota.input_tokens_count + quota.output_tokens_count) < quota.max_tokens_monthly_limit
+        
+        if not is_authorized:
+            logger.warning(f"[QuotaService] 🛑 BLOQUEIO POR TOKENS: {user.email} atingiu o limite de {quota.max_tokens_monthly_limit}")
+            
+        return is_authorized
+
+    def log_token_usage(self, user: User, input_tokens: int, output_tokens: int):
+        """Atualiza os contadores de tokens do usuário de forma atômica."""
+        if not user or not user.is_authenticated:
+            return
+
+        if getattr(user, "is_super_admin", False):
+            return
+
+        with transaction.atomic():
+            quota, _ = UsageQuota.objects.select_for_update().get_or_create(user=user)
+            quota.input_tokens_count += input_tokens
+            quota.output_tokens_count += output_tokens
+            quota.save(update_fields=["input_tokens_count", "output_tokens_count", "updated_at"])
+            
+            logger.info(f"[QuotaService] Tokens registrados para {user.email}: +{input_tokens} in, +{output_tokens} out")
+
     def get_remaining_quota(self, user: User) -> int:
         """Retorna quantos relatórios o usuário ainda pode gerar."""
-        if user.is_super_admin:
+        if not user or not user.is_authenticated:
+            return 0
+
+        if getattr(user, "is_super_admin", False):
             return 999999
             
         quota, _ = UsageQuota.objects.get_or_create(user=user)

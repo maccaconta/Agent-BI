@@ -60,7 +60,7 @@ class DashboardHtmlRendererService:
       </div>
 
       <div class="flex-grow text-center flex flex-col items-center justify-center px-4">
-        { f'<div class="inline-flex items-center gap-2 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full mb-4"><span class="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]"></span><span class="text-[9px] font-black text-amber-600 uppercase tracking-widest">Certified Blueprint</span></div>' if is_blueprint else '' }
+        { f'<div class="inline-flex items-center gap-2 px-3 py-1 bg-blue-600 border border-blue-400 rounded-full mb-4 shadow-[0_0_15px_rgba(37,99,235,0.4)]"><span class="w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_8px_#FFF] animate-pulse"></span><span class="text-[9px] font-black text-white uppercase tracking-widest">Certified Blueprint</span></div>' if is_blueprint else '' }
         <h1 class="text-4xl md:text-5xl font-black tracking-tightest text-gray-900 lowercase italic">{self._escape_html(title)}</h1>
         <p class="text-[10px] text-gray-400 font-bold uppercase tracking-[0.4em] mt-3">{generated_at}</p>
       </div>
@@ -72,11 +72,10 @@ class DashboardHtmlRendererService:
 
     <div class="w-full h-[1px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent opacity-40 mb-16"></div>
 
-    {self._render_kpi_grid(kpis)}
-
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-10 mb-16">
-      {self._render_other_widgets(others)}
+    <div class="grid grid-cols-2 gap-8 mb-16">
+      {self._render_widgets_ordered(widget_results)}
     </div>
+
 
     {self._render_diagnostico(clean_diag)}
 
@@ -128,6 +127,29 @@ class DashboardHtmlRendererService:
 
             if (type === 'BIGNUMBER') {{
               container.innerText = formatValue(Object.values(rows[0])[0]);
+            }} else if (type === 'TABLE') {{
+              // --- RENDERIZADOR DE TABELAS LUXURY ---
+              container.classList.remove('min-h-[150px]');
+              container.classList.add('overflow-x-auto');
+              let html = `<table class="w-full text-left text-[11px] border-collapse">
+                <thead>
+                  <tr class="border-b border-gray-100">
+                    ${{cols.map(c => `<th class="py-3 px-2 font-black text-gray-400 uppercase tracking-tighter">${{c}}</th>`).join('')}}
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50">
+                  ${{rows.slice(0, 15).map(r => `
+                    <tr class="hover:bg-gray-50/50 transition-colors">
+                      ${{cols.map(c => `<td class="py-3 px-2 font-medium text-gray-600">${{formatValue(r[c])}}</td>`).join('')}}
+                    </tr>
+                  `).join('')}}
+                </tbody>
+              </table>`;
+              
+              if(rows.length > 15) {{
+                html += `<div class="mt-4 text-[9px] text-center font-bold text-gray-300 uppercase tracking-widest">+ ${{rows.length - 15}} registros ocultos para brevidade executiva</div>`;
+              }}
+              container.innerHTML = html;
             }} else {{
               const chart = echarts.init(container);
               const isPie = type.toLowerCase() === 'pie';
@@ -166,26 +188,56 @@ class DashboardHtmlRendererService:
 </html>"""
         return html
 
-    def _render_kpi_grid(self, kpis: list) -> str:
-        if not kpis: return ""
-        cards = ""
-        for w in kpis:
-            w_id = w.get('widget_id', 'Indicador')
-            w_title = w.get('title', w_id)
-            has_error = not w.get('success', True)
-            error_class = "border-amber-100 bg-amber-50/30" if has_error else "border-[#F0F0F0]"
+    def _render_widgets_ordered(self, results: list) -> str:
+        """
+        Renderiza todos os widgets em uma única sequência, respeitando a ordem da lista.
+        """
+        html = ""
+        for w in results:
+            v_type = w.get('visual_type', 'CHART')
             
-            cards += f"""
-            <div class="kpi-card min-w-0 w-full flex flex-col items-center justify-center text-center relative group {error_class}">
-              <div class="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity cursor-help" title="{self._escape_html(w.get('business_rationale', 'Insight estratégico'))}">
-                <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-              </div>
-              <span class="kpi-label mb-2">{self._escape_html(w_title)}</span>
-              <div id="widget-{w_id}" class="text-5xl font-black kpi-value tracking-tighter">
-                <span class="text-gray-200 text-lg">...</span>
-              </div>
-            </div>"""
-        return f'<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-16">{cards}</div>'
+            if v_type == 'BIGNUMBER':
+                html += self._render_single_kpi(w)
+            else:
+                html += self._render_single_complex_widget(w)
+        return html
+
+    def _render_single_kpi(self, w: dict) -> str:
+        w_id = w.get('widget_id', 'Indicador')
+        w_title = w.get('title', w_id)
+        has_error = not w.get('success', True)
+        error_class = "border-amber-100 bg-amber-50/30" if has_error else "border-[#F0F0F0]"
+        
+        return f"""
+        <div class="kpi-card col-span-1 min-w-0 w-full flex flex-col items-center justify-center text-center relative group {error_class}">
+          <div class="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity cursor-help" title="{self._escape_html(w.get('business_rationale', 'Insight estratégico'))}">
+            <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <span class="kpi-label mb-2">{self._escape_html(w_title)}</span>
+          <div id="widget-{w_id}" class="text-5xl font-black kpi-value tracking-tighter">
+            <span class="text-gray-200 text-lg">...</span>
+          </div>
+        </div>"""
+
+    def _render_single_complex_widget(self, w: dict) -> str:
+        w_id = w.get('widget_id', 'Visualização')
+        w_title = w.get('title', w_id)
+        has_error = not w.get('success', True)
+        error_class = "border-amber-100 bg-amber-50/10" if has_error else "border-[#F0F0F0]"
+        
+        return f"""
+        <div class="kpi-card col-span-2 flex flex-col min-h-[500px] relative group {error_class}">
+          <div class="flex items-center justify-between mb-6 pb-4 border-b border-gray-50">
+            <h3 class="text-sm font-black uppercase tracking-widest italic" style="color: #D4AF37;">{self._escape_html(w_title)}</h3>
+            <div class="flex items-center gap-2">
+                <div class="opacity-0 group-hover:opacity-100 transition-opacity cursor-help" title="{self._escape_html(w.get('business_rationale', 'Insight estratégico'))}">
+                    <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                </div>
+                { '<span class="bg-amber-100 text-[9px] px-2 py-1 rounded text-amber-600 font-bold uppercase">LLM Offline</span>' if has_error else '<span class="bg-gray-50 text-[9px] px-2 py-1 rounded text-gray-400 font-bold uppercase">Live Insight</span>' }
+            </div>
+          </div>
+          <div id="widget-{w_id}" class="flex-1 w-full h-full min-h-[400px]"></div>
+        </div>"""
 
     def _render_other_widgets(self, others: list) -> str:
         html = ""
