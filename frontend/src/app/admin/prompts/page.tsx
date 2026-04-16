@@ -35,7 +35,7 @@ export default function AdminPromptsPage() {
   const [selectedSpecialist, setSelectedSpecialist] = useState<any>(null);
 
   // Ponte direta para o backend no modo Local Fast
-  const BACKEND_URL = "http://127.0.0.1:8000";
+  const BACKEND_URL = "";
 
   const [prompt, setPrompt] = useState({
     id: null as string | null,
@@ -66,7 +66,7 @@ export default function AdminPromptsPage() {
     
     try {
       const res = await fetch(url, {
-        headers: { "Content-Type": "application/json" },
+        headers: getHeaders(),
         cache: 'no-store'
       });
       
@@ -75,9 +75,11 @@ export default function AdminPromptsPage() {
         // Como desativamos a paginação no backend, 'data' agora deve ser um array direto
         const rawResults = Array.isArray(data) ? data : (data.results || []);
         
-        // Filtra especialistas de forma robusta
+        // Filtra por categoria, mas aceita variações ou apenas a presença do texto 'SPECIALIST'
         const filtered = rawResults.filter((s: any) => 
-            s.category?.toUpperCase() === "SPECIALIST" || s.category === "Especialista"
+            !s.category || // Se não tiver categoria, mostra (para debug)
+            s.category.toUpperCase().includes("SPECIALIST") || 
+            s.category.includes("Especialista")
         );
         
         console.log("🔍 Especialistas carregados:", filtered.length);

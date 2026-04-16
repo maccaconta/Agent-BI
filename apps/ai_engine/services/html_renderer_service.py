@@ -5,6 +5,7 @@ Camada de renderizacao HTML do dashboard.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from django.utils import timezone
@@ -17,8 +18,6 @@ class DashboardHtmlRendererService:
         """
         Gera o HTML final do dashboard com motor JS embutido. Standalone.
         """
-        import json
-        import re
         
         # Limpeza de insights (remover artefatos de pontuação indesejados no início/fim)
         clean_diag = diagnostico_consolidado.strip()
@@ -90,12 +89,22 @@ class DashboardHtmlRendererService:
   </div>
 
   <script>
+    console.log("[AgentBI] 🚀 Dashboard Inicializado. Aguardando DOM...");
     window.AgentBI_Datasets = {json.dumps(dataset_ids)};
     window.AgentBI = {{
-      renderWidget: async (containerId, content, type, title) => {{
+      renderWidget: async (containerId, content, type, title, hasError) => {{
+        console.log(`[AgentBI] 🎨 Tentativa de renderizar: ${{title}} (${{type}}) - Erro Prévio: ${{hasError}}`);
         const container = document.getElementById(containerId);
         if(!container) return;
         
+        if (hasError) {{
+          container.innerHTML = `<div class="flex flex-col items-center justify-center h-full text-amber-500 opacity-60">
+            <svg class="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            <span class="text-[10px] font-black uppercase tracking-widest">Indisponível</span>
+          </div>`;
+          return;
+        }}
+
         const formatValue = (val) => {{
           if (val === null || val === undefined || val === '') return '-';
           const num = parseFloat(val);
@@ -106,7 +115,7 @@ class DashboardHtmlRendererService:
         }};
 
         try {{
-          const response = await fetch('http://127.0.0.1:8000/api/v1/ai/sql-preview', {{
+          const response = await fetch('/api/v1/ai/sql-preview', {{
             method: 'POST',
             headers: {{ 'Content-Type': 'application/json' }},
             body: JSON.stringify({{ sql: content, datasets: window.AgentBI_Datasets }}) 
@@ -141,7 +150,11 @@ class DashboardHtmlRendererService:
               }});
             }}
           }}
-        }} catch (e) {{ console.error(e); container.innerText = 'Erro de Dados'; }}
+          console.log(`[AgentBI] ✅ Widget ${{title}} renderizado com sucesso.`);
+        }} catch (e) {{ 
+          console.error(`[AgentBI] ❌ Erro ao renderizar ${{title}}:`, e);
+          container.innerText = 'Erro de Dados'; 
+        }}
       }}
     }};
 
@@ -159,8 +172,11 @@ class DashboardHtmlRendererService:
         for w in kpis:
             w_id = w.get('widget_id', 'Indicador')
             w_title = w.get('title', w_id)
+            has_error = not w.get('success', True)
+            error_class = "border-amber-100 bg-amber-50/30" if has_error else "border-[#F0F0F0]"
+            
             cards += f"""
-            <div class="kpi-card min-w-0 w-full flex flex-col items-center justify-center text-center relative group">
+            <div class="kpi-card min-w-0 w-full flex flex-col items-center justify-center text-center relative group {error_class}">
               <div class="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity cursor-help" title="{self._escape_html(w.get('business_rationale', 'Insight estratégico'))}">
                 <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               </div>
@@ -176,15 +192,18 @@ class DashboardHtmlRendererService:
         for w in others:
             w_id = w.get('widget_id', 'Visualização')
             w_title = w.get('title', w_id)
+            has_error = not w.get('success', True)
+            error_class = "border-amber-100 bg-amber-50/10" if has_error else "border-[#F0F0F0]"
+            
             html += f"""
-            <div class="kpi-card flex flex-col min-h-[500px] relative group">
+            <div class="kpi-card flex flex-col min-h-[500px] relative group {error_class}">
               <div class="flex items-center justify-between mb-6 pb-4 border-b border-gray-50">
                 <h3 class="text-sm font-black uppercase tracking-widest italic" style="color: #D4AF37;">{self._escape_html(w_title)}</h3>
                 <div class="flex items-center gap-2">
                     <div class="opacity-0 group-hover:opacity-100 transition-opacity cursor-help" title="{self._escape_html(w.get('business_rationale', 'Insight estratégico'))}">
                         <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     </div>
-                    <span class="bg-gray-50 text-[9px] px-2 py-1 rounded text-gray-400 font-bold uppercase">Live Insight</span>
+                    { '<span class="bg-amber-100 text-[9px] px-2 py-1 rounded text-amber-600 font-bold uppercase">LLM Offline</span>' if has_error else '<span class="bg-gray-50 text-[9px] px-2 py-1 rounded text-gray-400 font-bold uppercase">Live Insight</span>' }
                 </div>
               </div>
               <div id="widget-{w_id}" class="flex-1 w-full h-full min-h-[400px]"></div>
@@ -218,9 +237,10 @@ class DashboardHtmlRendererService:
             w_id = w.get('widget_id', 'unknown')
             w_type = w.get('visual_type', 'BAR')
             title = w.get('title', w_id.replace('_', ' ').title())
+            has_error = "true" if not w.get('success', True) else "false"
             
             content_js = json.dumps(content)
-            scripts += f"window.AgentBI.renderWidget('widget-{w_id}', {content_js}, '{w_type}', '{json.dumps(title)}');\n"
+            scripts += f"window.AgentBI.renderWidget('widget-{w_id}', {content_js}, '{w_type}', {json.dumps(title)}, {has_error});\n"
         return scripts
 
     def _escape_html(self, value: Any) -> str:

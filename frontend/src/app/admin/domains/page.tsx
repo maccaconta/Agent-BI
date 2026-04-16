@@ -11,7 +11,8 @@ import {
   BarChart3, 
   Shield, 
   Globe,
-  Settings2
+  Settings2,
+  Phone
 } from "lucide-react";
 
 interface Domain {
@@ -32,7 +33,7 @@ export default function DomainsAdminPage() {
     async function fetchDomains() {
       try {
         setIsLoading(true);
-        const res = await fetch("http://127.0.0.1:8000/api/v1/projects/domains/?t=" + Date.now(), {
+        const res = await fetch("/api/v1/projects/domains/?t=" + Date.now(), {
           headers: { "Content-Type": "application/json" }
         });
         if (res.ok) {
@@ -115,6 +116,8 @@ export default function DomainsAdminPage() {
                     {domain.icon === "BarChart3" && <BarChart3 size={24} />}
                     {domain.icon === "Layers" && <Layers size={24} />}
                     {domain.icon === "Shield" && <Shield size={24} />}
+                    {domain.icon === "Database" && <Database size={24} />}
+                    {domain.icon === "Phone" && <Phone size={24} />}
                   </div>
                   <button className="p-2 text-lux-muted hover:text-lux-text transition-colors">
                     <MoreVertical size={20} />

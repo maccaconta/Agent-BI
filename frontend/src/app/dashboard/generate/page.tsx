@@ -69,6 +69,8 @@ function DashboardContent() {
   const [activeDashboardId, setActiveDashboardId] = useState<number | null>(null);
   const [isPlanning, setIsPlanning] = useState(false);
   const [isMaterializing, setIsMaterializing] = useState(false);
+  const [materializeTimer, setMaterializeTimer] = useState(0);
+  const [loadingMessage, setLoadingMessage] = useState("Iniciando motor de inteligência...");
   const [tabs, setTabs] = useState<DashboardTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -148,7 +150,7 @@ function DashboardContent() {
       setProjectSources(sources);
 
       // Buscar datasets reais para o contexto do dashboard
-      fetch(`http://127.0.0.1:8000/api/v1/datasets/?project_id=${projectId}`, {
+      fetch(`/api/v1/datasets/?project_id=${projectId}`, {
         headers: getBackendJsonHeaders()
       })
       .then(res => res.json())
@@ -187,7 +189,7 @@ function DashboardContent() {
     if (!projectId || projectId === "PRJ-TEMP" || dataReady) return;
     const checkStatus = async () => {
       try {
-        const response = await fetch(`http://127.0.0.1:8000/api/v1/projects/${projectId}/`, {
+        const response = await fetch(`/api/v1/projects/${projectId}/`, {
           headers: getBackendJsonHeaders()
         });
         if (response.ok) {
@@ -231,6 +233,30 @@ function DashboardContent() {
     }
   }, [dataReady, plannedWidgets.length, projectId]);
 
+  // Temporizador de Materialização (Progresso Visível)
+  useEffect(() => {
+    let interval: any;
+    if (isMaterializing) {
+      setMaterializeTimer(0);
+      interval = setInterval(() => {
+        setMaterializeTimer(prev => prev + 1);
+      }, 1000);
+    } else {
+      setMaterializeTimer(0);
+    }
+    return () => clearInterval(interval);
+  }, [isMaterializing]);
+
+  // Mensagens dinâmicas baseadas no tempo
+  useEffect(() => {
+    if (!isMaterializing) return;
+    if (materializeTimer < 5) setLoadingMessage("Sincronizando com Amazon Bedrock...");
+    else if (materializeTimer < 12) setLoadingMessage("Orquestrando 7 widgets em paralelo...");
+    else if (materializeTimer < 20) setLoadingMessage("Refinando complexidade analítica e roteamento...");
+    else if (materializeTimer < 30) setLoadingMessage("Finalizando polimento e consistência no SQLite...");
+    else setLoadingMessage("Quase lá! Finalizando empacotamento...");
+  }, [materializeTimer, isMaterializing]);
+
   const autoPlan = async () => {
     if (!projectId || isPlanning) return;
     
@@ -246,7 +272,7 @@ function DashboardContent() {
     setLoadingAgent("Designer IA");
     setLoadingAction("Interpretando datasets para sugestão estratégica...");
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/v1/ai/report-prompt/plan", {
+      const response = await fetch("/api/v1/ai/report-prompt/plan", {
         method: "POST",
         headers: getBackendJsonHeaders(),
         body: JSON.stringify({
@@ -284,7 +310,7 @@ function DashboardContent() {
     window.dispatchEvent(new CustomEvent('agent-bi-trace', { detail: { traceId: trace_id } }));
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/v1/ai/report-prompt/materialize", {
+      const response = await fetch("/api/v1/ai/report-prompt/materialize", {
         method: "POST",
         headers: getBackendJsonHeaders(),
         body: JSON.stringify({
@@ -303,8 +329,19 @@ function DashboardContent() {
           trace_id: trace_id
         }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "Erro desconhecido no servidor");
+
+      // Tratamento resiliente de JSON para evitar erro "Unexpected token I..."
+      const contentType = response.headers.get("content-type");
+      let data;
+      if (contentType && contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        console.error("[Frontend] Resposta não-JSON recebida:", text);
+        throw new Error("O servidor retornou um erro inesperado (Non-JSON). Verifique os logs do backend.");
+      }
+
+      if (!response.ok) throw new Error(data.detail || `Erro ${response.status} no servidor`);
 
       if (data.status === "success") {
         if (data.results && Array.isArray(data.results)) {
@@ -331,13 +368,18 @@ function DashboardContent() {
           setViewCode(false);
         }, 100); 
       }
-    } catch (err) { console.error("Erro ao materializar:", err); }
-    finally { setIsMaterializing(false); }
+    } catch (err: any) { 
+      console.error("Erro ao materializar:", err);
+      // Feedback visual simples para o usuário
+      alert(`Falha na Materialização: ${err.message}`);
+    } finally { 
+      setIsMaterializing(false); 
+    }
   };
 
   const handlePromote = async (tabId: string) => {
     try {
-      const response = await fetch(`http://127.0.0.1:8000/api/v1/dashboards/${tabId}/promote/`, {
+      const response = await fetch(`/api/v1/dashboards/${tabId}/promote/`, {
         method: "POST",
         headers: getBackendJsonHeaders(),
         body: JSON.stringify({
@@ -354,6 +396,30 @@ function DashboardContent() {
         setTabs(prev => prev.map(t => t.id === tabId ? { ...t, isBlueprint: true } : t));
       }
     } catch (err) { console.error("Erro ao elevar para Blueprint:", err); }
+  };
+
+  const handleExportStreamlit = async () => {
+    if (!activeTabId) return;
+    try {
+      const response = await fetch(`/api/v1/ai/export-streamlit/${activeTabId}`, {
+        method: "GET",
+        headers: getBackendJsonHeaders(),
+      });
+      if (!response.ok) throw new Error("Falha ao gerar exportação.");
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `agent_bi_export_${activeTabId}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Erro ao exportar:", err);
+      alert("Erro ao exportar dashboard. Verifique sua conexão.");
+    }
   };
 
   const saveTabName = (tabId: string, newName: string) => {
@@ -373,7 +439,7 @@ function DashboardContent() {
     const title = activeTab?.name || "Pipeline Canvas";
     const generatedAt = new Date().toLocaleDateString('pt-BR') + " " + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-    if (fragment && fragment.startsWith("<!DOCTYPE")) {
+    if (fragment && fragment.trim().startsWith("<!DOCTYPE")) {
       return fragment;
     }
 
@@ -425,7 +491,7 @@ function DashboardContent() {
                     };
 
                     try {
-                        const response = await fetch('http://127.0.0.1:8000/api/v1/ai/sql-preview', {
+                        const response = await fetch('/api/v1/ai/sql-preview', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ 
@@ -558,44 +624,70 @@ function DashboardContent() {
     `;
   };
 
-  const GeneratingAnimation = () => (
-    <div className="flex flex-col items-center justify-center p-20 text-center h-full relative overflow-hidden">
-      <motion.div 
-        animate={{ scale: [1, 1.2, 1], opacity: [0.1, 0.3, 0.1] }}
-        transition={{ repeat: Infinity, duration: 4 }}
-        className="absolute w-[400px] h-[400px] bg-lux-accent/10 rounded-full blur-[100px]"
-      />
-      <div className="relative z-10">
-        <div className="relative flex items-center justify-center">
-          {[0, 72, 144, 216, 288].map((angle, i) => (
-            <motion.div
-              key={i}
-              animate={{ rotate: 360, scale: [1, 1.5, 1] }}
-              transition={{ 
-                rotate: { repeat: Infinity, duration: 3 + i, ease: "linear" },
-                scale: { repeat: Infinity, duration: 2, delay: i * 0.2 }
-              }}
-              className="absolute w-2 h-2 rounded-full bg-lux-accent shadow-[0_0_10px_rgba(212,175,55,0.8)]"
-              style={{ originX: "28px", originY: "28px" }}
-            />
-          ))}
-          <div className="w-24 h-24 rounded-full border-2 border-lux-accent/20 flex items-center justify-center bg-lux-card/40 backdrop-blur-xl shadow-2xl relative overflow-hidden group">
-            <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }}>
-              <RefreshCw size={40} className="text-lux-accent" />
+  // Componente de animação isolado e memoizado para evitar re-renderizações que causam "engasgos"
+  const GeneratingAnimation = React.memo(({ action, message, timer }: { action: string, message: string, timer: number }) => (
+    <div className="flex flex-col items-center justify-center p-20 text-center h-full relative overflow-hidden bg-lux-bg/50">
+      {/* Background Glow sutil */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-lux-accent/5 rounded-full blur-[100px]" />
+      </div>
+
+      <div className="relative z-10 w-full max-w-md">
+        <div className="relative flex items-center justify-center mb-12 h-32">
+          
+          {/* Núcleo Central - Estilo Ingestão (Clockwise) */}
+          <div className="relative w-24 h-24 flex items-center justify-center">
+            {/* Círculo de Base Minimalista */}
+            <div className="absolute inset-0 border border-lux-accent/10 rounded-full" />
+            
+            {/* Spinner principal sentido horário - Alinhado com a Ingestão */}
+            <motion.div 
+               animate={{ rotate: 360 }}
+               transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+               className="w-20 h-20 border-2 border-transparent border-t-lux-accent border-r-lux-accent/20 rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(212,175,55,0.1)]"
+            >
+               <Zap className="w-8 h-8 text-lux-accent drop-shadow-[0_0_10px_rgba(212,175,55,0.4)]" />
             </motion.div>
           </div>
         </div>
-        <div className="mt-12 space-y-4">
-           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-2">
-             <h3 className="font-serif italic text-2xl text-lux-text tracking-tighter">{loadingAgent}</h3>
-             <div className="flex items-center justify-center gap-3">
-               <span className="text-[10px] font-black uppercase tracking-[0.3em] text-lux-accent animate-pulse">{loadingAction}</span>
-             </div>
-           </motion.div>
+        
+        <div className="space-y-2">
+          <h3 className="text-xl font-bold text-lux-text uppercase tracking-[0.2em] mb-1">
+            {action}
+          </h3>
+          <p className="text-lux-muted text-xs italic opacity-80 font-medium">
+             {message}
+          </p>
+        </div>
+
+        {/* HUD de Tempo e Progresso - Cores integradas ao padrão LUX */}
+        <div className="mt-10 space-y-4">
+          <div className="flex justify-between items-end text-[9px] uppercase tracking-widest font-black text-lux-muted/60">
+            <span>Runtime: <span className="text-lux-accent font-mono">{timer}s</span></span>
+            <span>Sync: <span className="text-lux-accent">{Math.min(Math.round((timer / 25) * 100), 99)}%</span></span>
+          </div>
+          
+          {/* Barra de Progresso com fundo lux-bg/10 (mais elegante que o cinza anterior) */}
+          <div className="h-1 w-full bg-lux-text/5 dark:bg-white/5 rounded-full overflow-hidden">
+             <motion.div 
+               initial={{ width: 0 }}
+               animate={{ width: `${Math.min((timer / 25) * 100, 99)}%` }}
+               transition={{ duration: 0.5 }}
+               className="h-full bg-lux-accent shadow-[0_0_10px_rgba(212,175,55,0.4)]"
+             />
+          </div>
+          
+          <div className="flex items-center gap-2 justify-center pt-3">
+            <span className="w-1 h-1 rounded-full bg-lux-accent animate-ping" />
+            <span className="text-[9px] text-lux-muted font-bold uppercase tracking-[0.25em]">
+              Agent-BI Intelligence Engine Active
+            </span>
+          </div>
         </div>
       </div>
     </div>
-  );
+  ));
+  GeneratingAnimation.displayName = 'GeneratingAnimation';
 
   const extractWidgetSql = (widgetId: string, content: string | undefined): string => {
     if (!content) return "-- Dashboard não gerado.";
@@ -927,11 +1019,29 @@ function DashboardContent() {
                   </div>
 
                   {activeTab && !activeTab.isBlueprint && (
+                    <div className="flex items-center gap-2 shrink-0">
+                        <button 
+                          onClick={handleExportStreamlit}
+                          className="h-8 px-4 bg-emerald-500/10 border border-emerald-500/40 text-emerald-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-2"
+                        >
+                          <Download size={12} /> Export Streamlit (Beta)
+                        </button>
+
+                        <button 
+                          onClick={() => handlePromote(activeTab.id)}
+                          className="h-8 px-4 bg-lux-accent text-black rounded-xl text-[9px] font-black uppercase tracking-widest hover:scale-105 hover:shadow-lg hover:shadow-lux-accent/20 transition-all flex items-center gap-2"
+                        >
+                          <Zap size={12} fill="currentColor" /> Elevate to Blueprint
+                        </button>
+                    </div>
+                  )}
+
+                  {activeTab && activeTab.isBlueprint && (
                     <button 
-                      onClick={() => handlePromote(activeTab.id)}
-                      className="h-8 px-4 bg-lux-accent text-black rounded-xl text-[9px] font-black uppercase tracking-widest hover:scale-105 hover:shadow-lg hover:shadow-lux-accent/20 transition-all flex items-center gap-2 shrink-0"
+                      onClick={handleExportStreamlit}
+                      className="h-8 px-4 bg-emerald-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:scale-105 hover:shadow-lg hover:shadow-emerald-500/20 transition-all flex items-center gap-2 shrink-0"
                     >
-                      <Zap size={12} fill="currentColor" /> Elevate to Blueprint
+                      <Download size={12} /> Export Streamlit Code
                     </button>
                   )}
                 </div>
@@ -946,7 +1056,7 @@ function DashboardContent() {
                       <button onClick={() => setActiveTabId(tabs[0]?.id)} className="mt-2 text-[10px] underline">Voltar para início</button>
                     </div>
                   ) : isWorking ? (
-                    <GeneratingAnimation />
+                    <GeneratingAnimation action={loadingAction} message={loadingMessage} timer={materializeTimer} />
                   ) : (
                     <div className="flex flex-col items-center justify-center p-20 text-lux-muted/50 text-center h-full">
                       <div className="p-10 rounded-[3rem] border border-lux-border/10 bg-lux-bg/5 flex flex-col items-center gap-6">

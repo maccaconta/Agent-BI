@@ -3,7 +3,7 @@ apps.users.urls
 ───────────────
 URL patterns para autenticação e usuários.
 """
-from django.urls import include, path
+from django.urls import include, path, re_path
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -14,19 +14,19 @@ from apps.users.views import (
     TenantViewSet,
 )
 
-router = DefaultRouter()
+router = DefaultRouter(trailing_slash=False)
 router.register("tenants", TenantViewSet, basename="tenant")
 router.register("register", RegisterView, basename="register")
 
 urlpatterns = [
     # JWT
-    path("token/", AgentBITokenObtainPairView.as_view(), name="token_obtain_pair"),
-    path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    re_path(r"^token/?$", AgentBITokenObtainPairView.as_view(), name="token_obtain_pair"),
+    re_path(r"^token/refresh/?$", TokenRefreshView.as_view(), name="token_refresh"),
     # Me / Profile
-    path("me/", MeView.as_view({"get": "me"}), name="me"),
-    path("me/update/", MeView.as_view({"patch": "update_me"}), name="me_update"),
-    path(
-        "me/change-password/",
+    re_path(r"^me/?$", MeView.as_view({"get": "me"}), name="me"),
+    re_path(r"^me/update/?$", MeView.as_view({"patch": "update_me"}), name="me_update"),
+    re_path(
+        r"^me/change-password/?$",
         MeView.as_view({"post": "change_password"}),
         name="change_password",
     ),

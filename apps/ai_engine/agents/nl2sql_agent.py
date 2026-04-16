@@ -39,14 +39,17 @@ class NL2SQLAgent:
     def __init__(self):
         self.bedrock_service = BedrockService()
 
-    def generate_sql(self, user_prompt: str, datasets: List[Dict[str, Any]], relationships: List[Dict[str, Any]] = None, specialist_context: str = "", trace=None) -> Dict[str, Any]:
+    def generate_sql(self, user_prompt: str, datasets: List[Dict[str, Any]], relationships: List[Dict[str, Any]] = None, specialist_context: str = "", trace=None, system_prompt_override: str = None) -> Dict[str, Any]:
         """
         Gera a proposta SQL baseada no contexto tabular e nas métricas da Base de Conhecimento.
         """
         logger.info("[Assistente_NL2SQL] Iniciando geração de SQL com contexto especializado.")
         
-        # Carrega o system prompt dinâmico do banco
-        base_system_prompt = PromptService.get_system_prompt("NL2SQLAgent", NL2SQL_AGENT_SYSTEM_PROMPT)
+        # Carrega o system prompt dinâmico do banco (apenas se não for passado via override)
+        if system_prompt_override:
+            base_system_prompt = system_prompt_override
+        else:
+            base_system_prompt = PromptService.get_system_prompt("NL2SQLAgent", NL2SQL_AGENT_SYSTEM_PROMPT)
         
         # Injeta contexto especializado se houver
         if specialist_context:
@@ -55,15 +58,25 @@ class NL2SQLAgent:
         if trace and hasattr(trace, "log_thought"):
             trace.log_thought("Assistente NL2SQL", "Combinando esquema com as regras de granularidade e diretrizes do especialista.")
 
-        # Constrói o contexto tabular detalhado
+        # Constrói o contexto tabular otimizado (poda de metadados para velocidade)
         datasets_context = []
         for ds in datasets:
+            schema_raw = ds.get("schema_json") or {}
+            columns_minimal = []
+            
+            # Extrai apenas o essencial de cada coluna para economizar tokens e tempo
+            for col in schema_raw.get("columns", []):
+                columns_minimal.append({
+                    "name": col.get("name"),
+                    "type": col.get("type"),
+                    "description": col.get("description", "")
+                })
+
             table_info = {
                 "sqlite_table": ds.get("sqlite_table"),
                 "name": ds.get("name"),
                 "granularity": ds.get("data_profile", {}).get("granularity_level", "UNKNOWN"),
-                "columns": [],
-                "schema": ds.get("schema_json"),
+                "columns": columns_minimal,
                 "profile_summary": ds.get("data_profile", {}).get("summary", "Não disponível")
             }
             datasets_context.append(table_info)

@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from apps.dashboards.views import DashboardViewSet
 
-router = DefaultRouter()
+router = DefaultRouter(trailing_slash=False)
 router.register(r"", DashboardViewSet, basename="dashboard")
 
 urlpatterns = [

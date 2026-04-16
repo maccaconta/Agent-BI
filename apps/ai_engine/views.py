@@ -4,6 +4,9 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.http import FileResponse
+from apps.dashboards.models import Dashboard
+from apps.ai_engine.services.streamlit_exporter import StreamlitExporter
 
 from apps.ai_engine.serializers import (
     CopilotGenerateSerializer, 
@@ -14,13 +17,13 @@ from apps.ai_engine.serializers import (
 from apps.ai_engine.services.incremental_dashboard_agent import IncrementalDashboardAgentService
 from apps.ai_engine.services.report_prompt_service import ReportPromptService
 from apps.datasets.services.sqlite_query_service import LocalSQLiteQueryService, SQLiteQueryValidationError
+from django.conf import settings
 from apps.projects.models import Project
 
 logger = logging.getLogger(__name__)
 
 
 class CopilotGenerateAPIView(APIView):
-    permission_classes = [AllowAny]
 
     @extend_schema(
         tags=["ai"],
@@ -43,7 +46,6 @@ class CopilotGenerateAPIView(APIView):
 
 
 class CopilotSQLPreviewAPIView(APIView):
-    permission_classes = [AllowAny]
 
     @extend_schema(
         tags=["ai"],
@@ -99,7 +101,6 @@ class CopilotSQLPreviewAPIView(APIView):
             return Response({"detail": f"Erro inesperado: {str(exc)}", "rows": [], "columns": []}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class ReportPromptPlanAPIView(APIView):
-    permission_classes = [AllowAny]
 
     @extend_schema(
         tags=["ai"],
@@ -124,7 +125,6 @@ class ReportPromptPlanAPIView(APIView):
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
 class ReportPromptMaterializeAPIView(APIView):
-    permission_classes = [AllowAny]
 
     @extend_schema(
         tags=["ai"],
@@ -152,8 +152,59 @@ class ReportPromptMaterializeAPIView(APIView):
                 project_id=project_id,
                 user=request.user
             )
+            
+            # Diagnóstico de Payload e Performance (Fase Final)
+            try:
+                import json
+                serialization_start = time.time()
+                payload_str = json.dumps(result)
+                serialization_time = time.time() - serialization_start
+                payload_size_kb = len(payload_str) / 1024
+                
+                widget_count = len(result.get("results", []))
+                logger.info(
+                    f"[ReportPromptView] Materialização concluída: {widget_count} widgets. "
+                    f"Payload: {payload_size_kb:.2f} KB. "
+                    f"Tempo de Serialização: {serialization_time:.4f}s"
+                )
+            except Exception as e:
+                logger.warning(f"[ReportPromptView] Falha ao calcular diagnóstico de payload: {e}")
+
             return Response(result, status=status.HTTP_200_OK)
         except Exception as exc:
             import traceback
-            traceback.print_exc()
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            error_details = traceback.format_exc()
+            logger.error(f"[ReportPromptView] Falha crítica na materialização: {exc}\n{error_details}")
+            
+            # Retorno JSON garantido com detalhamento técnico para o desenvolvedor
+            return Response(
+                {
+                    "detail": f"Erro interno na materialização: {str(exc)}", 
+                    "trace_id": trace_id,
+                    "debug_info": error_details if settings.DEBUG else None
+                }, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+class StreamlitExportAPIView(APIView):
+    """
+    Endpoint para exportar dashboard como script Streamlit.
+    """
+    @extend_schema(
+        tags=["ai"],
+        summary="Exportar dashboard como pacote Streamlit (.zip)",
+    )
+    def get(self, request, dashboard_id):
+        try:
+            dashboard = Dashboard.objects.get(id=dashboard_id)
+            exporter = StreamlitExporter()
+            zip_buffer = exporter.generate_zip(dashboard)
+            
+            response = FileResponse(zip_buffer, content_type="application/zip")
+            response["Content-Disposition"] = f'attachment; filename="agentbi_export_{dashboard_id}.zip"'
+            return response
+        except Dashboard.DoesNotExist:
+            return Response({"detail": "Dashboard não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as exc:
+            logger.exception("Erro ao exportar Streamlit")
+            return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

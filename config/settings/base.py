@@ -94,6 +94,9 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / config("DATABASE_NAME", default="dev.sqlite3"),
+        "OPTIONS": {
+            "timeout": 20,  # Aumenta a paciência do SQLite para 20 segundos
+        },
     }
 }
 

@@ -18,6 +18,8 @@ export const metadata: Metadata = {
   description: "Protótipo GenIA para Analytics com AWS Bedrock",
 };
 
+import { AuthProvider } from "@/contexts/AuthContext";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -26,7 +28,9 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className={`${inter.variable} ${playfair.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col font-sans relative">
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
         <DevHUD />
       </body>
     </html>

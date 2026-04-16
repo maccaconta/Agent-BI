@@ -97,7 +97,7 @@ export default function RelationshipDesigner() {
     
     try {
       // Eleva o status do projeto para BLUEPRINT no backend
-      await fetch(`http://127.0.0.1:8000/api/v1/projects/${projectId}/`, {
+      await fetch(`/api/v1/projects/${projectId}/`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -143,10 +143,24 @@ export default function RelationshipDesigner() {
   if (approving) {
     return (
       <div className="min-h-[75vh] flex flex-col items-center justify-center p-10 bg-lux-bg/5">
-        <motion.div animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }} transition={{ duration: 3, repeat: Infinity }}>
-          <div className="w-40 h-40 rounded-full border-4 border-lux-text border-t-transparent animate-spin flex items-center justify-center shadow-[0_0_100px_rgba(0,0,0,0.1)]">
-            <Database size={64} className="text-lux-text" />
-          </div>
+        <motion.div 
+          animate={{ scale: [1, 1.05, 1] }} 
+          transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+          className="relative"
+        >
+          <motion.div
+            animate={{ rotate: [0, 360] }}
+            transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+            className="w-40 h-40 rounded-full border-[3px] border-lux-text/10 border-t-lux-text flex items-center justify-center shadow-[0_0_60px_rgba(0,0,0,0.05)]"
+          >
+            <Database size={64} className="text-lux-text opacity-90" />
+          </motion.div>
+          {/* Efeito de brilho orbital secundário */}
+          <motion.div
+            animate={{ rotate: [360, 0] }}
+            transition={{ repeat: Infinity, duration: 3, ease: "linear" }}
+            className="absolute inset-0 border border-dashed border-lux-text/5 rounded-full scale-125"
+          />
         </motion.div>
         <h2 className="text-4xl font-serif font-bold text-lux-text mt-12 mb-6 text-center">Gerando Base Analitica...</h2>
         <p className="text-lux-muted text-xl max-w-2xl text-center leading-relaxed font-light">

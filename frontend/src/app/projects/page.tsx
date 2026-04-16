@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { FolderKanban, Plus, Clock, Search, Workflow, Loader2 } from "lucide-react";
+import { FolderKanban, Plus, Clock, Search, Workflow, Loader2, Database } from "lucide-react";
 import Link from "next/link";
 import { getBackendJsonHeaders } from "@/lib/backendAuth";
 
@@ -9,15 +9,16 @@ export default function ProjectsList() {
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [domains, setDomains] = useState<any[]>([]);
+  const [selectedDomain, setSelectedDomain] = useState("all");
 
   useEffect(() => {
     const fetchProjects = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/api/v1/projects/", {
+        const res = await fetch("/api/v1/projects/", {
           headers: getBackendJsonHeaders()
         });
         const data = await res.json();
-        // A API pode retornar { results: [] } ou []
         const list = Array.isArray(data) ? data : (data.results || []);
         setProjects(list);
       } catch (error) {
@@ -27,11 +28,27 @@ export default function ProjectsList() {
       }
     };
 
+    const fetchDomains = async () => {
+      try {
+        const res = await fetch("/api/v1/projects/domains", {
+          headers: getBackendJsonHeaders()
+        });
+        const data = await res.json();
+        setDomains(Array.isArray(data) ? data : (data.results || []));
+      } catch (error) {
+        console.error("Erro ao carregar domínios:", error);
+      }
+    };
+
     fetchProjects();
+    fetchDomains();
   }, []);
 
   const filteredProjects = projects.filter(p => 
-    p.status === "BLUEPRINT" && (
+    p.status === "BLUEPRINT" && 
+    (p.blueprint_widgets && p.blueprint_widgets.length > 0) &&
+    (selectedDomain === "all" || p.domain === selectedDomain) &&
+    (
       p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (p.domain_name && p.domain_name.toLowerCase().includes(searchTerm.toLowerCase()))
     )
@@ -62,7 +79,7 @@ export default function ProjectsList() {
         </Link>
       </div>
 
-      <div className="mb-8 flex gap-4">
+      <div className="mb-8 flex flex-col md:flex-row gap-4">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-lux-muted/70" size={18} />
           <input 
@@ -72,6 +89,20 @@ export default function ProjectsList() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+        </div>
+
+        <div className="relative w-full md:w-64">
+          <Database className="absolute left-4 top-1/2 -translate-y-1/2 text-lux-muted/70" size={18} />
+          <select
+            value={selectedDomain}
+            onChange={(e) => setSelectedDomain(e.target.value)}
+            className="glass-input pl-12 h-12 w-full text-md shadow-sm appearance-none cursor-pointer"
+          >
+            <option value="all">Todos os Domínios</option>
+            {domains.map(d => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
         </div>
       </div>
 

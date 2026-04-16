@@ -155,25 +155,29 @@ class ParquetService:
         }
 
     def _optimize_dtypes(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Otimiza tipos de dados para reduzir tamanho."""
+        """
+        Otimiza tipos de dados usando operações vetorizadas (Alta Performance).
+        Garante que datas e números sejam convertidos sem loops lentos.
+        """
         for col in df.columns:
             if df[col].dtype == object:
-                # 1. Tenta datetime robusto
-                try:
-                    # Salva uma cópia para comparar se a conversão foi útil
-                    converted_dt = self._robust_to_datetime(df[col])
-                    if not converted_dt.equals(df[col]) and "datetime" in str(converted_dt.dtype):
-                        df[col] = converted_dt
+                # Tenta conversão numérica primeiro (mais comum e rápida)
+                # Otimização: processa apenas se houver padrão numérico provável
+                if any(k in col.lower() for k in ["vlr", "valor", "limit", "saldo", "total", "price", "amount"]):
+                    try:
+                        df[col] = pd.to_numeric(df[col], errors="coerce")
                         continue
-                except (ValueError, TypeError):
-                    pass
+                    except (ValueError, TypeError):
+                        pass
 
-                # 2. Tenta numérico
-                try:
-                    df[col] = pd.to_numeric(df[col])
-                    continue
-                except (ValueError, TypeError):
-                    pass
+                # Tenta conversão de data (Vetorizada e com dayfirst=True para Brasil)
+                if any(k in col.lower() for k in ["data", "date", "dt_", "time", "created", "update", "inicio", "fim", "_at", "período"]):
+                    try:
+                        # pd.to_datetime vetorizado é muito mais rápido que o loop antigo
+                        df[col] = pd.to_datetime(df[col], dayfirst=True, errors="coerce")
+                        continue
+                    except (ValueError, TypeError):
+                        pass
 
         return df
 
@@ -273,24 +277,22 @@ class ParquetService:
             logger.error(f"Erro ao inferir schema: {e}")
             raise
 
-    def build_data_profile(self, df: pd.DataFrame) -> dict:
+    def build_data_profile(self, df: pd.DataFrame, sample_size: int = 10000) -> dict:
         """
-        Gera um perfil estatístico compacto do DataFrame.
-
-        Substitui o envio de centenas de linhas brutas para a LLM por um
-        resumo inteligente por coluna (~10x menor em tokens):
-          - Colunas categóricas: top 10 valores com frequência relativa (%)
-          - Colunas numéricas: min, max, mean, stddev, p25/p50/p75
-          - Colunas de data: data mínima e máxima
-          - Todas: cardinalidade (nº únicos) e taxa de nulos (%)
+        Gera um perfil estatístico inteligente usando amostragem de alta performance (10k linhas).
         """
+        # Se o DF for maior que o limite, usa uma amostra para o profiling estatístico
+        # Isso garante feedback instantâneo na UI e contexto suficiente para a IA
+        process_df = df.head(sample_size) if len(df) > sample_size else df
+        
         profile: dict = {
             "row_count": len(df),
             "column_count": len(df.columns),
             "columns": {},
+            "profiling_sample_size": len(process_df),
         }
 
-        for col in df.columns:
+        for col in process_df.columns:
             series = df[col]
             total = len(series)
             null_count = int(series.isna().sum())
@@ -357,22 +359,23 @@ class ParquetService:
         )
         return profile
 
-    def build_temporal_profile(self, df: pd.DataFrame) -> dict:
+    def build_temporal_profile(self, df: pd.DataFrame, sample_size: int = 20000) -> dict:
         """
-        Gera um perfil de tendência temporal (Camada 2).
-        Identifica colunas de data e resume métricas numéricas por mês.
+        Gera um perfil de tendência temporal na amostra para velocidade.
         """
-        temporal_profile = {"series": [], "has_temporal_data": False}
+        process_df = df.head(sample_size) if len(df) > sample_size else df
+        temporal_profile = {"series": [], "has_temporal_data": False, "sample_size": len(process_df)}
         
         # 1. Identificar colunas de data
-        date_cols = [col for col in df.columns if "datetime" in str(df[col].dtype)]
+        date_cols = [col for col in process_df.columns if "datetime" in str(process_df[col].dtype)]
         if not date_cols:
-            # Tentar converter objetos que parecem datas
-            for col in df.select_dtypes(include=["object"]).columns:
+            # Tentar converter objetos que parecem datas na amostra
+            for col in process_df.select_dtypes(include=["object"]).columns:
                 try:
-                    df[col] = pd.to_datetime(df[col])
-                    date_cols.append(col)
-                    break # Usar apenas a primeira para o perfil principal
+                    process_df[col] = pd.to_datetime(process_df[col], dayfirst=True, errors="coerce")
+                    if process_df[col].notna().any():
+                        date_cols.append(col)
+                        break 
                 except Exception:
                     continue
         
@@ -385,16 +388,16 @@ class ParquetService:
         
         # 2. Identificar colunas numéricas para agregar
         num_cols = [
-            col for col in df.columns 
-            if str(df[col].dtype) in ("int64", "float64") and col != time_col
-        ][:5] # Limitar a 5 para manter o JSON leve
+            col for col in process_df.columns 
+            if str(process_df[col].dtype) in ("int64", "float64", "float32", "int32") and col != time_col
+        ][:5] 
         
         if not num_cols:
             return temporal_profile
 
         try:
-            # 3. Agregação Mensal
-            df_temp = df.set_index(time_col)
+            # 3. Agregação Mensal na amostra
+            df_temp = process_df.set_index(time_col)
             monthly = df_temp[num_cols].resample("ME").agg(["sum", "mean", "count"])
             
             # Formatar para JSON amigável

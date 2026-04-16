@@ -18,6 +18,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
+APPEND_SLASH = False
 
 # Banco local rápido para desenvolvimento
 from decouple import config
@@ -36,10 +37,10 @@ CACHES = {
     }
 }
 
-CELERY_BROKER_URL = "memory://"
-CELERY_RESULT_BACKEND = "cache+memory://"
-CELERY_TASK_ALWAYS_EAGER = True
-CELERY_TASK_EAGER_PROPAGATES = True
+
+# Celery: detectado automaticamente pelo base.py via REDIS_URL.
+# Se REDIS_URL estiver vazio → Zero-Infra (síncrono). Se tiver → Celery real.
+
 
 # Mantém frontend local funcionando sem restrições de CORS
 CORS_ALLOW_ALL_ORIGINS = True

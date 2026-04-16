@@ -51,6 +51,8 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
     try:
         from apps.datasets.services.parquet_service import ParquetService
         
+        dataset.processing_step = "Lendo Dados Brutos..."
+        dataset.save(update_fields=["processing_step"])
         trace.start_step("Carregando Dados Brutos")
         use_aws_data = bool(getattr(settings, "USE_AWS_DATA_SERVICES", True))
         parquet_svc = ParquetService()
@@ -70,6 +72,8 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
             
         trace.end_step("Carregando Dados Brutos", message=f"Formato: {ext.upper()}")
 
+        dataset.processing_step = "Limpando Datas e Números (Vetorizado)..."
+        dataset.save(update_fields=["processing_step"])
         trace.start_step("Conversão para Parquet")
         logger.info("[DatasetTask] Processando %s", ext.upper())
         
@@ -111,27 +115,32 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
             logger.error(f"[DatasetTask] Falha crítica de leitura: {conv_err}")
             raise ValueError(f"O arquivo {ext.upper()} não pôde ser lido: {conv_err}")
 
+        # --- FAST SAMPLING (Performance UX) ---
+        # Salva uma amostra inicial IMEDIATAMENTE antes do profiling pesado e da IA
+        dataset.sample_json = _to_json_compatible(df_full.head(100).fillna("").to_dict(orient="records"))
+        dataset.save(update_fields=["sample_json"])
+        # ----------------------------------------
+
         trace.end_step("Conversão para Parquet")
 
+        dataset.processing_step = "Gerando Perfil Estatístico (Amostra 10k)..."
+        dataset.save(update_fields=["processing_step"])
         trace.start_step("Data Profiling")
-        # Gera amostra para a UI (100 linhas)
-        all_rows_sample = _to_json_compatible(df_full.head(100).fillna("").to_dict(orient="records"))
-        dataset.sample_json = all_rows_sample
-        dataset.save(update_fields=["sample_json", "updated_at"])
-
         # Gerar perfil estatístico compacto (substitui sample bruto para a LLM)
         try:
-            # 1. Buscar políticas de governança do tenant
-            from apps.governance.models import GlobalSystemPrompt
-            policy = GlobalSystemPrompt.objects.filter(tenant=dataset.project.tenant, is_active=True).first()
+            # 1. Buscar políticas de governança do tenant (Novo Modelo GlobalAIConfig)
+            from apps.governance.models import GlobalAIConfig
+            policy = GlobalAIConfig.objects.filter(tenant=dataset.project.tenant, is_active=True).first()
             
-            # 2. Perfil Básico (Sempre gerado)
-            data_profile = parquet_svc.build_data_profile(df_full)
+            # 2. Perfil Básico (Sempre gerado - agora com Smart Sampling de 10k)
+            data_profile = parquet_svc.build_data_profile(df_full, sample_size=10000)
             
             # 3. Perfil Temporal (Condicional via Governança)
-            if policy and policy.enable_temporal_profile:
+            enable_temporal = policy.enable_temporal_profile if (policy and hasattr(policy, 'enable_temporal_profile')) else True
+            
+            if enable_temporal:
                 logger.info("[DatasetTask] Gerando perfil temporal (ativado na governanca)")
-                temporal_data = parquet_svc.build_temporal_profile(df_full)
+                temporal_data = parquet_svc.build_temporal_profile(df_full, sample_size=20000)
                 data_profile["temporal"] = temporal_data
             
             dataset.data_profile_json = _to_json_compatible(data_profile)
@@ -141,6 +150,8 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
         dataset.save(update_fields=["data_profile_json", "updated_at"])
         trace.end_step("Data Profiling", message="Perfil básico e temporal concluídos")
 
+        dataset.processing_step = "Persistindo no Data Lake Analítico..."
+        dataset.save(update_fields=["processing_step"])
         trace.start_step("Persistência do Dataset")
         table_name = (
             dataset.name.lower().replace(" ", "_").replace("-", "_")[:255]
@@ -174,15 +185,30 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
             )
 
             sqlite_store = LocalSQLiteAnalyticsStoreService()
-            # Ingestão real de todos os dados no SQLite analítico
-            sqlite_table = sqlite_store.upsert_dataset_rows(
+            # Ingestão TURBO: Envia o DataFrame diretamente para o SQLite analítico
+            sqlite_table = sqlite_store.upsert_dataset_dataframe(
                 dataset=dataset,
-                rows=_to_json_compatible(df_full.fillna("").to_dict(orient="records")),
+                df=df_full.fillna(""),
                 schema_json=schema_info,
             )
 
         # No modo local ou AWS, os dados técnicos já estão prontos, mas mantemos PROCESSING
-        # para a etapa de IA que vem a seguir.
+        # para a etapa de IA que vem a seguir. Fazemos um MERGE para não perder edições manuais.
+        old_schema = dataset.schema_json or {}
+        old_cols = {c["name"]: c for c in old_schema.get("columns", [])}
+        
+        new_cols = schema_info.get("columns", [])
+        for col in new_cols:
+            c_name = col["name"]
+            if c_name in old_cols:
+                # Preserva o que for "negócio" e não "técnico"
+                col["description"] = old_cols[c_name].get("description") or col.get("description", "")
+                col["is_key"] = old_cols[c_name].get("is_key") or col.get("is_key", False)
+                col["is_historical_date"] = old_cols[c_name].get("is_historical_date") or col.get("is_historical_date", False)
+                col["is_category"] = old_cols[c_name].get("is_category") or col.get("is_category", False)
+                col["is_value"] = old_cols[c_name].get("is_value") or col.get("is_value", False)
+                col["is_elected_for_risk"] = old_cols[c_name].get("is_elected_for_risk") or col.get("is_elected_for_risk", False)
+
         dataset.s3_parquet_path = parquet_path
         dataset.glue_table = table_name if use_aws_data else sqlite_table
         if not use_aws_data:
@@ -211,6 +237,8 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
 
         # --- NOVA ETAPA: INFERÊNCIA SEMÂNTICA E ESTRATÉGICA (LLM) ---
         print(f"\n\n[AI_ENGINE] 🧠 Iniciando interpretação semântica para: {dataset.name}...")
+        dataset.processing_step = "Interpretando Semântica de Negócio (Bedrock)..."
+        dataset.save(update_fields=["processing_step"])
         trace.start_step("Enriquecimento com IA (Bedrock)")
         try:
             from apps.ai_engine.agents.data_interpreter_agent import DataInterpreterAgent
@@ -276,9 +304,13 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
                     elif role == "MEASURE": col["is_value"] = True
                     
                     # --- NOVOS CAMPOS DE DOMÍNIO ---
-                    col["grouping_suitability"] = mapping.get("grouping_suitability", "MEDIUM")
                     col["calculation_suitability"] = mapping.get("calculation_suitability", "NONE")
                     col["usage_instructions"] = mapping.get("usage_instructions", "")
+                    
+                    # --- CORREÇÃO DE TIPO FÍSICO PELA IA ---
+                    if mapping.get("physical_type"):
+                        col["type"] = mapping["physical_type"]
+                        print(f"   - [AI_TYPE_CORRECTION] {col_name} -> {mapping['physical_type']}")
                     
                     # Hint de formato de data
                     if mapping.get("date_format_hint"):
@@ -318,8 +350,9 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
         # Finalização definitiva do Dataset
         dataset.status = DatasetStatus.READY
         dataset.processing_finished_at = timezone.now()
+        dataset.processing_step = ""
         dataset.processing_error = ""
-        dataset.save(update_fields=["status", "processing_finished_at", "processing_error", "updated_at"])
+        dataset.save(update_fields=["status", "processing_finished_at", "processing_step", "processing_error", "updated_at"])
 
         print(f"[DatasetTask] 🚀 Dataset '{dataset.name}' totalmente pronto para análise!\n")
 

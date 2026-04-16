@@ -48,13 +48,14 @@ class TenantCreateSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     role_in_tenant = serializers.SerializerMethodField()
+    primary_tenant_slug = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             "id", "email", "username", "full_name", "avatar_url",
             "is_active", "is_super_admin", "role_in_tenant",
-            "last_active_at", "created_at",
+            "primary_tenant_slug", "last_active_at", "created_at",
         ]
         read_only_fields = ["id", "is_super_admin", "created_at"]
 
@@ -63,6 +64,9 @@ class UserSerializer(serializers.ModelSerializer):
         if request and request.tenant:
             return obj.get_tenant_role(request.tenant)
         return None
+
+    def get_primary_tenant_slug(self, obj):
+        return obj.primary_tenant.slug if obj.primary_tenant else None
 
 
 class UserCreateSerializer(serializers.ModelSerializer):

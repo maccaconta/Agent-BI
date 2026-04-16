@@ -7,7 +7,6 @@ from rest_framework.response import Response
 
 from apps.audit.signals import audit_event
 from apps.users.permissions import IsTenantAnalyst, IsTenantMember, TenantObjectPermission
-from apps.users.mock_auth import LocalFastMockAuthentication
 
 from .models import DataDomain, Project
 from .serializers import (
@@ -27,8 +26,6 @@ class DataDomainViewSet(viewsets.ModelViewSet):
 
     queryset = DataDomain.objects.all()
     serializer_class = DataDomainSerializer
-    permission_classes = [permissions.AllowAny]
-    authentication_classes = [] # Desativa autenticação para evitar erros de MockAuth em desenvolvimento
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["tenant"]
     search_fields = ["name", "description"]
@@ -54,7 +51,6 @@ class DataDomainViewSet(viewsets.ModelViewSet):
 class ProjectViewSet(viewsets.ModelViewSet):
     """ViewSet de projetos com endpoint de intake para criação via frontend."""
 
-    authentication_classes = [LocalFastMockAuthentication]
     queryset = Project.objects.filter(is_deleted=False)
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["status", "domain"]

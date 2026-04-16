@@ -6,11 +6,14 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 
 def build_sqlite_table_name(dataset_id: str, dataset_name: str | None = None) -> str:
@@ -31,6 +34,36 @@ class LocalSQLiteAnalyticsStoreService:
 
     def __init__(self, db_path: str | None = None):
         self.db_path = Path(db_path or self._default_db_path())
+
+    def upsert_dataset_dataframe(self, dataset, df: Any, schema_json: dict | None = None) -> str:
+        """
+        Versão de ALTA PERFORMANCE: Transfere o DataFrame diretamente para o SQLite
+        usando recursos nativos do Pandas para evitar conversões lentas de dicionários.
+        """
+        table_name = build_sqlite_table_name(str(dataset.id), getattr(dataset, "name", None))
+        
+        self._ensure_db_parent()
+        connection = sqlite3.connect(self.db_path)
+        try:
+            self._ensure_registry_table(connection)
+            self._drop_table(connection, table_name)
+            
+            # O Pandas to_sql é muito mais rápido que o executemany manual com listas de dicts
+            # Usamos chunksize para manter o consumo de memória estável em datasets gigantes.
+            df.to_sql(
+                table_name, 
+                connection, 
+                if_exists="replace", 
+                index=False, 
+                chunksize=10000
+            )
+            
+            self._register_dataset(connection, dataset_id=str(dataset.id), table_name=table_name)
+            connection.commit()
+            logger.info(f"[SQLiteStore] Dataset {dataset.id} ingerido com sucesso (%s linhas).", len(df))
+        finally:
+            connection.close()
+        return table_name
 
     def upsert_dataset_rows(self, dataset, rows: list[dict], schema_json: dict | None = None) -> str:
         """

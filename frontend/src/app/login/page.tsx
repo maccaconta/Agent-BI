@@ -1,97 +1,135 @@
 "use client";
 import React, { useState } from "react";
 import { motion } from "framer-motion";
-import { ShieldCheck, Globe, Lock, ArrowRight } from "lucide-react";
+import { ShieldCheck, Lock, ArrowRight, Mail, Key, AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
-  const handleGoogleLogin = () => {
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
-    // Simulação do túnel do Google OAuth2
-    setTimeout(() => {
-      router.push("/login/mfa"); // Próximo passo: Desafio TOTP
-    }, 1800);
+    setError("");
+
+    try {
+      const response = await fetch("/api/v1/auth/token/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Falha na autenticação. Verifique suas credenciais.");
+      }
+
+      // data contém { access, refresh, user: { ... } }
+      login(data.access, data.refresh, data.user);
+      
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-lux-bg flex items-center justify-center p-6 relative overflow-hidden transition-colors duration-500 font-sans">
+    <div className="min-h-screen bg-lux-bg flex items-center justify-center p-6 relative overflow-hidden font-sans">
       
-      {/* Elementos Decorativos de Background (Lux) */}
+      {/* Decoração Background */}
       <div className="absolute top-[-10%] right-[-5%] w-[500px] h-[500px] bg-lux-card/10 rounded-full blur-[120px]" />
       <div className="absolute bottom-[-10%] left-[-5%] w-[400px] h-[400px] bg-lux-text/5 rounded-full blur-[100px]" />
 
       <motion.div 
-        initial={false}
+        initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8 }}
-        className="w-full max-w-[480px] z-10"
+        className="w-full max-w-[440px] z-10"
       >
-        <div className="glass-panel p-10 md:p-14 border-lux-border/30 shadow-[0_40px_100px_-20px_rgba(0,0,0,0.15)] flex flex-col items-center">
+        <div className="glass-panel p-10 md:p-12 border-lux-border/30 shadow-[0_40px_100px_-20px_rgba(0,0,0,0.15)]">
             
-            {/* Branding Core */}
-            <div className="mb-12 flex flex-col items-center">
-               <motion.img 
-                 initial={false}
-                 animate={{ scale: 1, opacity: 1 }}
-                 src="/logos/ntt-data-black.png" 
-                 alt="NTT DATA" 
-                 className="h-10 w-auto mb-6 object-contain"
-               />
-               <div className="h-px w-12 bg-lux-border/40 mb-6" />
-               <h1 className="text-3xl font-serif font-bold text-lux-text tracking-tight text-center">Monitor de Acesso</h1>
-               <p className="text-lux-muted text-[10px] mt-3 font-black uppercase tracking-[0.4em]">Governança & Auditoria</p>
+            {/* Branding */}
+            <div className="mb-10 flex flex-col items-center">
+               <img src="/logos/ntt-data-black.png" alt="NTT DATA" className="h-8 mb-6 object-contain" />
+               <h1 className="text-2xl font-serif font-black text-lux-text tracking-tight uppercase">Portal de Acesso</h1>
+               <div className="h-0.5 w-8 bg-lux-accent mt-2" />
             </div>
 
-            {/* Login Action Area */}
-            <div className="w-full space-y-6">
+            {error && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-600 text-xs font-bold"
+              >
+                <AlertCircle size={16} />
+                {error}
+              </motion.div>
+            )}
+
+            {/* Login Form */}
+            <form onSubmit={handleLogin} className="space-y-5">
+               <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-lux-muted tracking-widest ml-1">E-mail Corporativo</label>
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-lux-muted/40" size={18} />
+                    <input 
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full pl-12 pr-4 py-4 bg-white/50 border border-lux-border/20 rounded-2xl focus:ring-2 focus:ring-lux-text/5 focus:border-lux-text/20 transition-all outline-none text-sm text-lux-text"
+                      placeholder="seu.nome@nttdata.com"
+                    />
+                  </div>
+               </div>
+
+               <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase text-lux-muted tracking-widest ml-1">Senha</label>
+                  <div className="relative">
+                    <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-lux-muted/40" size={18} />
+                    <input 
+                      type="password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full pl-12 pr-4 py-4 bg-white/50 border border-lux-border/20 rounded-2xl focus:ring-2 focus:ring-lux-text/5 focus:border-lux-text/20 transition-all outline-none text-sm text-lux-text"
+                      placeholder="••••••••"
+                    />
+                  </div>
+               </div>
+
                <button 
-                 onClick={handleGoogleLogin}
+                 type="submit"
                  disabled={loading}
-                 className="w-full flex items-center justify-center gap-4 bg-white border border-lux-border/30 p-5 rounded-2xl text-lux-text font-bold shadow-sm hover:shadow-md hover:bg-lux-bg transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-wait group"
+                 className="w-full bg-lux-text text-white p-5 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 group mt-2"
                >
-                 <div className="p-2 bg-lux-bg/50 rounded-lg group-hover:bg-white transition-colors">
-                   <img src="/logos/google-cloud.svg" alt="Google" className="w-5 h-5" /> 
-                 </div>
-                 <span className="text-md">Autenticar via Google Cloud</span>
-                 {loading ? (
-                    <div className="w-4 h-4 border-2 border-lux-text border-t-transparent rounded-full animate-spin ml-2" />
-                 ) : (
-                    <ArrowRight size={18} className="opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
-                 )}
+                 {loading ? "Autenticando..." : "Entrar no Agent-BI"}
+                 {!loading && <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />}
                </button>
+            </form>
 
-               <div className="relative flex items-center justify-center py-4">
-                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-lux-border/20"></div></div>
-                  <span className="relative px-4 bg-lux-bg text-[10px] uppercase font-bold text-lux-muted tracking-widest">Segurança Bancária</span>
-               </div>
-
-               {/* Institutional Credits & AWS */}
-               <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-lux-bg/30 rounded-2xl flex flex-col items-center justify-center border border-lux-border/10">
-                     <ShieldCheck size={20} className="text-lux-muted mb-2" />
-                     <span className="text-[10px] font-bold text-lux-text uppercase">AES-256 Auth</span>
+            {/* Footer */}
+            <div className="mt-10 pt-8 border-t border-lux-border/10 flex flex-col items-center gap-4">
+               <div className="flex items-center gap-6 opacity-40">
+                  <div className="flex items-center gap-1.5">
+                    <ShieldCheck size={14} />
+                    <span className="text-[8px] font-black uppercase tracking-tighter">JWT Secure</span>
                   </div>
-                  <div className="p-4 bg-lux-bg/30 rounded-2xl flex flex-col items-center justify-center border border-lux-border/10">
-                     <Lock size={20} className="text-lux-muted mb-2" />
-                     <span className="text-[10px] font-bold text-lux-text uppercase">Zero Trust</span>
+                  <div className="flex items-center gap-1.5">
+                    <Lock size={14} />
+                    <span className="text-[8px] font-black uppercase tracking-tighter">AES-256 Cloud</span>
                   </div>
                </div>
-            </div>
-
-            {/* Footer Branding */}
-            <div className="mt-14 flex items-center gap-3 opacity-60">
-               <span className="text-[10px] font-bold text-lux-muted uppercase tracking-widest">Powered by</span>
-               <img src="/logos/aws-partner.png" alt="AWS" className="h-5 w-auto" />
+               <img src="/logos/aws-partner.png" alt="AWS" className="h-4 opacity-50 filter grayscale" />
             </div>
         </div>
-
-        {/* Global Compliance Note */}
-        <p className="mt-8 text-center text-[10px] text-lux-muted/60 max-w-[300px] mx-auto leading-relaxed">
-           Esta plataforma é monitorada por protocolos de **Governança Global**. O acesso requer autenticação multifator obrigatória conforme política NTT DATA.
-        </p>
       </motion.div>
     </div>
   );

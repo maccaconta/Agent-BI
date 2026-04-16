@@ -80,13 +80,13 @@ class GeneratorAgent:
             iteration=iteration,
         )
 
-        from apps.governance.models import GlobalSystemPrompt
-
+        from apps.governance.models import GlobalAIConfig
         tenant = dataset.project.tenant
-        global_policy = GlobalSystemPrompt.objects.filter(tenant=tenant, is_active=True).first()
+        global_policy = GlobalAIConfig.objects.filter(tenant=tenant, is_active=True).first()
         system_instructions = GENERATOR_SYSTEM_PROMPT
         if global_policy:
-            system_instructions = global_policy.generate_full_system_prompt() + "\n\n" + GENERATOR_SYSTEM_PROMPT
+            master_rules = f"PERSONA: {global_policy.persona_title}\n{global_policy.persona_description}\n\nRULES: {global_policy.compliance_rules}"
+            system_instructions = master_rules + "\n\n" + GENERATOR_SYSTEM_PROMPT
 
         try:
             response_data = self.bedrock.invoke_with_json_output(

@@ -8,3 +8,4 @@ class UsersConfig(AppConfig):
 
     def ready(self):
         import apps.audit.signals  # noqa: F401
+        import apps.users.signals  # noqa: F401

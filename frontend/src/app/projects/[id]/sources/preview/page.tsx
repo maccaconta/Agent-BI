@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle2,
@@ -15,6 +15,7 @@ import {
   Info,
   Sparkles,
   Shield,
+  Clock,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import {
@@ -78,6 +79,9 @@ export default function DataPreviewPage() {
     is_value: false,
     is_elected_for_risk: false,
   });
+  const [processingStep, setProcessingStep] = useState<string>("");
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const saveSources = (items: StoredProjectSource[]) => {
     setSources(items);
@@ -91,14 +95,35 @@ export default function DataPreviewPage() {
       setActiveSourceId(sessionSources[0].id);
     }
     setLoading(false);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
   }, [projectId]);
+
+  // Efeito para o Cronômetro reativo ao processamento
+  useEffect(() => {
+    const isAnySourceProcessing = sources.some(s => s.status === "PROCESSING");
+    if (isAnySourceProcessing) {
+      if (!timerRef.current) {
+        setElapsedTime(0);
+        timerRef.current = setInterval(() => {
+          setElapsedTime(prev => prev + 1);
+        }, 1000);
+      }
+    } else {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+  }, [sources]);
 
   useEffect(() => {
     let isMounted = true;
 
     const fetchDatasets = async () => {
       try {
-        const response = await fetch(`http://127.0.0.1:8000/api/v1/datasets/?project_id=${projectId}`, {
+        const response = await fetch(`/api/v1/datasets/?project_id=${projectId}`, {
           headers: getBackendAuthHeaders(),
         });
         if (!response.ok) return;
@@ -106,6 +131,14 @@ export default function DataPreviewPage() {
         const data = await response.json();
         const results = Array.isArray(data?.results) ? data.results : Array.isArray(data) ? data : [];
         if (results.length === 0 || !isMounted) return;
+
+        // Atualiza passo de processamento se disponível no primeiro dataset processando
+        const processingDataset = results.find((d: any) => d.status === "PROCESSING");
+        if (processingDataset) {
+          setProcessingStep(processingDataset.processing_step || "Analisando semântica...");
+        } else {
+          setProcessingStep("");
+        }
 
         const apiSources = results.map((dataset: ApiDataset) => {
           const colDescriptions: Record<string, string> = {};
@@ -162,7 +195,7 @@ export default function DataPreviewPage() {
     };
 
     fetchDatasets();
-    const interval = setInterval(fetchDatasets, 5000);
+    const interval = setInterval(fetchDatasets, 3000);
     return () => {
       isMounted = false;
       clearInterval(interval);
@@ -216,7 +249,7 @@ export default function DataPreviewPage() {
     // Se for um dataset persistido no backend (nâo apenas local), sincroniza
     if (activeSourceId && !activeSourceId.startsWith("local-")) {
       try {
-        const getResp = await fetch(`http://127.0.0.1:8000/api/v1/datasets/${activeSourceId}/`, {
+        const getResp = await fetch(`/api/v1/datasets/${activeSourceId}/`, {
           headers: getBackendAuthHeaders(),
         });
         if (!getResp.ok) return;
@@ -229,7 +262,7 @@ export default function DataPreviewPage() {
           );
         }
 
-        await fetch(`http://127.0.0.1:8000/api/v1/datasets/${activeSourceId}/`, {
+        await fetch(`/api/v1/datasets/${activeSourceId}/`, {
           method: "PATCH",
           headers: {
             ...getBackendAuthHeaders(),
@@ -273,51 +306,113 @@ export default function DataPreviewPage() {
         {activeSource && (
           <motion.div key={activeSource.id} initial={false} animate={{ opacity: 1, scale: 1 }} className="flex-1 flex flex-col min-h-0">
             {/* AI Strategic Intelligence - Lux-Sober Minimalist Design */}
-            {(activeSource.aiDescription || (activeSource.aiInsights && activeSource.aiInsights.length > 0)) && (
+            {(activeSource.status === "PROCESSING" || activeSource.aiDescription || (activeSource.aiInsights && activeSource.aiInsights.length > 0)) && (
               <motion.div 
                 initial={{ opacity: 0, y: 10 }} 
                 animate={{ opacity: 1, y: 0 }}
-                className="mb-6 border border-lux-border/30 bg-lux-bg/50 dark:bg-lux-card/20 rounded-[1.5rem] overflow-hidden shadow-sm"
+                className="mb-6 border border-lux-border/30 bg-lux-bg/50 dark:bg-lux-card/20 rounded-[1.5rem] overflow-hidden shadow-sm relative"
               >
+                {/* Efeito de Shimmer se estiver processando e sem dados ainda */}
+                {activeSource.status === "PROCESSING" && !activeSource.aiDescription && (
+                  <div className="absolute inset-0 z-10 pointer-events-none overflow-hidden rounded-[1.5rem]">
+                    <motion.div 
+                      animate={{ x: ["-100%", "100%"] }} 
+                      transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                      className="h-full w-1/2 bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-12"
+                    />
+                  </div>
+                )}
+
                 <div className="p-4 lg:p-6 flex flex-col lg:flex-row gap-6">
                   <div className="flex-1 space-y-4">
                     <div className="flex items-center gap-3">
-                      <div className="p-2 bg-lux-text text-lux-bg rounded-xl shadow-md">
+                      <div className={`p-2 rounded-xl shadow-md transition-colors ${activeSource.status === "PROCESSING" && !activeSource.aiDescription ? "bg-lux-muted text-lux-bg animate-pulse" : "bg-lux-text text-lux-bg"}`}>
                         <Sparkles size={18} />
                       </div>
                       <div>
                         <span className="text-[9px] font-black uppercase tracking-[0.3em] text-lux-muted block mb-0.5">Diagnóstico Executivo</span>
-                        <h2 className="text-xl font-serif font-bold text-lux-text leading-tight">
-                          {activeSource.aiDescription || "Interpretação Semântica"}
-                        </h2>
+                        <div className="flex items-center gap-3">
+                          <h2 className={`text-xl font-serif font-bold leading-tight transition-all ${activeSource.status === "PROCESSING" && !activeSource.aiDescription ? "text-lux-muted/40 italic" : "text-lux-text"}`}>
+                            {activeSource.aiDescription || (activeSource.status === "PROCESSING" ? "IA está gerando seu diagnóstico estratégico..." : "Interpretação Semântica")}
+                          </h2>
+                          {activeSource.status === "PROCESSING" && (
+                            <div className="flex items-center gap-2 px-3 py-1 bg-lux-accent/10 border border-lux-accent/20 rounded-full animate-pulse shrink-0">
+                               <Clock size={10} className="text-lux-accent" />
+                               <span className="text-[10px] font-mono font-black text-lux-accent tabular-nums">
+                                 {Math.floor(elapsedTime / 60)}:{(elapsedTime % 60).toString().padStart(2, "0")}
+                               </span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                     
-                    {activeSource.aiInsights && activeSource.aiInsights.length > 0 && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
-                        {activeSource.aiInsights.map((insight, idx) => (
-                          <div key={idx} className="flex items-start gap-2 p-2 bg-white dark:bg-lux-card/40 border border-lux-border/20 rounded-xl group hover:border-lux-accent/30 transition-all">
-                             <div className="mt-1 w-1 h-1 rounded-full bg-lux-accent/60 group-hover:bg-lux-accent shrink-0" />
-                             <span className="text-[11px] font-medium text-lux-text/80 leading-snug italic">{insight}</span>
-                          </div>
+                    {activeSource.status === "PROCESSING" && (
+                      <motion.div 
+                        initial={{ opacity: 0, height: 0 }} 
+                        animate={{ opacity: 1, height: "auto" }}
+                        className="p-3 bg-lux-text/5 dark:bg-white/5 border border-lux-border/10 rounded-2xl flex items-center justify-between"
+                      >
+                         <div className="flex items-center gap-3">
+                            <div className="w-2 h-2 rounded-full bg-lux-accent animate-ping" />
+                            <span className="text-[10px] font-black uppercase tracking-wider text-lux-text/60">
+                              {processingStep}
+                            </span>
+                         </div>
+                         <div className="flex-1 max-w-[200px] h-1 bg-lux-border/20 rounded-full ml-6 overflow-hidden">
+                            <motion.div 
+                              className="h-full bg-lux-accent"
+                              initial={{ width: "5%" }}
+                              animate={{ width: "95%" }}
+                              transition={{ duration: 45, ease: "linear" }}
+                            />
+                         </div>
+                      </motion.div>
+                    )}
+                    
+                    {activeSource.status === "PROCESSING" && !activeSource.aiDescription ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1 opacity-50">
+                        {[1, 2].map(i => (
+                          <div key={i} className="h-8 bg-lux-border/10 rounded-xl animate-pulse" />
                         ))}
                       </div>
+                    ) : (
+                      activeSource.aiInsights && activeSource.aiInsights.length > 0 && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1">
+                          {activeSource.aiInsights.map((insight, idx) => (
+                            <motion.div 
+                              initial={{ opacity: 0, x: -10 }} 
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: idx * 0.1 }}
+                              key={idx} 
+                              className="flex items-start gap-2 p-2 bg-white dark:bg-lux-card/40 border border-lux-border/20 rounded-xl group hover:border-lux-accent/30 transition-all"
+                            >
+                               <div className="mt-1 w-1 h-1 rounded-full bg-lux-accent/60 group-hover:bg-lux-accent shrink-0" />
+                               <span className="text-[11px] font-medium text-lux-text/80 leading-snug italic">{insight}</span>
+                            </motion.div>
+                          ))}
+                        </div>
+                      )
                     )}
                   </div>
 
-                  <div className="shrink-0 lg:w-60 bg-lux-bg/40 dark:bg-black/20 p-6 rounded-[1.2rem] border border-lux-border/10 flex flex-col justify-center gap-3">
+                  <div className="shrink-0 lg:w-60 bg-lux-bg/40 dark:bg-black/20 p-6 rounded-[1.2rem] border border-lux-border/10 flex flex-col justify-center gap-3 relative overflow-hidden">
                     <div className="space-y-1">
-                      <p className="text-[9px] font-black uppercase text-lux-muted tracking-widest">Confiabilidade do Modelo</p>
+                      <p className="text-[9px] font-black uppercase text-lux-muted tracking-widest">
+                        {activeSource.status === "PROCESSING" ? "Calculando Confiabilidade..." : "Confiabilidade do Modelo"}
+                      </p>
                       <div className="flex items-center gap-2">
                          <div className="flex-1 h-1.5 bg-lux-border/20 rounded-full overflow-hidden">
                             <motion.div 
                               initial={{ width: 0 }} 
-                              animate={{ width: "98%" }} 
-                              transition={{ duration: 1.5, ease: "easeOut" }}
-                              className="h-full bg-emerald-500/60" 
+                              animate={{ width: activeSource.status === "PROCESSING" ? "40%" : "98%" }} 
+                              transition={{ duration: activeSource.status === "PROCESSING" ? 10 : 1.5, ease: "easeOut" }}
+                              className={`h-full ${activeSource.status === "PROCESSING" ? "bg-lux-accent/40 animate-pulse" : "bg-emerald-500/60"}`} 
                             />
                          </div>
-                         <span className="text-xs font-black text-emerald-600">98%</span>
+                         <span className={`text-xs font-black ${activeSource.status === "PROCESSING" ? "text-lux-muted animate-pulse" : "text-emerald-600"}`}>
+                           {activeSource.status === "PROCESSING" ? "--%" : "98%"}
+                         </span>
                       </div>
                     </div>
                     
@@ -325,13 +420,24 @@ export default function DataPreviewPage() {
                     
                     <div className="space-y-1">
                        <p className="text-[9px] font-black uppercase text-lux-muted tracking-widest">Aderência Semântica</p>
-                       <p className="text-xl font-serif font-black text-lux-text">Alta Fidelidade</p>
+                       <p className={`text-xl font-serif font-black transition-all ${activeSource.status === "PROCESSING" ? "text-lux-muted/40 animate-pulse" : "text-lux-text"}`}>
+                         {activeSource.status === "PROCESSING" ? "Analizando..." : "Alta Fidelidade"}
+                       </p>
                     </div>
 
-                    {activeSource.status === "READY" && (
-                      <div className="mt-2 flex items-center gap-2 text-[10px] font-bold text-emerald-600 bg-emerald-500/5 py-2 px-3 rounded-xl border border-emerald-500/10">
+                    {activeSource.status === "READY" ? (
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0.9 }} 
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="mt-2 flex items-center gap-2 text-[10px] font-bold text-emerald-600 bg-emerald-500/5 py-2 px-3 rounded-xl border border-emerald-500/10"
+                      >
                          <CheckCircle2 size={12} />
                          Análise Auditada pela IA
+                      </motion.div>
+                    ) : (
+                      <div className="mt-2 flex items-center gap-2 text-[10px] font-bold text-lux-muted bg-lux-bg/50 py-2 px-3 rounded-xl border border-lux-border/10 animate-pulse">
+                         <Sparkles size={12} className="text-lux-accent" />
+                         Refinando Inteligência...
                       </div>
                     )}
                   </div>
@@ -413,7 +519,13 @@ export default function DataPreviewPage() {
                              </div>
 
                              {/* Badges Semânticos */}
-                             <div className="flex flex-wrap gap-1.5">
+                             <div className="flex flex-wrap gap-1.5 min-h-[1.5rem]">
+                                {activeSource.status === "PROCESSING" && Object.keys(activeSource.semanticFlags?.[col] || {}).length === 0 && (
+                                  <span className="px-2 py-0.5 rounded-lg bg-lux-bg text-lux-muted border border-lux-border/20 text-[8px] font-black uppercase tracking-widest animate-pulse flex items-center gap-1">
+                                    <Sparkles size={8} className="text-lux-accent" />
+                                    IA Analisando...
+                                  </span>
+                                )}
                                 {activeSource.semanticFlags?.[col]?.is_key && (
                                   <span className="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-100 text-[8px] font-black uppercase tracking-widest">Key</span>
                                 )}

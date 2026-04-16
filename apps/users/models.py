@@ -233,3 +233,46 @@ class TenantInvitation(TimeStampedModel):
 
     def __str__(self):
         return f"Convite: {self.email} → {self.tenant.slug}"
+
+class UsageQuota(TimeStampedModel):
+    """
+    Controle de consumo de recursos de IA por usuário.
+    Permite definir limites e rastrear o uso mensal.
+    """
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="quota",
+        verbose_name="Usuário"
+    )
+    reports_generated_count = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Relatórios Gerados (Mês Atual)"
+    )
+    max_reports_per_month = models.PositiveIntegerField(
+        default=10,
+        verbose_name="Limite de Relatórios/Mês"
+    )
+    reset_date = models.DateField(
+        auto_now_add=True,
+        verbose_name="Data de Reinício"
+    )
+
+    class Meta:
+        db_table = "user_usage_quotas"
+        verbose_name = "Quota de Uso"
+        verbose_name_plural = "Quotas de Uso"
+
+    def __str__(self):
+        return f"Quota: {self.user.email} ({self.reports_generated_count}/{self.max_reports_per_month})"
+
+    def can_generate_report(self) -> bool:
+        """Verifica se o usuário ainda tem saldo de quota."""
+        if self.user.is_super_admin:
+            return True
+        return self.reports_generated_count < self.max_reports_per_month
+
+    def increment_usage(self):
+        """Incrementa o contador de uso."""
+        self.reports_generated_count += 1
+        self.save(update_fields=["reports_generated_count", "updated_at"])

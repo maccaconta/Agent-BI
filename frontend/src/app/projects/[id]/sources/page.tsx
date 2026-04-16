@@ -39,11 +39,52 @@ export default function SourcesPage() {
   const [sources, setSources] = useState<StoredProjectSource[]>([]);
   const [uploading, setUploading] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [currentDatasetId, setCurrentDatasetId] = useState<string | null>(null);
+  const [processingStep, setProcessingStep] = useState<string>("");
+  const [elapsedTime, setElapsedTime] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     setSources(readProjectSources(projectId));
+    
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
   }, [projectId]);
+
+  // O cronômetro foi movido para a tela de Diagnóstico/Preview
+
+  // Polling para acompanhar o processamento no backend (Sincronia Silenciosa)
+  useEffect(() => {
+    if (currentDatasetId && isAnalyzing) {
+      const poll = async () => {
+        try {
+          const res = await fetch(`/api/v1/datasets/${currentDatasetId}/`, {
+            headers: getBackendAuthHeaders(),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.status === "READY" || data.status === "ERROR") {
+              setIsAnalyzing(false);
+              setCurrentDatasetId(null);
+              // Atualiza a lista local
+              setSources(readProjectSources(projectId));
+            }
+          }
+        } catch (err) {
+          console.error("Erro no polling do dataset:", err);
+        }
+      };
+
+      pollingRef.current = setInterval(poll, 3000);
+      poll();
+    } else {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    }
+  }, [currentDatasetId, isAnalyzing, projectId]);
 
   const saveSources = (items: StoredProjectSource[]) => {
     setSources(items);
@@ -108,7 +149,7 @@ export default function SourcesPage() {
           formData.append("project_id", projectId);
           formData.append("name", newSource.name);
 
-          const response = await fetch("http://127.0.0.1:8000/api/v1/datasets/upload/", {
+          const response = await fetch("/api/v1/datasets/upload/", {
             method: "POST",
             headers: {
               ...getBackendAuthHeaders(),
@@ -121,6 +162,10 @@ export default function SourcesPage() {
             console.error("Falha ao sincronizar dataset com o backend para análise de IA.");
           } else {
             const apiResult = await response.json();
+            setCurrentDatasetId(apiResult.id);
+            setIsAnalyzing(true);
+            setProcessingStep("Iniciando Ingestão Turbo...");
+            
             // Atualiza o ID local com o ID real do backend para sincronia futura
             const finalSources = updated.map(s => 
               s.id === newSource.id ? { ...s, id: apiResult.id, status: "PROCESSING" } : s
@@ -129,8 +174,8 @@ export default function SourcesPage() {
           }
         } catch (backendErr) {
           console.error("Erro na chamada de sincronização IA:", backendErr);
-        } finally {
           setIsAnalyzing(false);
+        } finally {
           setUploading(false);
           if (fileInputRef.current) fileInputRef.current.value = "";
         }
@@ -280,9 +325,15 @@ export default function SourcesPage() {
                           </div>
                         </div>
                         <div className="flex items-center justify-between pt-4 border-t border-lux-border/10">
-                          <span className="flex items-center gap-1.5 text-[9px] font-black text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-3 py-1 rounded-full uppercase tracking-widest border border-amber-200/50">
-                            <Clock size={12} /> Local / Análise
-                          </span>
+                          {source.status === "PROCESSING" ? (
+                            <span className="flex items-center gap-1.5 text-[9px] font-black text-lux-accent bg-lux-accent/5 dark:bg-lux-accent/10 px-3 py-1 rounded-full uppercase tracking-widest border border-lux-accent/20 animate-pulse">
+                              <Sparkles size={12} /> IA Refinando...
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1.5 text-[9px] font-black text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-3 py-1 rounded-full uppercase tracking-widest border border-amber-200/50">
+                              <Clock size={12} /> Local / Pronto
+                            </span>
+                          )}
                           <span className="text-[10px] font-black text-lux-muted tracking-tighter">{formatBytes(source.size)}</span>
                         </div>
                       </div>

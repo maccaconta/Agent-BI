@@ -97,6 +97,11 @@ class Dataset(TimeStampedModel):
     parquet_size_bytes = models.BigIntegerField(default=0)
 
     # Processing
+    processing_step = models.CharField(
+        max_length=255, blank=True,
+        verbose_name="Passo de Processamento",
+        help_text="Descrição da etapa atual (ex: Interpretando com IA...)",
+    )
     processing_error = models.TextField(blank=True)
     processing_started_at = models.DateTimeField(null=True, blank=True)
     processing_finished_at = models.DateTimeField(null=True, blank=True)

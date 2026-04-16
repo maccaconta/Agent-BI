@@ -38,6 +38,11 @@ class Version(TimeStampedModel):
     )
 
     # Snapshot HTML
+    html_content = models.TextField(
+        blank=True, 
+        verbose_name="Conteúdo HTML",
+        help_text="Snapshot completo do HTML gerado para esta versão"
+    )
     html_s3_path = models.CharField(
         max_length=1000, blank=True,
         verbose_name="Path HTML no S3",

@@ -96,25 +96,18 @@ class Command(BaseCommand):
             )
             self.stdout.write(self.style.SUCCESS(f'Prompt "{obj.name}" Criado com sucesso.'))
 
-        # 3. SEED: GlobalSystemPrompt (Master Persona + Logos)
+        # 3. SEED: GlobalAIConfig (Master Persona + Regras)
         if tenant:
-            from apps.governance.models import GlobalSystemPrompt
-            style_guide = {
-                "logo_ntt_data": "/logos/ntt-data-black.png",
-                "logo_aws": "/logos/aws-partner.png",
-                "primary_color": "#000000",
-                "accent_color": "#D3BC8E",
-            }
+            from apps.governance.models import GlobalAIConfig
             
-            gs_prompt, created = GlobalSystemPrompt.objects.update_or_create(
+            gs_prompt, created = GlobalAIConfig.objects.update_or_create(
                 tenant=tenant,
                 is_active=True,
                 defaults={
                     "persona_title": "Analista Financeiro e de Negócios Sênior (NTT DATA AI)",
                     "persona_description": "Você é a inteligência Neural da NTT DATA, operada na AWS. Seu tom de voz é executivo, sóbrio e altamente focado em resultados tangíveis para o C-Level.",
-                    "style_guide": style_guide,
                     "compliance_rules": "Sigilo absoluto. Anonimização de PII. Foco em KPIs estratégicos e visual premium."
                 }
             )
             status = "Criado" if created else "Atualizado"
-            self.stdout.write(self.style.SUCCESS(f'GlobalSystemPrompt (Master) {status} com sucesso.'))
+            self.stdout.write(self.style.SUCCESS(f'GlobalAIConfig (Master) {status} com sucesso.'))

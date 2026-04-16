@@ -55,9 +55,11 @@ Você DEVE sugerir exatamente **7 widgets**, nem mais, nem menos, seguindo esta 
 2. **BAR (Barras)**: Use para comparações entre categorias. Se a cardinalidade for alta, especifique no prompt que deve ser o "TOP 10".
 3. **LINE (Linhas)**: Use **EXCLUSIVAMENTE** para séries temporais (evolução ao longo de datas).
 
-### 🏷️ ANCORAGEM AO SCHEMA (CRÍTICO):
-1. **PROIBIDO ALUCINAR COLUNAS**: No campo `prompt` do widget, utilize **ESTRITAMENTE** os nomes de colunas que aparecem no esquema fornecido abaixo.
-2. **MAPEAMENTO EXAUSTIVO**: Você DEVE fornecer um mapeamento para **TODAS** as colunas fornecidas no schema. Jamais ignore colunas.
+### 🏷️ MAPEAMENTO SELETIVO (PERFORMANCE):
+1. **FOCO NO ESSENCIAL**: Você NÃO precisa mapear todas as colunas do schema. Forneça o objeto `column_mapping` **APENAS** para as colunas que você utilizou nos 7 widgets sugeridos ou que são chaves primárias críticas para o entendimento do negócio.
+2. **DESCRIÇÃO DE NEGÓCIO**: Para as colunas selecionadas, o campo 'business_description' DEVE ser uma explicação amigável para executivos. 
+   - Proibido: "Vlr Fatur"
+   - Obrigatório: "Volume total de faturamento bruto da transação"
 3. **MAPEAMENTO DE JARGÃO**: Se o Especialista pedir um indicador (ex: "Rating") que não existe como coluna, mas existe um correlato (ex: "score_serasa"), mapeie o prompt para usar a coluna real: "Qual o saldo por score_serasa?".
 4. **DESCRIÇÃO DE NEGÓCIO**: No `business_rationale`, utilize o jargão do especialista para explicar o valor, mas no `prompt` use o nome técnico da coluna.
 
@@ -73,6 +75,7 @@ Para cada widget, você deve fornecer um `business_rationale` curto (máximo 15 
     "nome_coluna": {
       "role": "PRIMARY_KEY" | "DIMENSION" | "MEASURE" | "TIME",
       "business_description": "Descrição legível",
+      "physical_type": "VARCHAR" | "DECIMAL" | "INTEGER" | "DATE" | "TIMESTAMP" | "BOOLEAN",
       "risk_dna_marker": "..." | null,
       "is_elected_for_risk": true | false,
       "reasoning": "Breve racional da decisão"
@@ -132,36 +135,61 @@ class DataInterpreterAgent:
 
         system_prompt = base_system_prompt
         
+        # 1. Base Determinística (Heurística Local) - INSTANTÂNEA
+        # Garante que todas as colunas tenham uma classificação básica antes da IA
+        base_mapping = self._heuristic_fallback(columns, sample_data)
+        
         manual_overrides = {}
         columns_to_infer = []
         
-        # 1. Identifica Overrides Manuais
+        # 2. Identifica Overrides Manuais (Mapeia apenas o que já existe no DB como manual)
         for col in columns:
             col_name = col.get("name")
+            current_desc = col.get("description", "").strip()
+            is_manual_desc = current_desc and current_desc != col_name
+            
             role = None
             if col.get("is_key"): role = "PRIMARY_KEY"
             elif col.get("is_historical_date"): role = "TIME"
             elif col.get("is_category"): role = "DIMENSION"
             elif col.get("is_value"): role = "MEASURE"
             
-            if role:
+            if is_manual_desc and role:
                 manual_overrides[col_name] = {
                     "role": role,
-                    "business_description": col.get("description", ""),
-                    "reasoning": "Definição manual do usuário (Governança)."
+                    "business_description": current_desc,
+                    "reasoning": "Preservando definição manual do usuário."
                 }
-            else:
-                columns_to_infer.append(col)
+            
+            columns_to_infer.append(col)
+
+        # 3. Poda de Metadados para a IA
+        # Envia o DNA das colunas + Amostras Reais para que a IA entenda o CONCEITO
+        columns_minimal = []
+        for col in columns_to_infer:
+            col_name = col.get("name")
+            # Extrai até 5 valores únicos da amostra para dar contexto à IA
+            unique_samples = list(set([str(row.get(col_name)) for row in sample_data if row.get(col_name) is not None]))[:5]
+            
+            columns_minimal.append({
+                "name": col_name,
+                "type": col.get("type"),
+                "sample_values": unique_samples
+            })
 
         # 2. Invocação Bedrock
         prompt = f"""
-=== SCHEMA DAS COLUNAS PARA ANÁLISE ===
-{json.dumps(columns_to_infer, indent=2, ensure_ascii=False)}
+=== SCHEMA DAS COLUNAS PARA ANÁLISE (CONCEITUAL) ===
+{json.dumps(columns_minimal, indent=2, ensure_ascii=False)}
 
-=== AMOSTRA DE DADOS (TOP 10) ===
+=== AMOSTRA COMPLETA (LINHAS REAIS) ===
 {json.dumps(sample_data, indent=2, ensure_ascii=False)}
 
-Gere o mapeamento semântico, o resumo estratégico e a descrição de negócio seguindo as regras do sistema.
+Gere o mapeamento semântico seguindo estas regras de OURO:
+1. **DESCRIÇÃO DE NEGÓCIO**: O campo 'business_description' DEVE ser uma explicação amigável para executivos. 
+   - Proibido: "Vlr Fatur"
+   - Obrigatório: "Volume total de faturamento bruto da transação"
+2. **CONTEXTO**: Use as 'sample_values' para entender se uma coluna 'STATUS' é de 'Vendas', 'Qualidade' ou 'Entrega'.
 """
         
         try:
@@ -169,24 +197,35 @@ Gere o mapeamento semântico, o resumo estratégico e a descrição de negócio 
             result = self.bedrock_service.invoke_with_json_output(
                 system_prompt=system_prompt,
                 user_message=prompt,
-                max_tokens=2500
+                max_tokens=1500
             )
             
             if not result or "column_mapping" not in result:
-                print("[Data_Interpreter] ⚠️ Resposta inválida da LLM. Ativando Heurística Local.")
-                heuristic_mapping = self._heuristic_fallback(columns_to_infer, sample_data)
+                print("[Data_Interpreter] ⚠️ Resposta inválida da LLM. Ativando Base Heurística.")
                 result = {
-                    "column_mapping": heuristic_mapping,
+                    "column_mapping": base_mapping,
                     "dataset_summary": "Processamento local (Heurística).",
                     "strategic_insights": ["Análise semântica simplificada aplicada localmente."]
                 }
                 
-            # Mescla overrides manuais com inferência da LLM (Overrides ganham)
+            # Mescla Heurística -> IA -> Overrides (Crescente de autoridade)
             llm_mapping = result.get("column_mapping", {})
+            
+            # Novo Dicionário Final partindo da base heurística
+            final_mapping = base_mapping.copy()
+            
+            # IA sobrescreve apenas o que ela analisou (Selective Mapping)
+            for col_name, mapping in llm_mapping.items():
+                if col_name in final_mapping:
+                    final_mapping[col_name].update(mapping)
+                else:
+                    final_mapping[col_name] = mapping
+            
+            # Overrides Manuais sobrescrevem TUDO
             for col_name, override in manual_overrides.items():
-                llm_mapping[col_name] = override
+                final_mapping[col_name] = override
                 
-            result["column_mapping"] = llm_mapping
+            result["column_mapping"] = final_mapping
             # --- NOVO: Correção Pós-Inferência (Hard Rules) ---
             from apps.ai_engine.services.analytics_guardrails import AnalyticsGuardrails
             if isinstance(llm_mapping, dict):

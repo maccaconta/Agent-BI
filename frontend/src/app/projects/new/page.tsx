@@ -48,6 +48,7 @@ export default function NewProjectWorkspace() {
   
   const isFormValid = !!(
     form.dashboard.trim() && 
+    form.dataDomain.trim() &&
     form.domain_id && 
     form.domainDataOwner.trim() && 
     form.confidentiality && 
@@ -76,16 +77,16 @@ export default function NewProjectWorkspace() {
     async function fetchSpecs() {
       try {
         setFetchingSpecialists(true);
-        // Usando a ponte direta para o backend conforme padrão estabelecido
-        const res = await fetch("http://127.0.0.1:8000/api/v1/governance/prompt-templates/?t=" + Date.now(), {
-          headers: { "Content-Type": "application/json" } 
+        // Usando headers de tenant padronizados
+        const res = await fetch("/api/v1/governance/prompt-templates/?t=" + Date.now(), {
+          headers: getBackendJsonHeaders()
         });
         if (res.ok) {
           const data = await res.json();
           const results = Array.isArray(data) ? data : (data.results || []);
           // Filtro flexível para especialistas
           setSpecialists(results.filter((s: any) => 
-            s.category?.toUpperCase() === "SPECIALIST" || s.category === "Especialista"
+            s.category?.toUpperCase().includes("SPECIALIST") || s.category?.includes("Especialista")
           ));
         }
       } catch (err) {
@@ -98,13 +99,20 @@ export default function NewProjectWorkspace() {
     async function fetchDomains() {
       try {
         setFetchingDomains(true);
-        const res = await fetch("http://127.0.0.1:8000/api/v1/projects/domains/?t=" + Date.now(), {
-          headers: { "Content-Type": "application/json" }
+        const res = await fetch("/api/v1/projects/domains/?t=" + Date.now(), {
+          headers: getBackendJsonHeaders()
         });
+        
+        console.log("📡 [DOMAINS FETCH] Status:", res.status);
+        
         if (res.ok) {
           const data = await res.json();
           const results = Array.isArray(data) ? data : (data.results || []);
+          console.log("✅ [DOMAINS FETCH] Sucesso! Itens:", results.length);
           setDomains(results);
+        } else {
+          const text = await res.text();
+          console.error("❌ [DOMAINS FETCH] Erro:", res.status, text.substring(0, 200));
         }
       } catch (err) {
         console.error("Erro ao buscar domínios:", err);
@@ -139,8 +147,8 @@ export default function NewProjectWorkspace() {
     try {
       const isUpdate = !!form.projectId;
       const url = isUpdate 
-        ? `http://127.0.0.1:8000/api/v1/projects/${form.projectId}/`
-        : "http://127.0.0.1:8000/api/v1/projects/";
+        ? `/api/v1/projects/${form.projectId}/`
+        : "/api/v1/projects/";
       
       const response = await fetch(url, {
         method: isUpdate ? "PATCH" : "POST",
@@ -152,8 +160,8 @@ export default function NewProjectWorkspace() {
           confidentiality: form.confidentiality,
           crawlFrequency: form.crawlFrequency,
           objective: form.objective,
-          specialist_prompt_id: form.specialist_prompt_id,
-          domain_id: form.domain_id,
+          specialist_prompt_id: form.specialist_prompt_id || null,
+          domain_id: form.domain_id || null,
         }),
       });
 

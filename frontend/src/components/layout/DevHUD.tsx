@@ -73,9 +73,8 @@ export default function DevHUD() {
 
     const fetchTraces = async () => {
       try {
-        const { getBackendAuthHeaders } = await import('@/lib/backendAuth');
-        const response = await fetch(`http://127.0.0.1:8000/api/v1/audit/traces/by-trace/${activeTraceId}/`, {
-          headers: getBackendAuthHeaders()
+        const response = await fetch(`/api/v1/audit/traces/by-trace/${activeTraceId}/`, {
+          headers: { "Content-Type": "application/json" }
         });
         if (response.ok) {
           const data = await response.json();

@@ -24,7 +24,6 @@ from apps.datasets.services.sqlite_analytics_store import (
 )
 
 from apps.ai_engine.agents.supervisor_agent import SupervisorAgent
-from apps.ai_engine.agents.pandas_analytics_agent import PandasAnalyticsAgent
 from apps.ai_engine.agents.rag_knowledge_agent import RAGKnowledgeAgent
 from apps.ai_engine.agents.critic_agent import CriticAgent
 from apps.ai_engine.agents.data_interpreter_agent import DataInterpreterAgent
@@ -106,16 +105,31 @@ class IncrementalDashboardAgentService:
         # --- DATA INTERPRETATION (SEMANTIC ANALYTICS) ---
         trace.start_step("Data Interpreter: Análise Semântica")
         interpreter = DataInterpreterAgent()
-        # Usa o perfilamento de dados já existente para inferir semântica
         semantic_mapping = {}
         domain_name = context.get("dataDomain", "")
-        for ds in context.get("datasets", []):
-            table_mapping = interpreter.interpret_schema(
-                columns=ds.get("schema_json", {}).get("columns", []),
-                sample_data=ds.get("data_profile", {}).get("top_rows", []),
-                domain_name=domain_name
-            )
-            semantic_mapping[ds.get("sqlite_table")] = table_mapping.get("column_mapping", {})
+        
+        # Otimização: Paralelização das chamadas de IA para múltiplos datasets
+        from concurrent.futures import ThreadPoolExecutor
+        
+        def process_dataset(ds):
+            try:
+                table_mapping = interpreter.interpret_schema(
+                    columns=ds.get("schema_json", {}).get("columns", []),
+                    sample_data=ds.get("data_profile", {}).get("top_rows", []),
+                    domain_name=domain_name
+                )
+                return ds.get("sqlite_table"), table_mapping.get("column_mapping", {})
+            except Exception as e:
+                logger.error(f"Erro ao processar dataset {ds.get('name')}: {e}")
+                return ds.get("sqlite_table"), {}
+
+        datasets_to_process = context.get("datasets", [])
+        if datasets_to_process:
+            logger.info(f"[IncrementalAgent] 🚀 Lançando {len(datasets_to_process)} threads para análise semântica paralela.")
+            with ThreadPoolExecutor(max_workers=min(len(datasets_to_process), 5)) as executor:
+                results = list(executor.map(process_dataset, datasets_to_process))
+                for table_name, mapping in results:
+                    semantic_mapping[table_name] = mapping
         
         context["semantic_mapping"] = semantic_mapping
         
@@ -131,7 +145,7 @@ class IncrementalDashboardAgentService:
                     }
         context["risk_dna_context"] = risk_dna_context
         
-        trace.end_step("Data Interpreter: Análise Semântica", message=f"Mapeamento semântico e DNA de Risco ({len(risk_dna_context)} marcadores) gerados.")
+        trace.end_step("Data Interpreter: Análise Semântica", message=f"Mapeamento semântico paralelo e DNA de Risco ({len(risk_dna_context)} marcadores) gerados.")
 
         # --- SPECIALIST & COMPLIANCE PROMPTS ---
         trace.start_step("Compliance & Normas: Auditoria")
@@ -470,10 +484,10 @@ class IncrementalDashboardAgentService:
             project = Project.objects.select_related("domain", "domain__owner").filter(id=project_id).first()
 
         if project and not master_prompt:
-            from apps.governance.models import GlobalSystemPrompt
-            policy = GlobalSystemPrompt.objects.filter(tenant=project.tenant, is_active=True).first()
+            from apps.governance.models import GlobalAIConfig
+            policy = GlobalAIConfig.objects.filter(tenant=project.tenant, is_active=True).first()
             if policy:
-                master_prompt = policy.generate_full_system_prompt()
+                master_prompt = f"PERSONA: {policy.persona_title}\n{policy.persona_description}\n\nRULES: {policy.compliance_rules}"
 
         # --- BUSCA DE ESPECIALISTA POR DOMÍNIO ---
         specialist_prompt_content = ""
@@ -500,8 +514,8 @@ class IncrementalDashboardAgentService:
                         logger.info(f"[Agent] Especialista detectado via domínio '{domain_name}': {specialist_template.name}")
             
             # 2. Busca regras de compliance globais do tenant
-            from apps.governance.models import GlobalSystemPrompt
-            policy = GlobalSystemPrompt.objects.filter(tenant=project.tenant, is_active=True).first()
+            from apps.governance.models import GlobalAIConfig
+            policy = GlobalAIConfig.objects.filter(tenant=project.tenant, is_active=True).first()
             if policy:
                 compliance_prompt_content = policy.compliance_rules
 
@@ -631,8 +645,8 @@ class IncrementalDashboardAgentService:
             "dataDomain": context.get("dataDomain"),
             "specialist_insights": context.get("specialist_insights"),
             "specialist_sql": context.get("specialist_sql"), # INJETADO: Sugestão mestre para a LLM
-            "materialized_table": materialized_table,
-            "materialized_schema": materialized_schema,
+            "materialized_table": context.get("materialized_table"),
+            "materialized_schema": context.get("materialized_schema"),
             "datasets": datasets_clean,
             "semantic_mapping": context.get("semantic_mapping") if not materialized_table else None,
             "previousBusinessLogic": context.get("previousBusinessLogic"),

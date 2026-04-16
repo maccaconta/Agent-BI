@@ -46,7 +46,8 @@ class TraceService:
                 duration_ms=0
             )
         except Exception as e:
-            logger.error(f"[Tracer] Erro ao persistir início de step: {e}")
+            # Blindagem: se o banco estiver locked, logamos no console mas não quebramos o fluxo
+            logger.warning(f"[Tracer] ⚠️ Falha ao persistir início (banco ocupado): {e}")
 
     def end_step(
         self, 
@@ -75,29 +76,36 @@ class TraceService:
             )
             logger.info(f"[Tracer] Concluido: {step_name} em {duration_ms}ms")
         except Exception as e:
-            logger.error(f"[Tracer] Erro ao salvar trace: {e}")
+            logger.warning(f"[Tracer] ⚠️ Falha ao salvar fim de step (banco ocupado): {e}")
 
     @classmethod
     def quick_log(cls, trace_id: uuid.UUID, job_type: str, step_name: str, message: str, **kwargs):
         """Log direto sem cronometragem (para eventos pontuais)."""
-        ExecutionTrace.objects.create(
-            trace_id=trace_id,
-            job_type=job_type,
-            step_name=step_name,
-            message=message,
-            **kwargs
-        )
+        try:
+            ExecutionTrace.objects.create(
+                trace_id=trace_id,
+                job_type=job_type,
+                step_name=step_name,
+                message=message,
+                **kwargs
+            )
+        except Exception as e:
+            logger.warning(f"[Tracer] ⚠️ Falha no quick_log (banco ocupado): {e}")
 
     def log_thought(self, assistant_name: str, thought: str, metadata: dict = None):
         """
         Registra o raciocínio/pensamento de um assistente analítico.
         Essas mensagens aparecem com destaque no DevHUD para provar a autonomia.
         """
-        ExecutionTrace.objects.create(
-            trace_id=self.trace_id,
-            job_type=self.job_type,
-            step_name=f"Pensamento: {assistant_name}",
-            message=thought,
-            status="SUCCESS",
-            metadata=metadata or {}
-        )
+        try:
+            ExecutionTrace.objects.create(
+                trace_id=self.trace_id,
+                job_type=self.job_type,
+                step_name=f"Pensamento: {assistant_name}",
+                message=thought,
+                status="SUCCESS",
+                metadata=metadata or {}
+            )
+        except Exception as e:
+            # Em threads paralelas de IA, este ponto é o que mais sofre com 'database is locked'
+            logger.warning(f"[Tracer] 🧠 [{assistant_name}] Pensamento não persistido (banco ocupado): {thought[:50]}...")

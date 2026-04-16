@@ -41,17 +41,29 @@ echo [INFO] ^(3/4^) Subindo backend Django (porta 8000)...
 start "Agent-BI Backend" cmd /k "cd /d %~dp0 && .venv\Scripts\activate.bat && python manage.py runserver 0.0.0.0:8000 --settings=config.settings.local_fast"
 
 echo.
+echo [INFO] ^(3.5/4^) Verificando Redis e Celery Worker...
+docker exec redis-agentbi redis-cli ping >nul 2>&1
+if errorlevel 1 (
+  echo [WARNING] Redis nao detectado. Celery Worker NAO sera iniciado ^(modo Zero-Infra^).
+  echo [TIP] Para ativar o Redis: docker run -d --name redis-agentbi -p 6379:6379 redis:7-alpine
+) else (
+  echo [SUCCESS] Redis detectado ^(PONG^). Subindo Celery Worker...
+  start "Agent-BI Celery" cmd /k "cd /d %~dp0 && .venv\Scripts\activate.bat && set DJANGO_SETTINGS_MODULE=config.settings.local_fast&& celery -A config.celery worker --loglevel=info --concurrency=8 --pool=threads"
+  echo [SUCCESS] Celery Worker iniciado ^(8 threads paralelas^).
+)
+
+echo.
 echo [INFO] ^(4/4^) Construindo e subindo frontend Next.js (porta 3000)...
 start "Agent-BI Frontend" cmd /k "cd /d %~dp0frontend && npm run build && npm run start:local"
 
 echo.
 echo ==============================================================
-echo [SUCCESS] Pipeline de subida concluido! Acompanhe as 2 janelas novas.
+echo [SUCCESS] Pipeline de subida concluido! Acompanhe as janelas novas.
 echo.
 echo URLs mapeadas:
-echo - Frontend: http://127.0.0.1:3000
-echo - Backend:  http://127.0.0.1:8000
-echo - API Docs: http://127.0.0.1:8000/api/docs/
+echo - Frontend:      http://127.0.0.1:3000
+echo - Backend:       http://127.0.0.1:8000
+echo - API Docs:      http://127.0.0.1:8000/api/docs/
 echo ==============================================================
 echo Se precisar do modo com Docker depois, use start-dev-hybrid.bat
 echo.

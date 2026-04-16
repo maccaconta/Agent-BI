@@ -2,7 +2,7 @@
 Agent-BI — URL Configuration principal.
 """
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularSwaggerView,
@@ -12,23 +12,23 @@ from drf_spectacular.views import (
 # ─── API v1 URL Patterns ──────────────────────────────────────────────────────
 api_v1_patterns = [
     # Auth
-    path("auth/", include("apps.users.urls")),
+    re_path(r"^auth/?", include("apps.users.urls")),
     # Core resources
-    path("projects/", include("apps.projects.urls")),
-    path("datasets/", include("apps.datasets.urls")),
-    path("dashboards/", include("apps.dashboards.urls")),
-    path("versions/", include("apps.versions.urls")),
-    path("approvals/", include("apps.approvals.urls")),
+    re_path(r"^projects/?", include("apps.projects.urls")),
+    re_path(r"^datasets/?", include("apps.datasets.urls")),
+    re_path(r"^dashboards/?", include("apps.dashboards.urls")),
+    re_path(r"^versions/?", include("apps.versions.urls")),
+    re_path(r"^approvals/?", include("apps.approvals.urls")),
     # Knowledge (Governança & Policies)
-    path("governance/", include("apps.governance.urls")),
-    path("templates/", include("apps.templates_lib.urls")),
-    path("instructions/", include("apps.instructions.urls")),
+    re_path(r"^governance/?", include("apps.governance.urls")),
+    re_path(r"^templates/?", include("apps.templates_lib.urls")),
+    re_path(r"^instructions/?", include("apps.instructions.urls")),
     # AI & Infra
-    path("copilot/", include("apps.ai_engine.urls")),
-    path("ai/", include("apps.ai_engine.urls")),
-    path("infra/", include("apps.infra.urls")),
+    re_path(r"^copilot/?", include("apps.ai_engine.urls")),
+    re_path(r"^ai/?", include("apps.ai_engine.urls")),
+    re_path(r"^infra/?", include("apps.infra.urls")),
     # Audit & Compliance
-    path("audit/", include("apps.audit.urls")),
+    re_path(r"^audit/?", include("apps.audit.urls")),
 ]
 
 urlpatterns = [
