@@ -39,9 +39,20 @@ import {
 import DevHUD from '@/components/layout/DevHUD';
 import { useRouter, useSearchParams } from "next/navigation";
 import { getProjectRelationshipsKey, readProjectSources, writeProjectSources } from "@/lib/projectSources";
-import { getBackendJsonHeaders } from "@/lib/backendAuth";
+import { getBackendJsonHeaders, getBackendAuthHeaders } from "@/lib/backendAuth";
 import { ProjectHeaderStandard } from "@/components/project/ProjectHeaderStandard";
 import { ProjectPhases } from "@/components/project/ProjectPhases";
+
+// Fallback para crypto.randomUUID em ambientes não seguros (HTTP)
+const safeRandomUUID = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
 
 interface DashboardTab {
   id: string;
@@ -319,7 +330,7 @@ function DashboardContent() {
   const handleMaterialize = async () => {
     if (plannedWidgets.length === 0 || isMaterializing) return;
     setIsMaterializing(true);
-    const trace_id = crypto.randomUUID();
+    const trace_id = safeRandomUUID();
     window.dispatchEvent(new CustomEvent('agent-bi-trace', { detail: { traceId: trace_id } }));
 
     try {
@@ -463,6 +474,10 @@ function DashboardContent() {
   const wrapInPremiumShell = (fragment: string, datasets: any[], isBlueprint: boolean = false) => {
     const title = activeTab?.name || "Pipeline Canvas";
     const generatedAt = new Date().toLocaleDateString('pt-BR') + " " + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    
+    // Captura headers de auth para injetar no iframe (essencial para AWS 401 fix)
+    const authHeaders = getBackendAuthHeaders();
+    const authToken = authHeaders.Authorization || "";
 
     if (fragment && fragment.trim().startsWith("<!DOCTYPE")) {
       return fragment;
@@ -499,7 +514,10 @@ function DashboardContent() {
         </head>
         <body class="p-10 animate-fade-in">
           <script>
-            window.AgentBI_Context = { datasets: ${JSON.stringify(datasets)} };
+            window.AgentBI_Context = { 
+                datasets: ${JSON.stringify(datasets)},
+                authToken: "${authToken}"
+            };
             window.AgentBI = {
                 renderWidget: async (containerId, sql, type, title) => {
                     const container = document.getElementById(containerId);
@@ -525,7 +543,10 @@ function DashboardContent() {
                     try {
                         const response = await fetch('/api/v1/ai/sql-preview', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'Authorization': window.AgentBI_Context.authToken || ''
+                            },
                             body: JSON.stringify({ 
                                 sql, 
                                 datasets: window.AgentBI_Context.datasets || [] 

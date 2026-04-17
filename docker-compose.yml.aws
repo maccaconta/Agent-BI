@@ -1,0 +1,64 @@
+services:
+  # ─── Redis (Broker) ──────────────────────────────────────────────────────────
+  redis:
+    image: redis:alpine
+    container_name: redis
+    volumes:
+      - redis_data:/data
+
+  # ─── API Django (SQLite Mode) ────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.development
+      - DATABASE_URL=sqlite:////app/dev.sqlite3
+      - IS_DOCKER=true
+      - USE_AWS_DATA_SERVICES=False
+    depends_on:
+      - redis
+    restart: always
+
+  # ─── Celery Worker (SQLite Mode) ─────────────────────────────────────────────
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A config.celery worker --loglevel=info --concurrency=2
+    env_file:
+      - .env
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.development
+      - DATABASE_URL=sqlite:////app/dev.sqlite3
+      - REDIS_URL=redis://redis:6379/0
+      - IS_DOCKER=true
+      - USE_AWS_DATA_SERVICES=False
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+      - api
+
+  # ─── Frontend Next.js ────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=/api/v1
+      - IS_DOCKER=true
+    depends_on:
+      - api
+
+volumes:
+  redis_data:
