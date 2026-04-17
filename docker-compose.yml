@@ -61,6 +61,7 @@ services:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=/api/v1
+      - IS_DOCKER=true
     depends_on:
       - api
 
