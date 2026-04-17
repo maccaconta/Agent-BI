@@ -18,8 +18,10 @@ import {
   BookOpen,
 } from "lucide-react";
 import Link from "next/link";
-import { useParams, usePathname } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import HelpModal from "./HelpModal";
+import { useAuth } from "@/contexts/AuthContext";
+import { LogOut } from "lucide-react";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -45,6 +47,8 @@ const DOMAINS = [
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const params = useParams();
   const pathname = usePathname();
+  const router = useRouter();
+  const { logout } = useAuth();
   const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   const menuItems = [
@@ -142,7 +146,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 </button>
               </div>
 
-              <div className="flex items-center gap-4 p-4 bg-lux-bg/40 border border-lux-border/20 rounded-3xl mb-2 group-hover:border-lux-text/20 transition-all">
+              <div className="flex items-center gap-4 p-4 bg-lux-bg/40 border border-lux-border/20 rounded-3xl mb-4 group-hover:border-lux-text/20 transition-all">
                 <div className="w-8 h-8 rounded-full bg-green-500/10 flex items-center justify-center text-green-600 animate-pulse">
                   <Activity size={16} />
                 </div>
@@ -151,6 +155,17 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   <p className="text-[9px] text-lux-muted opacity-70">AWS Pipeline Stable</p>
                 </div>
               </div>
+
+              <button
+                onClick={() => {
+                  logout();
+                  onClose();
+                }}
+                className="w-full flex items-center gap-3 p-4 rounded-2xl transition-all text-red-500 hover:bg-red-50 hover:text-red-600 font-bold"
+              >
+                <LogOut size={18} />
+                <span className="text-sm tracking-tight text-left">Encerrar Sessão</span>
+              </button>
             </div>
           </motion.div>
           <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
