@@ -88,11 +88,9 @@ class DashboardHtmlRendererService:
   </div>
 
   <script>
-    console.log("[AgentBI] 🚀 Dashboard Inicializado. Aguardando DOM...");
     window.AgentBI_Datasets = {json.dumps(dataset_ids)};
     window.AgentBI = {{
       renderWidget: async (containerId, content, type, title, hasError) => {{
-        console.log(`[AgentBI] 🎨 Tentativa de renderizar: ${{title}} (${{type}}) - Erro Prévio: ${{hasError}}`);
         const container = document.getElementById(containerId);
         if(!container) return;
         
@@ -104,13 +102,19 @@ class DashboardHtmlRendererService:
           return;
         }}
 
-        const formatValue = (val) => {{
+
+        const formatValue = (val, key = '') => {{
           if (val === null || val === undefined || val === '') return '-';
+          const k = String(key).toLowerCase();
+          const isId = k.includes('id') || k.includes('cod') || k.includes('pk') || k.includes('sk') || k.includes('nr') || k.includes('chave');
+          
+          if (isId) return val.toString(); // ID/Código sem formatação de milhar
+
           const num = parseFloat(val);
           if (isNaN(num)) return val;
-          if (num > 1000000) return (num / 1000000).toFixed(1) + 'M';
-          if (num > 1000) return (num / 1000).toFixed(1) + 'K';
-          return num.toLocaleString('pt-BR');
+          if (num > 1000000) return (num / 1000000).toLocaleString('pt-BR', {{ maximumFractionDigits: 1 }}) + 'M';
+          if (num > 1000) return (num / 1000).toLocaleString('pt-BR', {{ maximumFractionDigits: 1 }}) + 'K';
+          return num.toLocaleString('pt-BR', {{ maximumFractionDigits: 2 }});
         }};
 
         try {{
@@ -121,12 +125,21 @@ class DashboardHtmlRendererService:
           }});
           const data = await response.json();
           
+          const getValByIndex = (row, index, colName) => {{
+            if (!row) return '-';
+            if (Array.isArray(row)) return row[index];
+            return row[colName] !== undefined ? row[colName] : '-';
+          }};
+
           if (data && data.rows && data.rows.length > 0) {{
             const rows = data.rows;
-            const cols = Object.keys(rows[0]);
+            const cols = data.columns || [];
 
             if (type === 'BIGNUMBER') {{
-              container.innerText = formatValue(Object.values(rows[0])[0]);
+              const firstRow = rows[0];
+              const firstVal = Array.isArray(firstRow) ? firstRow[0] : Object.values(firstRow)[0];
+              const firstCol = cols[0] || '';
+              container.innerText = formatValue(firstVal, firstCol);
             }} else if (type === 'TABLE') {{
               // --- RENDERIZADOR DE TABELAS LUXURY ---
               container.classList.remove('min-h-[150px]');
@@ -140,7 +153,7 @@ class DashboardHtmlRendererService:
                 <tbody class="divide-y divide-gray-50">
                   ${{rows.slice(0, 15).map(r => `
                     <tr class="hover:bg-gray-50/50 transition-colors">
-                      ${{cols.map(c => `<td class="py-3 px-2 font-medium text-gray-600">${{formatValue(r[c])}}</td>`).join('')}}
+                      ${{cols.map((c, idx) => `<td class="py-3 px-2 font-medium text-gray-600">${{formatValue(getValByIndex(r, idx, c), c)}}</td>`).join('')}}
                     </tr>
                   `).join('')}}
                 </tbody>
@@ -153,12 +166,15 @@ class DashboardHtmlRendererService:
             }} else {{
               const chart = echarts.init(container);
               const isPie = type.toLowerCase() === 'pie';
-              const xAxisData = rows.map(r => r[cols[0]]);
-              const series = cols.slice(1).map(c => ({{
+              // Uso de índices garante fidelidade total independente de nomes de colunas
+              const xAxisData = rows.map(r => getValByIndex(r, 0, cols[0]));
+              const series = cols.slice(1).map((c, sIdx) => ({{
                 name: c, type: isPie ? 'pie' : 'bar',
                 colorBy: isPie ? 'data' : (cols.length === 2 ? 'data' : 'series'),
                 radius: isPie ? ['40%', '70%'] : undefined,
-                data: isPie ? rows.map(r => ({{name: r[cols[0]], value: r[c]}})) : rows.map(r => r[c])
+                data: isPie 
+                  ? rows.map(r => ({{name: getValByIndex(r, 0, cols[0]), value: getValByIndex(r, sIdx + 1, c)}})) 
+                  : rows.map(r => getValByIndex(r, sIdx + 1, c))
               }}));
 
               chart.setOption({{
@@ -172,9 +188,7 @@ class DashboardHtmlRendererService:
               }});
             }}
           }}
-          console.log(`[AgentBI] ✅ Widget ${{title}} renderizado com sucesso.`);
         }} catch (e) {{ 
-          console.error(`[AgentBI] ❌ Erro ao renderizar ${{title}}:`, e);
           container.innerText = 'Erro de Dados'; 
         }}
       }}
@@ -214,7 +228,7 @@ class DashboardHtmlRendererService:
             <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           </div>
           <span class="kpi-label mb-2">{self._escape_html(w_title)}</span>
-          <div id="widget-{w_id}" class="text-5xl font-black kpi-value tracking-tighter">
+          <div id="widget-{w_id}" class="text-4xl font-black kpi-value tracking-tighter">
             <span class="text-gray-200 text-lg">...</span>
           </div>
         </div>"""

@@ -24,7 +24,6 @@ class TraceService:
     def start_step(self, step_name: str, message: str = None):
         """Inicia a cronometragem de um passo e persiste imediatamente para o HUD."""
         self._start_times[step_name] = time.perf_counter()
-        logger.debug(f"[Tracer] Iniciando: {step_name} (Trace: {self.trace_id})")
         
         # Fallbacks dinâmicos para evitar repetição excessiva
         import random
@@ -37,6 +36,7 @@ class TraceService:
             "Rastreando dependências de dados..."
         ]
         display_message = message or random.choice(placeholders)
+        logger.debug(f"[Tracer] [{self.trace_id}] {step_name}: {display_message}")
 
         # Persistência imediata do início da etapa para feedback no HUD
         try:
@@ -52,8 +52,10 @@ class TraceService:
                 dashboard_id=self.dashboard_id
             )
         except Exception as e:
-            # Blindagem: se o banco estiver locked, logamos no console mas não quebramos o fluxo
-            logger.warning(f"[Tracer] ⚠️ Falha ao persistir início (banco ocupado): {e}")
+            # Blindagem: se o banco estiver ocupado demais, não esperamos.
+            # O timeout de 60s do settings pode travar a thread aqui, o que é ruim.
+            # Logamos apenas no console para não degradar a performance da IA.
+            logger.warning(f"[Tracer] ⚠️ [{step_name}] Skip persistência inicial (banco ocupado): {e}")
 
     def end_step(
         self, 
@@ -93,7 +95,8 @@ class TraceService:
             )
             logger.info(f"[Tracer] Concluido: {step_name} em {duration_ms}ms (Custo: ${estimated_cost})")
         except Exception as e:
-            logger.warning(f"[Tracer] ⚠️ Falha ao salvar fim de step (banco ocupado): {e}")
+            # Log final é importante, mas ainda assim não deve travar a IA
+            logger.warning(f"[Tracer] ⚠️ [{step_name}] Falha ao salvar log final: {e}")
 
     @classmethod
     def quick_log(cls, trace_id: uuid.UUID, job_type: str, step_name: str, message: str, **kwargs):
@@ -107,14 +110,16 @@ class TraceService:
                 **kwargs
             )
         except Exception as e:
-            logger.warning(f"[Tracer] ⚠️ Falha no quick_log (banco ocupado): {e}")
+            logger.warning(f"[Tracer] ⚠️ Falha no quick_log: {e}")
 
     def log_thought(self, assistant_name: str, thought: str, metadata: dict = None):
         """
         Registra o raciocínio/pensamento de um assistente analítico.
-        Essas mensagens aparecem com destaque no DevHUD para provar a autonomia.
         """
+        logger.info(f"[Tracer] 🧠 [{assistant_name}] Pensamento: {thought[:100]}...")
         try:
+            # Pensamentos são puramente informativos para o HUD. 
+            # Se falhar a persistência, não há impacto no resultado analítico.
             ExecutionTrace.objects.create(
                 trace_id=self.trace_id,
                 job_type=self.job_type,
@@ -124,5 +129,4 @@ class TraceService:
                 metadata=metadata or {}
             )
         except Exception as e:
-            # Em threads paralelas de IA, este ponto é o que mais sofre com 'database is locked'
-            logger.warning(f"[Tracer] 🧠 [{assistant_name}] Pensamento não persistido (banco ocupado): {thought[:50]}...")
+            logger.warning(f"[Tracer] 🧠 [{assistant_name}] Pensamento ignorado no banco (DB ocupado): {e}")

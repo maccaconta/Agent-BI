@@ -5,6 +5,8 @@ Views para gestão de políticas e diretrizes de IA por Administradores.
 """
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
+import os
+from django.conf import settings
 # Remover import temporário do spectacular para evitar conflitos de introspecção
 from apps.shared_models import PromptTemplate
 from apps.governance.models import GlobalAIConfig
@@ -199,3 +201,36 @@ class CostGovernanceViewSet(viewsets.ViewSet):
             quota.save()
             
         return Response({"status": "success", "new_limit": quota.max_tokens_monthly_limit})
+
+    @action(detail=False, methods=['post'])
+    def purge_analytical_cache(self, request):
+        """
+        LIMPEZA PROFUNDA (Higiene de Dados):
+        Remove o banco analítico temporário e os logs de execução.
+        NÃO afeta usuários, projetos ou templates.
+        """
+        results = {"database": "skipped", "traces": 0}
+        
+        # 1. Limpeza do Banco Analítico (SQLite de Datasets)
+        db_path = getattr(settings, "LOCAL_ANALYTICS_SQLITE_PATH", None)
+        if db_path and os.path.exists(db_path):
+            try:
+                # Fechamos conexões se houver (opcional, OS.remove resolve se não houver lock ativo)
+                os.remove(db_path)
+                results["database"] = "purged"
+            except Exception as e:
+                results["database"] = f"error: {str(e)}"
+
+        # 2. Limpeza de Logs de Execução (Audit Traces)
+        try:
+            count = ExecutionTrace.objects.count()
+            ExecutionTrace.objects.all().delete()
+            results["traces"] = count
+        except Exception as e:
+            results["traces"] = f"error: {str(e)}"
+
+        return Response({
+            "status": "success",
+            "message": "Higiene de dados concluída. O ambiente analítico foi resetado.",
+            "details": results
+        })

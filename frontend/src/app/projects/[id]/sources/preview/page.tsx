@@ -479,7 +479,7 @@ export default function DataPreviewPage() {
                     <tr className="border-b border-lux-border/20 text-lux-muted uppercase text-[10px] font-black tracking-widest bg-white">
                       {columns.map((col) => (
                         <th key={col} className="px-3 py-4 text-left border-lux-border/10 bg-lux-bg/10 first:border-l-0 group min-w-[260px] align-top">
-                          <div className={`p-5 rounded-[2rem] border transition-all h-full min-h-[170px] flex flex-col gap-4 shadow-sm ${
+                          <div className={`p-4 rounded-[1.5rem] border transition-all h-full min-h-[120px] flex flex-col gap-2.5 shadow-sm ${
                             (activeSource.selectedCols || []).includes(col) 
                               ? "bg-white border-lux-border/40 shadow-lux-shadow/5" 
                               : "bg-gray-50/50 border-dashed border-gray-300 opacity-60"

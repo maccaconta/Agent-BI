@@ -363,7 +363,8 @@ class ParquetService:
         """
         Gera um perfil de tendência temporal na amostra para velocidade.
         """
-        process_df = df.head(sample_size) if len(df) > sample_size else df
+        # IMPORTANTE: Usar .copy() para evitar mutação in-place no DataFrame original
+        process_df = df.head(sample_size).copy() if len(df) > sample_size else df.copy()
         temporal_profile = {"series": [], "has_temporal_data": False, "sample_size": len(process_df)}
         
         # 1. Identificar colunas de data

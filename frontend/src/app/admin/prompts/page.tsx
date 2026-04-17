@@ -59,6 +59,7 @@ export default function AdminPromptsPage() {
   const [simModel, setSimModel] = useState("AMAZON_NOVA_PRO");
   const [specialists, setSpecialists] = useState<any[]>([]);
   const [selectedSpecialist, setSelectedSpecialist] = useState<any>(null);
+  const [cleaning, setCleaning] = useState(false);
 
   // Ponte direta para o backend no modo Local Fast
   const BACKEND_URL = "";
@@ -254,6 +255,33 @@ export default function AdminPromptsPage() {
       setError(err.message);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handlePurgeCache = async () => {
+    if (!window.confirm("ATENÇÃO: Este procedimento de HIGIENE DE DADOS irá deletar todos os datasets ingeridos e logs de execução. Usuários, Prompts e Projetos estão SEGUROS. Deseja prosseguir com a faxina profunda?")) return;
+    
+    setCleaning(true);
+    setError(null);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/governance/costs/purge_analytical_cache/`, {
+        method: "POST",
+        headers: getHeaders()
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        alert(`Sucesso! ${data.message}\nDetalhes: ${JSON.stringify(data.details)}`);
+        fetchCostsData();
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 3000);
+      } else {
+        throw new Error("Erro ao realizar limpeza.");
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setCleaning(false);
     }
   };
 
@@ -811,6 +839,50 @@ export default function AdminPromptsPage() {
                         })}
                       </div>
                    </div>
+                </section>
+
+                {/* --- SEÇÃO DE HIGIENE E MANUTENÇÃO (SOLICITADO PELO USUÁRIO) --- */}
+                <section className="bg-white border-2 border-dashed border-red-100 p-12 rounded-[4rem] shadow-sm relative overflow-hidden group/maint mt-10">
+                  <div className="flex flex-col md:flex-row items-center justify-between gap-10">
+                    <div className="max-w-2xl">
+                      <div className="flex items-center gap-3 mb-6">
+                        <div className="p-3 bg-red-50 text-red-500 rounded-2xl">
+                           <Trash2 size={24} />
+                        </div>
+                        <h2 className="text-2xl font-black tracking-tight text-[#1A1A1A]">Higiene de Dados & Manutenção</h2>
+                      </div>
+                      <p className="text-sm text-[#8C8C8C] leading-relaxed mb-6">
+                        O sistema acumula logs de interação e cache de datasets ingeridos para performance. 
+                        A <span className="font-bold text-red-500 underline underline-offset-4 tracking-tighter uppercase text-[10px]">Limpeza Profunda</span> remove 
+                        tabelas obsoletas e rastros de execução, garantindo a integridade mestre do ambiente.
+                      </p>
+                      
+                      <div className="flex items-center gap-4 p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                        <ShieldCheck size={20} className="text-amber-500 shrink-0" />
+                        <p className="text-[11px] font-bold text-amber-700 leading-tight">
+                          NOTA DE SEGURANÇA: Esta ação NÃO afeta usuários, projetos, especialistas ou templates. Somente dados voláteis são removidos.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="shrink-0">
+                      <button 
+                        onClick={handlePurgeCache}
+                        disabled={cleaning}
+                        className="flex flex-col items-center gap-4 p-10 bg-white border-2 border-red-50 rounded-[3rem] hover:border-red-200 hover:shadow-xl transition-all group/btn disabled:opacity-50"
+                      >
+                         <div className={`p-6 rounded-full ${cleaning ? 'bg-gray-100 rotate-180' : 'bg-red-50 group-hover/btn:bg-red-500 group-hover/btn:text-white'} transition-all duration-500`}>
+                            {cleaning ? <RefreshCw className="animate-spin" size={32} /> : <Zap size={32} />}
+                         </div>
+                         <div className="text-center">
+                            <span className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#8C8C8C] mb-1">
+                               {cleaning ? "Higienizando..." : "Executar Limpeza"}
+                            </span>
+                            <span className="block text-xs font-bold text-red-500 italic">Purgar Cache Analítico</span>
+                         </div>
+                      </button>
+                    </div>
+                  </div>
                 </section>
              </div>
           ) : (

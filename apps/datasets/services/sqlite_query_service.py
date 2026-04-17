@@ -114,7 +114,14 @@ class LocalSQLiteQueryService:
         cursor = connection.execute(sql)
         rows = cursor.fetchmany(limit or self.MAX_ROWS)
         columns = [item[0] for item in (cursor.description or [])]
-        serialized_rows = [self._serialize_row(dict(row)) for row in rows]
+        
+        # Migração para Positional Mapping (Arrays em vez de Dicts)
+        # Isso garante que colunas duplicadas ou com nomes idênticos no SELECT não sejam perdidas
+        serialized_rows = [
+            [self._coerce_value(val) for val in row] 
+            for row in rows
+        ]
+        
         return {
             "validated_sql": sql,
             "columns": columns,

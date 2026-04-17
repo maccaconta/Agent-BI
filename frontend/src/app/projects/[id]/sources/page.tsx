@@ -192,7 +192,21 @@ export default function SourcesPage() {
     }
   };
 
-  const removeSource = (id: string) => {
+  const removeSource = async (id: string) => {
+    // Sincroniza com o backend se não for um ID temporário local
+    if (!id.startsWith("local-")) {
+      try {
+        const res = await fetch(`/api/v1/datasets/${id}/`, {
+          method: "DELETE",
+          headers: getBackendAuthHeaders(),
+        });
+        if (!res.ok) {
+          console.error("Falha ao excluir dataset no servidor.");
+        }
+      } catch (err) {
+        console.error("Erro ao conectar com a API de exclusão:", err);
+      }
+    }
     saveSources(sources.filter((source) => source.id !== id));
   };
 

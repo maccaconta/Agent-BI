@@ -61,7 +61,7 @@ class QuotaService:
             return
 
         with transaction.atomic():
-            quota, _ = UsageQuota.objects.select_for_update().get_or_create(user=user)
+            quota, _ = UsageQuota.objects.get_or_create(user=user)
             quota.input_tokens_count += input_tokens
             quota.output_tokens_count += output_tokens
             quota.save(update_fields=["input_tokens_count", "output_tokens_count", "updated_at"])

@@ -32,20 +32,20 @@ Você deve sugerir exatamente **7 widgets** que reflitam um diagnóstico realist
 Você DEVE sugerir exatamente **7 widgets**, nem mais, nem menos, seguindo esta distribuição:
 - **4 KPIs Críticos (BIGNUMBER)**: Valores consolidados (Escalares). 
   - **🚨 REGRA DE OURO**: JAMAIS use granularidade (ex: "por mês") em BIGNUMBER.
-- **3 Visões Analíticas (BAR, LINE ou PIE)**: Gráficos de distribuição e tendência.
+- **3 Visões Analíticas (CHART ou TABLE)**: Gráficos (Requer subType: BAR, LINE ou PIE) ou Listagens (TABLE).
 
 ### 🛡️ EXEMPLO DE SAÍDA (FEW-SHOT):
 ```json
 {
   "dataset_summary": "Análise de operações de vendas e faturamento...",
   "suggested_widgets": [
-    {"type": "BIGNUMBER", "title": "Receita Total", "prompt": "Qual a receita total?"},
-    {"type": "BIGNUMBER", "title": "Qtd Clientes", "prompt": "Total de clientes ativos?"},
-    {"type": "BIGNUMBER", "title": "Ticket Médio", "prompt": "Qual o ticket médio por venda?"},
-    {"type": "BIGNUMBER", "title": "Taxa de Conversão", "prompt": "Qual a taxa de conversão geral?"},
-    {"type": "BAR", "title": "Receita por Região", "prompt": "Distribuição de receita por região"},
-    {"type": "BAR", "title": "Top 10 Produtos", "prompt": "Top 10 produtos mais vendidos"},
-    {"type": "LINE", "title": "Evolução da Receita", "prompt": "Evolução mensal da receita"}
+    {"type": "BIGNUMBER", "title": "Receita Total", "prompt": "Qual a receita total?", "subType": null},
+    {"type": "BIGNUMBER", "title": "Qtd Clientes", "prompt": "Total de clientes ativos?", "subType": null},
+    {"type": "BIGNUMBER", "title": "Ticket Médio", "prompt": "Qual o ticket médio por venda?", "subType": null},
+    {"type": "BIGNUMBER", "title": "Taxa de Conversão", "prompt": "Qual a taxa de conversão geral?", "subType": null},
+    {"type": "CHART", "subType": "BAR", "title": "Receita por Região", "prompt": "Distribuição de receita por região"},
+    {"type": "CHART", "subType": "BAR", "title": "Top 10 Produtos", "prompt": "Top 10 produtos mais vendidos"},
+    {"type": "CHART", "subType": "LINE", "title": "Evolução da Receita", "prompt": "Evolução mensal da receita"}
   ]
 }
 ```
@@ -56,7 +56,7 @@ Você DEVE sugerir exatamente **7 widgets**, nem mais, nem menos, seguindo esta 
 3. **LINE (Linhas)**: Use **EXCLUSIVAMENTE** para séries temporais (evolução ao longo de datas).
 
 ### 🏷️ MAPEAMENTO SELETIVO (PERFORMANCE):
-1. **FOCO NO ESSENCIAL**: Você NÃO precisa mapear todas as colunas do schema. Forneça o objeto `column_mapping` **APENAS** para as colunas que você utilizou nos 7 widgets sugeridos ou que são chaves primárias críticas para o entendimento do negócio.
+1. **FOCO E VISIBILIDADE**: Você NÃO precisa mapear todas as colunas, mas **DEVE** mapear obrigatoriamente as PRIMARY_KEYS e colunas de **SCORE, RATING, SALDO ou LIMITES**, mesmo que não as use nos 7 widgets. Isso garante que o usuário consiga usá-las em edições manuais posteriores. Forneça o objeto `column_mapping` para estas colunas e para as que você utilizou.
 2. **DESCRIÇÃO DE NEGÓCIO**: Para as colunas selecionadas, o campo 'business_description' DEVE ser uma explicação amigável para executivos. 
    - Proibido: "Vlr Fatur"
    - Obrigatório: "Volume total de faturamento bruto da transação"
@@ -86,7 +86,8 @@ Para cada widget, você deve fornecer um `business_rationale` curto (máximo 15 
       "id": "id_unico_snake_case",
       "title": "Título Curto",
       "prompt": "Pergunta analítica usando nomes de colunas reais",
-      "type": "BIGNUMBER" | "BAR" | "LINE" | "PIE",
+      "type": "BIGNUMBER" | "CHART" | "TABLE",
+      "subType": "BAR" | "LINE" | "PIE" | null,
       "business_rationale": "Por que este KPI é importante...",
       "reasoning": "Por que este widget foi escolhido"
     }
@@ -249,9 +250,9 @@ Gere o mapeamento semântico seguindo estas regras de OURO:
             suggested = result.get("suggested_widgets", [])
             if isinstance(suggested, list) and len(suggested) > 0:
                 kpis = [w for w in suggested if w.get("type") == "BIGNUMBER"][:4]
-                charts = [w for w in suggested if w.get("type") in ["BAR", "LINE", "PIE"]][:3]
-                result["suggested_widgets"] = kpis + charts
-                logger.info(f"[Data_Interpreter] Composição 4+3 aplicada: {len(kpis)} KPIs e {len(charts)} Gráficos.")
+                charts_or_tables = [w for w in suggested if w.get("type") in ["CHART", "TABLE", "BAR", "LINE", "PIE"]][:3]
+                result["suggested_widgets"] = kpis + charts_or_tables
+                logger.info(f"[Data_Interpreter] Composição 4+3 aplicada: {len(kpis)} KPIs e {len(charts_or_tables)} Gráficos/Tabelas.")
 
             logger.info(f"[Data_Interpreter] Análise estratégica concluída para {len(llm_mapping)} colunas.")
             return result

@@ -85,10 +85,9 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
         # 1. Carregamento Único com Limites de Segurança
         try:
             if ext == "csv":
-                # Usamos utf-8 por padrão e o bloco except abaixo tentará iso-8859-1 se falhar
-                encoding = "utf-8"
+                # Usamos utf-8-sig por padrão para remover caracteres BOM invisíveis automaticamente
+                encoding = "utf-8-sig"
                 # Usamos sep=None com engine='python' para o Pandas detectar o delimitador automaticamente
-                # Testamos primeiro com o encoding sugerido, e tentamos ISO como fallback robusto
                 try:
                     df_full = pd.read_csv(
                         io.BytesIO(raw_bytes), 
@@ -111,6 +110,11 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
                     )
             else:
                 df_full = pd.read_excel(io.BytesIO(raw_bytes), nrows=parquet_svc.MAX_ROWS)
+            
+            # --- NORMALIZAÇÃO CRÍTICA DE COLUNAS ---
+            # Remove espaços acidentais no início/fim dos nomes (ex: " id_cliente" -> "id_cliente")
+            df_full.columns = [str(c).strip() for c in df_full.columns]
+            # ----------------------------------------
             
             # 2. Conversão e Schema
             parquet_bytes, schema_info = parquet_svc.convert_df_to_parquet(df_full)
@@ -331,13 +335,25 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
             
             # --- SALVAR PLANO ESTRATÉGICO NO PROJETO ---
             if ai_analysis.get("suggested_widgets"):
-                # Normalização de Widgets: Garantir que todos tenham um ID válido para evitar erros de Integridade
+                # Normalização de Widgets: Garantir que todos tenham um ID válido e esquema correto (type/subType)
                 widgets = []
                 for idx, w in enumerate(ai_analysis.get("suggested_widgets", [])):
                     w_id = w.get("id") or f"suggested_{w.get('type','widget').lower()}_{idx}"
-                    # Sanitização básica de ID
                     clean_id = w_id.lower().replace(" ", "_").replace("-", "_")
                     w["id"] = clean_id
+                    
+                    # Normalização de Tipo (Legado -> Padrão)
+                    w_type = str(w.get("type", "CHART")).upper()
+                    if w_type in ["BAR", "LINE", "PIE"]:
+                        w["subType"] = w_type
+                        w["type"] = "CHART"
+                    elif w_type == "GRID":
+                        w["type"] = "TABLE"
+                    
+                    # Garantir que subType seja UpperCase para o Frontend
+                    if w.get("subType"):
+                        w["subType"] = str(w["subType"]).upper()
+                        
                     widgets.append(w)
 
                 project.intake_metadata["initial_strategic_plan"] = widgets

@@ -18,8 +18,7 @@ Sua missão é transformar um "Prompt Global de Layout" do usuário em um plano 
      | :--- | :--- | :--- |
      | **BIGNUMBER** | 1 Linha x 1 Coluna | "Retorne o valor consolidado único para..." |
      | **TABLE** | Multi-linha x Multi-coluna | "Liste as colunas [A, B, C] para as top X ocorrências..." |
-     | **CHART_BAR/PIE** | Multi-linha x 2 Colunas | "Agrupe [Métrica] por [Categoria] e rankeie..." |
-     | **CHART_LINE** | Multi-linha x 2+ Colunas | "Mostre a evolução de [Métrica] ao longo do tempo (por dia/mês)..." |
+     | **CHART** | Multi-linha x 2+ Colunas | "Agrupe [Métrica] por [Categoria] e rankeie..." |
    - **ANTI-PATTERNS (PROIBIDO)**:
      - JAMAIS peça um gráfico para uma métrica que retorna valor único (ex: "Total de Vendas"). Se o widget for gráfico, seu prompt DEVE obrigar um agrupamento (ex: "Total de Vendas por Regional").
      - **Diferenciação Métrica vs Dimensão**: Inteiros e Floats (como idade, salário) são quase sempre MÉTRICAS (SUM, AVG). Não agrupe por eles (GROUP BY) a menos que queira uma distribuição de frequências. Categorias preferenciais: Strings com baixa cardinalidade ou Datas.
@@ -30,13 +29,12 @@ Sua missão é transformar um "Prompt Global de Layout" do usuário em um plano 
    - Verificar se as colunas numéricas de fato possuem valores (average > 0) antes de sugerir um cálculo de média anual.
    - Usar os nomes exatos das colunas (case-sensitive) conforme detectado no schema.
 6. ROBUSTEZ ANALÍTICA: Evite sugerir "Desvio Padrão", "Variância" ou cálculos estatísticos complexos nos BIGNUMBER, pois são instáveis e dificilmente fornecem insight rápido. Priorize: Soma (Total), Média (Ticket Médio/Performance), Contagem (Volume/Volumetria) e Percentual de Crescimento.
+7. **ESPECIFICAÇÃO DE GRÁFICOS (MANDATÓRIO)**: Todo widget do tipo `CHART` **DEVE** possuir obrigatoriamente a chave `subType` com um dos seguintes valores: `BAR`, `LINE` ou `PIE`. Nunca deixe esta chave vazia ou ausente se o tipo for CHART.
 
 ## TIPO DE WIDGETS SUPORTADOS:
 - BIGNUMBER: Para métricas únicas.
-- CHART_BAR: Comparação categorias.
-- CHART_LINE: Séries temporais.
-- CHART_PIE: Proporções percentuais ou partes de um todo.
-- TABLE: Para listagens detalhadas, grids de dados ou extrações de múltiplas colunas (máximo 10 colunas).
+- CHART: Para visualizações gráficas (Requer subType: BAR, LINE ou PIE).
+- TABLE: Para listagens detalhadas (máximo 10 colunas).
 
 ## SAÍDA EXIGIDA (JSON):
 {
@@ -46,8 +44,8 @@ Sua missão é transformar um "Prompt Global de Layout" do usuário em um plano 
     {
       "id": "bn_1",
       "title": "Breve nome da Metrica",
-      "type": "BIGNUMBER", // ou CHART ou TABLE
-      "subType": "PIE", // (Obrigatório se for CHART: BAR, LINE ou PIE. Remova se for BIGNUMBER ou TABLE)
+      "type": "CHART", // BIGNUMBER, CHART ou TABLE
+      "subType": "BAR", // OBRIGATÓRIO se for CHART: BAR, LINE ou PIE.
       "prompt": "prompt detalhado, coerente e com a especificação exata de colunas conforme regras."
     }
   ]
@@ -103,7 +101,7 @@ Sua missão é REVISAR e REFINAR os prompts dos widgets gerados por outro agente
 4. **CLAREZA DE MÉTRICA**: Se for BIGNUMBER, garanta que o prompt exija agregação única e proíba dimensões de agrupamento.
 5. **OTIMIZAÇÃO DE 'TABLE'**: Se o widget for TABLE, garanta que o prompt peça as colunas mais relevantes para o negócio (máximo 5-8 colunas).
 
-Retorne o exato mesmo JSON recebido, mas com os textos da chave 'prompt' otimizados."""
+Retorne o exato mesmo JSON recebido, preservando obrigatoriamente todas as chaves de metadados (`id`, `type`, `subType`, `title`), mas com os textos da chave 'prompt' otimizados. Nunca remova a chave 'subType' se o widget for um CHART."""
 
         user_message = f"""
 PLANO ATUAL:

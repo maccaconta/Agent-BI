@@ -350,8 +350,9 @@ function DashboardContent() {
         data = await response.json();
       } else {
         const text = await response.text();
-        // erro silenciado para producao
-        throw new Error("O servidor retornou um erro inesperado (Non-JSON). Verifique os logs do backend.");
+        const doc = new DOMParser().parseFromString(text, 'text/html');
+        const djangoError = doc.querySelector('title')?.textContent || "Erro Interno no Servidor";
+        throw new Error(`[Server ${response.status}] ${djangoError}`);
       }
 
       if (!response.ok) throw new Error(data.detail || `Erro ${response.status} no servidor`);
@@ -507,11 +508,18 @@ function DashboardContent() {
                     
                     const formatValue = (val) => {
                         if (val === null || val === undefined || val === '') return '-';
+                        
+                        // Detecção de Códigos/IDs: Strings que parecem números mas têm zeros à esquerda
+                        // ou que não são números puros devem ser retornadas como estão.
+                        const sVal = String(val);
+                        if (typeof val === 'string' && (val.startsWith('0') && val.length > 1)) return val;
+                        
                         const num = parseFloat(val);
-                        if (isNaN(num)) return val;
-                        if (num > 1000000) return (num / 1000000).toFixed(1) + 'M';
-                        if (num > 1000) return (num / 1000).toFixed(1) + 'K';
-                        return num.toLocaleString();
+                        if (isNaN(num) || !/^-?\d+(\.\d+)?$/.test(sVal.trim())) return sVal;
+                        
+                        if (num > 1000000) return (num / 1000000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 'M';
+                        if (num > 1000) return (num / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + 'K';
+                        return num.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
                     };
 
                     try {
@@ -531,37 +539,49 @@ function DashboardContent() {
 
                         if (data && data.rows && data.rows.length > 0) {
                             const rows = data.rows;
-                            const cols = Object.keys(rows[0]);
+                            const cols = data.columns || Object.keys(rows[0]);
+
+                            const getV = (row, index, col) => {
+                                if (!row) return '-';
+                                // 1. Tentar por Índice (Mapping Posicional - Recomendado)
+                                if (Array.isArray(row) && index < row.length) {
+                                  const val = row[index];
+                                  return (val !== null && val !== undefined) ? val : '-';
+                                }
+                                // 2. Tentar por Chave Exata (Dict Mapping)
+                                if (row[col] !== undefined && row[col] !== null) return row[col];
+                                // 3. Fallback: Busca Case-Insensitive (Para SQL Manual instável)
+                                const entry = Object.entries(row).find(([k]) => k.toLowerCase() === (col || "").toLowerCase());
+                                return entry ? entry[1] : '-';
+                            };
 
                             if (type === 'BIGNUMBER') {
                                 let val = 0;
+                                const firstRow = rows[0];
                                 if (rows.length === 1) {
-                                    val = Object.values(rows[0])[0];
+                                    val = Array.isArray(firstRow) ? firstRow[0] : Object.values(firstRow)[0];
                                 } else {
                                     val = rows.reduce((acc, row) => {
-                                        const v = parseFloat(Object.values(row)[0]);
+                                        const v = parseFloat(Array.isArray(row) ? row[0] : Object.values(row)[0]);
                                         return acc + (isNaN(v) ? 0 : v);
                                     }, 0);
                                 }
                                 
                                 container.innerText = formatValue(val);
                             } else if (type === 'TABLE') {
-                                // Prioriza colunas oficiais do backend para garantir integridade (Zero perda de campos)
-                                const actualCols = (data.columns && data.columns.length > 0) ? data.columns : cols;
-                                
                                 const tableHtml = \`
                                     <div class="overflow-hidden border border-gray-100 rounded-xl bg-white shadow-inner">
                                         <div class="overflow-x-auto custom-scrollbar">
                                             <table class="w-full text-left border-collapse">
                                                 <thead>
                                                     <tr class="bg-gray-50 border-b border-gray-100">
-                                                        \${actualCols.map(c => \`<th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-[#D4AF37] shadow-sm">\${c}</th>\`).join('')}
+                                                        \${cols.map(c => \`<th class="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-[#D4AF37] shadow-sm">\${c}</th>\`).join('')}
                                                     </tr>
                                                 </thead>
                                                 <tbody>
                                                     \${rows.map((row, i) => \`
                                                         <tr class="\${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                                                            \${actualCols.map(col => \`<td class="px-6 py-4 text-[11px] text-gray-700 font-medium">\${row[col] !== undefined && row[col] !== null ? row[col] : '-'}</td>\`).join('')}
+                                                            \${cols.map((c, idx) => \`<td class="px-6 py-4 text-[11px] text-gray-700 font-medium">\${formatValue(getV(row, idx, c))}</td>\`).join('')}
                                                         </tr>
                                                     \`).join('')}
                                                 </tbody>
@@ -578,34 +598,34 @@ function DashboardContent() {
                                 const pastelColors = ['#B3E5FC', '#C8E6C9', '#FFF9C4', '#FFCCBC', '#D1C4E9', '#F8BBD0', '#CFD8DC'];
 
                                 if (cols.length === 2) {
-                                    // Formato Simples: [Label, Valor]
-                                    xAxisData = rows.map(r => r[cols[0]]);
-                                    series = [{ name: title, data: rows.map(r => r[cols[1]]), type: type.toLowerCase() }];
+                                    xAxisData = rows.map((r, i) => getV(r, 0, cols[0]));
+                                    series = [{ name: title, data: rows.map((r, i) => getV(r, 1, cols[1])), type: type.toLowerCase() }];
                                 } else if (cols.length >= 3) {
-                                    // Detecção inteligente de formato: Pivotado [Series, Dim, Val] vs Wide [Dim, Metric1, Metric2]
                                     const firstRow = rows[0];
-                                    const isPivoted = typeof firstRow[cols[0]] === 'string' && 
-                                                     (typeof firstRow[cols[1]] === 'string' || firstRow[cols[1]] instanceof Date) &&
-                                                     typeof firstRow[cols[2]] === 'number';
+                                    const val0 = getV(firstRow, 0, cols[0]);
+                                    const val1 = getV(firstRow, 1, cols[1]);
+                                    const val2 = getV(firstRow, 2, cols[2]);
+                                    
+                                    const isPivoted = typeof val0 === 'string' && 
+                                                     (typeof val1 === 'string' || val1 instanceof Date) &&
+                                                     typeof val2 === 'number';
 
                                     if (isPivoted && cols.length === 3) {
-                                        // Formato Pivotado ECharts padrão
-                                        const devNames = [...new Set(rows.map(r => r[cols[0]]))];
-                                        xAxisData = [...new Set(rows.map(r => r[cols[1]]))].sort();
+                                        const devNames = [...new Set(rows.map((r, i) => getV(r, 0, cols[0])))];
+                                        xAxisData = [...new Set(rows.map((r, i) => getV(r, 1, cols[1])))].sort();
                                         series = devNames.map(name => ({
                                             name: name, type: type.toLowerCase(),
                                             data: xAxisData.map(x => {
-                                                const m = rows.find(r => r[cols[0]] === name && r[cols[1]] === x);
-                                                return m ? m[cols[2]] : 0;
+                                                const m = rows.find((r, i) => getV(r, 0, cols[0]) === name && getV(r, 1, cols[1]) === x);
+                                                return m ? getV(m, 2, cols[2]) : 0;
                                             })
                                         }));
                                     } else {
-                                        // Formato Wide: [X-Axis, Métrica 1, Métrica 2, ...]
-                                        xAxisData = rows.map(r => r[cols[0]]);
-                                        series = cols.slice(1).map(colName => ({
-                                            name: colName,
+                                        xAxisData = rows.map((r, i) => getV(r, 0, cols[0]));
+                                        series = cols.slice(1).map((c, idx) => ({
+                                            name: c,
                                             type: type.toLowerCase(),
-                                            data: rows.map(r => r[colName])
+                                            data: rows.map((r, i) => getV(r, idx + 1, c))
                                         }));
                                     }
                                 }
@@ -848,14 +868,15 @@ function DashboardContent() {
                       <div className={`px-4 py-3 bg-[#fdfdfd] dark:bg-black/20 border-b border-lux-border/10 flex items-center justify-between gap-3`}>
                         <div className="flex items-center gap-2 flex-1 min-w-0">
                            {/* Alça de Arraste */}
-                           <div className="cursor-grab active:cursor-grabbing text-lux-muted/30 hover:text-lux-accent transition-colors shrink-0 -ml-1 pr-1">
+                           <div className="cursor-grab active:cursor-grabbing text-lux-muted/30 hover:text-lux-accent transition-colors shrink-0 pr-1">
                               <GripVertical size={14} />
                            </div>
 
-                           <div className={`p-2 rounded-xl shrink-0 ${isBigNumber ? 'bg-lux-text/10 text-lux-text' : (widget.type === 'TABLE' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-lux-accent/20 text-lux-accent')}`}>
+                           <div className={`p-2 rounded-xl shrink-0 ${isBigNumber ? 'bg-lux-text/10 text-lux-text' : (widget.type?.toUpperCase() === 'TABLE' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-lux-accent/20 text-lux-accent')}`}>
                              {isBigNumber ? <Activity size={15} /> : (
-                               widget.type === 'TABLE' ? <Table size={15} /> : (
-                                 widget.subType === 'PIE' ? <PieChartIcon size={15} /> : (widget.subType === 'LINE' ? <LineChartIcon size={15} /> : <BarChart3 size={15} />)
+                               widget.type?.toUpperCase() === 'TABLE' ? <Table size={15} /> : (
+                                 (widget.subType?.toUpperCase() === 'PIE' || widget.type?.toUpperCase() === 'PIE') ? <PieChartIcon size={15} /> : 
+                                 ((widget.subType?.toUpperCase() === 'LINE' || widget.type?.toUpperCase() === 'LINE') ? <LineChartIcon size={15} /> : <BarChart3 size={15} />)
                                )
                              )}
                            </div>
@@ -875,18 +896,17 @@ function DashboardContent() {
                            <div className={`hidden sm:inline-block px-2 py-0.5 rounded-full text-[7px] font-black uppercase ${isBigNumber ? 'bg-emerald-500 text-white' : (widget.type === 'TABLE' ? 'bg-lux-text text-white' : 'bg-blue-500 text-white shadow-[0_2px_8px_rgba(59,130,246,0.5)]')}`}>
                               {isBigNumber ? 'KPI' : (widget.type === 'TABLE' ? 'GRID' : 'Chrt')}
                            </div>
-                           <div className="flex items-center gap-0.5 bg-black/5 p-0.5 rounded-xl border border-black/5">
+                           <div className="flex items-center gap-1 bg-black/5 p-1 rounded-xl border border-black/5">
                               <button onClick={() => setWidgetViewMode(prev => ({ ...prev, [widget.id]: 'PROMPT' }))} className={`px-2.5 py-1 rounded-lg text-[8px] font-black transition-all ${viewMode === 'PROMPT' ? 'bg-lux-text text-white shadow-md' : 'text-lux-muted hover:text-lux-text'}`}>PROMPT</button>
                               <button onClick={() => tabs.length > 0 && setWidgetViewMode(prev => ({ ...prev, [widget.id]: 'SQL' }))} disabled={tabs.length === 0} className={`px-2.5 py-1 rounded-lg text-[8px] font-black transition-all ${viewMode === 'SQL' ? 'bg-lux-accent text-black shadow-md' : 'text-lux-muted hover:text-lux-accent disabled:opacity-30'}`}>SQL</button>
                            </div>
                         </div>
                       </div>
                       
-                      <div className="p-4 relative min-h-[140px] flex flex-col">
-                        
-                        {/* Container Simétrico Unificado para Editores (Fix para Diferença de Altura) */}
-                        <div className="flex-1 w-full h-[340px] bg-black/5 dark:bg-white/5 border border-lux-border/20 rounded-2xl overflow-hidden shadow-inner flex flex-col relative transition-all p-5">
-                          {viewMode === 'PROMPT' ? (
+                      {/* Área do Editor - Preenchimento Integral do Corpo */}
+                      <div className="flex-1 flex flex-col border-b border-lux-border/5">
+                        {viewMode === 'PROMPT' ? (
+                          <div className="w-full flex-1 bg-blue-50/30 dark:bg-blue-900/5 p-4 flex flex-col min-h-[120px]">
                             <textarea 
                               value={widget.prompt}
                               onChange={(e) => {
@@ -895,34 +915,34 @@ function DashboardContent() {
                                 next[idx].prompt = e.target.value;
                                 setPlannedWidgets(next);
                               }}
-                              className="w-full h-full bg-transparent text-[13px] text-lux-text font-medium leading-relaxed resize-none outline-none focus:bg-lux-accent/[0.02] transition-all overflow-y-auto custom-scrollbar"
+                              className="flex-1 w-full bg-transparent text-[12px] text-slate-900 dark:text-slate-200 font-sans font-medium leading-relaxed resize-none outline-none overflow-y-auto scrollbar-thin scrollbar-thumb-lux-border/20 scrollbar-track-transparent"
                               placeholder="Descreva a regra de negócio..."
                             />
-                          ) : (
-                            <div className="w-full h-full bg-black relative group/terminal flex flex-col -m-5 p-5">
-                              <div className="absolute top-2 right-4 flex gap-1.5 z-10">
-                                <div className="w-1.5 h-1.5 rounded-full bg-red-500/30" />
-                                <div className="w-1.5 h-1.5 rounded-full bg-amber-500/30" />
-                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/30" />
-                              </div>
-                               <textarea 
-                                  value={(widget as any).sql !== undefined ? (widget as any).sql : extractWidgetSql(widget.id, activeTab?.content)}
-                                  onChange={(e) => {
-                                    const next = [...plannedWidgets];
-                                    const idx = next.findIndex(w => w.id === widget.id);
-                                    (next[idx] as any).sql = e.target.value;
-                                    setPlannedWidgets(next);
-                                  }}
-                                  spellCheck={false}
-                                  className="flex-1 w-full bg-transparent border-none outline-none resize-none text-[12px] font-mono text-[#00FF41] custom-scrollbar whitespace-pre-wrap break-words leading-relaxed drop-shadow-[0_0_5px_rgba(0,255,65,0.4)] overflow-y-auto"
-                               />
+                          </div>
+                        ) : (
+                          <div className="w-full flex-1 bg-[#0a0a0a] relative group/terminal p-4 flex flex-col min-h-[120px]">
+                            <div className="absolute top-2 right-4 flex gap-1 z-20 opacity-30">
+                              <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                              <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                             </div>
-                          )}
-                        </div>
+                             <textarea 
+                                value={(widget as any).sql !== undefined ? (widget as any).sql : extractWidgetSql(widget.id, activeTab?.content)}
+                                onChange={(e) => {
+                                  const next = [...plannedWidgets];
+                                  const idx = next.findIndex(w => w.id === widget.id);
+                                  (next[idx] as any).sql = e.target.value;
+                                  setPlannedWidgets(next);
+                                }}
+                                spellCheck={false}
+                                className="flex-1 w-full bg-transparent border-none outline-none resize-none text-[12px] font-mono text-[#00FF41]/90 scrollbar-thin scrollbar-thumb-emerald-500/10 scrollbar-track-transparent whitespace-pre-wrap break-words leading-relaxed drop-shadow-[0_0_8px_rgba(0,255,65,0.15)] overflow-y-auto"
+                             />
+                          </div>
+                        )}
                       </div>
                         
-                        {/* Unified Widget Toolbar */}
-                        <div className="mt-4 pt-4 border-t border-lux-border/5 flex items-center justify-between">
+                        {/* Toolbar do Widget - Footer */}
+                        <div className="px-4 py-3 bg-[#fdfdfd] dark:bg-black/5 flex items-center justify-between">
                            {!isBigNumber ? (
                              <div className="flex gap-2">
                                 {[
@@ -933,8 +953,11 @@ function DashboardContent() {
                                 ].map((tool) => {
                                   const vType = tool.id;
                                   let isActive = false;
-                                  if (vType === 'GRID') isActive = widget.type === 'TABLE';
-                                  else isActive = widget.type === 'CHART' && widget.subType === vType;
+                                  const currentType = widget.type?.toUpperCase();
+                                  const currentSubType = widget.subType?.toUpperCase();
+                                  
+                                  if (vType === 'GRID') isActive = currentType === 'TABLE' || currentType === 'GRID';
+                                  else isActive = (currentType === 'CHART' && currentSubType === vType) || currentType === vType;
 
                                   return (
                                     <button 
@@ -996,10 +1019,7 @@ function DashboardContent() {
             </div>
 
             <div className="mt-12 pt-12 border-t border-lux-border/10 flex flex-col items-center gap-6">
-              <div className="text-center space-y-2">
-                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-lux-muted">Finalização de Blueprint</p>
-                 <p className="text-[9px] text-lux-muted/60 italic">Clique para materializar todos os componentes acima em rastro analítico</p>
-              </div>
+
               <button 
                 onClick={handleMaterialize}
                 disabled={isWorking}

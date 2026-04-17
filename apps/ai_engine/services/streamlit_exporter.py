@@ -1,8 +1,10 @@
 import zipfile
 import io
 import textwrap
+import re
 from django.utils import timezone
 from apps.governance.models import WidgetScriptBinding
+from apps.datasets.models import Dataset
 
 class StreamlitExporter:
     """
@@ -16,8 +18,11 @@ class StreamlitExporter:
         version = dashboard.version_count  # Usa a versão mais recente
         widgets = WidgetScriptBinding.objects.filter(dashboard=dashboard, version=version)
         
+        # 0. Mapeamento de Tabelas (Lógico -> Físico)
+        table_map = self._build_table_map(dashboard)
+        
         # 1. Gerar o app.py
-        app_code = self._generate_app_py(dashboard, widgets)
+        app_code = self._generate_app_py(dashboard, widgets, table_map)
         
         # 2. Gerar requirements.txt
         requirements = "streamlit\npandas\nplotly\nsqlalchemy\npsycopg2-binary\npython-dotenv\n"
@@ -45,19 +50,46 @@ class StreamlitExporter:
         zip_buffer.seek(0)
         return zip_buffer
 
-    def _generate_app_py(self, dashboard, widgets):
+    def _build_table_map(self, dashboard):
         """
-        Gera o código fonte do Streamlit.
+        Constrói mapa de De-Para (Nome Lógico -> Nome Físico) para o projeto.
+        """
+        project = dashboard.project
+        datasets = Dataset.objects.filter(project=project)
+        mapping = {}
+        for ds in datasets:
+            # Variação 1: Nome limpo que a IA costuma usar (sem pontos/espaços)
+            logical = ds.name.lower().replace(" ", "_").replace("-", "_").replace(".", "_")
+            if ds.glue_table:
+                mapping[logical] = ds.glue_table
+                # Variação 2: Nome original em minúsculo
+                mapping[ds.name.lower()] = ds.glue_table
+        return mapping
+
+    def _generate_app_py(self, dashboard, widgets, table_map):
+        """
+        Gera o código fonte do Streamlit com mapeamento de tabelas.
         """
         title = dashboard.name
         generated_at = timezone.now().strftime('%d/%m/%Y %H:%M')
         
+        # Função interna para traduzir o SQL
+        def translate_sql(sql_content):
+            if not sql_content:
+                return ""
+            translated = sql_content
+            for logical, physical in table_map.items():
+                # Usa word boundary (\b) para evitar substituições parciais perigosas
+                pattern = r"\b" + re.escape(logical) + r"\b"
+                translated = re.sub(pattern, physical, translated, flags=re.IGNORECASE)
+            return translated
+
         # Header do Script
         code = textwrap.dedent(f"""
             import streamlit as st
             import pandas as pd
             import plotly.express as px
-            from sqlalchemy import create_all_engines, create_engine
+            from sqlalchemy import create_engine
             import os
             from dotenv import load_dotenv
 
@@ -128,7 +160,8 @@ class StreamlitExporter:
             for i, kpi in enumerate(kpis):
                 idx = i % cols_count
                 code += f"with cols[{idx}]:\n"
-                code += f"    df_{i} = run_query(\"\"\"{kpi.script_content}\"\"\")\n"
+                translated_sql = translate_sql(kpi.script_content)
+                code += f"    df_{i} = run_query(\"\"\"{translated_sql}\"\"\")\n"
                 code += f"    if not df_{i}.empty:\n"
                 code += f"        val = df_{i}.iloc[0, 0]\n"
                 code += f"        st.metric(\"{kpi.widget_id.replace('_', ' ').title()}\", val)\n"
@@ -138,7 +171,8 @@ class StreamlitExporter:
             code += "\n\n# --- Visualizações Estratégicas ---\n"
             for i, chart in enumerate(charts):
                 code += f"\nst.subheader(\"{chart.widget_id.replace('_', ' ').title()}\")\n"
-                code += f"df_c_{i} = run_query(\"\"\"{chart.script_content}\"\"\")\n"
+                translated_sql = translate_sql(chart.script_content)
+                code += f"df_c_{i} = run_query(\"\"\"{translated_sql}\"\"\")\n"
                 code += f"if not df_c_{i}.empty:\n"
                 # Heurística simples de gráfico baseada no prompt ou colunas
                 code += f"    cols = df_c_{i}.columns\n"

@@ -40,7 +40,7 @@ class ReportPromptService:
                  "name": ds.name,
                  "columns": ds.schema_json.get("columns", []) if ds.schema_json else [],
                  "row_count": ds.row_count,
-                 "data_profile": ds.data_profile_json,
+                 "data_profile": ds.data_profile_json or {},
                  "data_sample": ds.sample_json[:5]  # Apenas 5 linhas para calibração visual do modelo
              })
 
@@ -221,7 +221,13 @@ class ReportPromptService:
                 import traceback
                 error_trace = traceback.format_exc()
                 logger.error(f"[ReportPrompt] ❌ Falha crítica na thread do widget {w_id}: {e}\n{error_trace}")
-                return {"widget_id": w_id, "success": False, "error": str(e), "prompt": prompt}
+                return {
+                    "widget_id": w_id, 
+                    "success": False, 
+                    "error": str(e), 
+                    "error_type": type(e).__name__,
+                    "prompt": prompt
+                }
 
         # Execução Paralela da Rede (IA)
         with ThreadPoolExecutor(max_workers=min(len(widget_prompts), 10)) as executor:
@@ -311,8 +317,11 @@ class ReportPromptService:
         total_out = sum(r.get("output_tokens", 0) for r in (results or []))
         
         if (total_in + total_out) > 0:
-            logger.info(f"[ReportPromptService] Debitando {total_in + total_out} tokens reais para {user.email if user else 'desconhecido'}")
-            self.quota_service.log_token_usage(user, total_in, total_out)
+            try:
+                logger.info(f"[ReportPromptService] Debitando {total_in + total_out} tokens reais para {user.email if user else 'desconhecido'}")
+                self.quota_service.log_token_usage(user, total_in, total_out)
+            except Exception as q_err:
+                logger.warning(f"[ReportPromptService] ⚠️ Falha ao debitar tokens (DB busy): {q_err}")
         
         render_start = time.time()
         html = self.renderer.render_premium_deterministic_dashboard(
@@ -364,14 +373,8 @@ class ReportPromptService:
             total_time = time.time() - start_time
             logger.info(f"[ReportPromptService] ✔️ Materialização total finalizada em {total_time:.2f}s. Enviando {len(lean_results)} resultados enxutos.")
 
-            # Registrar consumo de tokens no QuotaService
-            try:
-                from apps.users.services.quota_service import QuotaService
-                total_in = sum(r.get("input_tokens", 0) for r in (results or []))
-                total_out = sum(r.get("output_tokens", 0) for r in (results or []))
-                QuotaService().log_token_usage(user, total_in, total_out)
-            except Exception as q_err:
-                logger.warning(f"[ReportPromptService] Falha ao registrar tokens: {q_err}")
+            # O registro de tokens já foi feito no início do bloco de persistência
+            # para evitar redundância e locks múltiplos.
 
             return {
                 "status": "success", 
@@ -383,13 +386,7 @@ class ReportPromptService:
                 "total_time": total_time
             }
         except Exception as e:
-            # Em caso de erro, ainda tentamos logar o que consumiu até aqui
-            try:
-                from apps.users.services.quota_service import QuotaService
-                total_in = sum(r.get("input_tokens", 0) for r in (results or []))
-                total_out = sum(r.get("output_tokens", 0) for r in (results or []))
-                QuotaService().log_token_usage(user, total_in, total_out)
-            except: pass
+            # Registro em erro removido para reduzir concorrência em falhas críticas
 
             logger.error(f"[ReportPromptService] ❌ Erro ao salvar versão no banco: {e}")
             

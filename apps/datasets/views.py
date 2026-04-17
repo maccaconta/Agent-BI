@@ -67,6 +67,18 @@ class DatasetViewSet(viewsets.ModelViewSet):
             resource_id=dataset.id,
         )
 
+    def perform_destroy(self, instance):
+        """Realiza exclusão lógica (soft-delete)."""
+        instance.soft_delete()
+        audit_event.send(
+            sender=self.__class__,
+            action="dataset.deleted",
+            user=self.request.user,
+            tenant=self.request.tenant,
+            resource_type="Dataset",
+            resource_id=instance.id,
+        )
+
     @action(
         detail=False,
         methods=["post"],
