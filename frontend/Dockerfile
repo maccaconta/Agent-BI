@@ -10,6 +10,7 @@ RUN npm ci
 COPY . .
 # Ignora erros de lint/typescript durante o build de produção para velocidade na demo
 ENV NEXT_TELEMETRY_DISABLED 1
+ENV IS_DOCKER=true
 RUN npm run build
 
 # ─── Runner ───────────────────────────────────────────────────────────────────
