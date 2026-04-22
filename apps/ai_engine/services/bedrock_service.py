@@ -207,8 +207,10 @@ class BedrockService:
                 if not content:
                     raise BedrockInvocationError("Resposta vazia do modelo.")
 
-                text = content[0].get("text", "")
                 usage = response_body.get("usage", {})
+                self.last_invoke_metadata["input_tokens"] = usage.get("input_tokens", 0)
+                self.last_invoke_metadata["output_tokens"] = usage.get("output_tokens", 0)
+
                 if trace and hasattr(trace, "end_step"):
                     trace.end_step(
                         "AWS Bedrock Inference",
@@ -217,20 +219,20 @@ class BedrockService:
                             "model_id": self.model_id,
                             "system_prompt": system_prompt,
                             "messages": messages,
-                            "input_tokens": usage.get("input_tokens", 0),
-                            "output_tokens": usage.get("output_tokens", 0),
+                            "input_tokens": self.last_invoke_metadata["input_tokens"],
+                            "output_tokens": self.last_invoke_metadata["output_tokens"],
                             "temperature": temperature
                         },
-                        input_tokens=usage.get("input_tokens", 0),
-                        output_tokens=usage.get("output_tokens", 0),
+                        input_tokens=self.last_invoke_metadata["input_tokens"],
+                        output_tokens=self.last_invoke_metadata["output_tokens"],
                         model_id=self.model_id
                     )
 
                 logger.info(
                     "Bedrock invoke_model: model=%s, input_tokens=%s, output_tokens=%s, elapsed=%.2fs",
                     self.model_id,
-                    usage.get("input_tokens", 0),
-                    usage.get("output_tokens", 0),
+                    self.last_invoke_metadata["input_tokens"],
+                    self.last_invoke_metadata["output_tokens"],
                     elapsed,
                 )
                 return text
@@ -382,6 +384,8 @@ class BedrockService:
 
                 text = content[0].get("text", "")
                 usage = response.get("usage", {})
+                self.last_invoke_metadata["input_tokens"] = usage.get("inputTokens", 0)
+                self.last_invoke_metadata["output_tokens"] = usage.get("outputTokens", 0)
                 
                 if trace and hasattr(trace, "end_step"):
                     trace.end_step(
@@ -391,20 +395,20 @@ class BedrockService:
                             "model_id": self.model_id,
                             "system_prompt": system_prompt,
                             "messages": messages or [{"role": "user", "content": user_message}],
-                            "input_tokens": usage.get("inputTokens", 0),
-                            "output_tokens": usage.get("outputTokens", 0),
+                            "input_tokens": self.last_invoke_metadata["input_tokens"],
+                            "output_tokens": self.last_invoke_metadata["output_tokens"],
                             "temperature": temperature
                         },
-                        input_tokens=usage.get("inputTokens", 0),
-                        output_tokens=usage.get("outputTokens", 0),
+                        input_tokens=self.last_invoke_metadata["input_tokens"],
+                        output_tokens=self.last_invoke_metadata["output_tokens"],
                         model_id=self.model_id
                     )
 
                 logger.info(
                     "Bedrock converse: model=%s, input_tokens=%s, output_tokens=%s, elapsed=%.2fs",
                     self.model_id,
-                    usage.get("inputTokens", 0),
-                    usage.get("outputTokens", 0),
+                    self.last_invoke_metadata["input_tokens"],
+                    self.last_invoke_metadata["output_tokens"],
                     elapsed,
                 )
                 return text
@@ -584,7 +588,7 @@ class BedrockService:
         if parsed is not None:
             metadata["response_origin"] = "agent_runtime" if used_agent_runtime else "model_runtime"
             metadata["success"] = True
-            self.last_invoke_metadata = metadata
+            self.last_invoke_metadata.update(metadata)
             return parsed
 
         if used_agent_runtime:
@@ -608,11 +612,11 @@ class BedrockService:
             if parsed_fallback is not None:
                 metadata["response_origin"] = "model_runtime_fallback_after_agent_runtime"
                 metadata["success"] = True
-                self.last_invoke_metadata = metadata
+                self.last_invoke_metadata.update(metadata)
                 return parsed_fallback
             response_text = fallback_text
 
-        self.last_invoke_metadata = metadata
+        self.last_invoke_metadata.update(metadata)
         raise BedrockInvocationError("Resposta do modelo nao e JSON valido.")
 
     def count_tokens_estimate(self, text: str) -> int:

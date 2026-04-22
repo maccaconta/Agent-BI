@@ -180,6 +180,7 @@ class CostGovernanceViewSet(viewsets.ViewSet):
             data.append({
                 "user_id": str(q.user.id),
                 "email": q.user.email,
+                "role": q.user.get_tenant_role(request.tenant) if hasattr(request, 'tenant') else "VIEWER",
                 "consumed_tokens": total_consumed,
                 "max_limit": q.max_tokens_monthly_limit,
                 "percent_used": round((total_consumed / q.max_tokens_monthly_limit * 100), 2) if q.max_tokens_monthly_limit > 0 else 0,

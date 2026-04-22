@@ -57,9 +57,6 @@ class QuotaService:
         if not user or not user.is_authenticated:
             return
 
-        if getattr(user, "is_super_admin", False):
-            return
-
         with transaction.atomic():
             quota, _ = UsageQuota.objects.get_or_create(user=user)
             quota.input_tokens_count += input_tokens

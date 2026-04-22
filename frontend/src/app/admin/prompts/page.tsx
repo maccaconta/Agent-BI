@@ -113,6 +113,7 @@ export default function AdminPromptsPage() {
     fetchSpecialists();
     fetchSystemPrompts();
     fetchCostsData();
+    fetchUsersQuotas();
     fetchDomains();
   }, []);
 
@@ -151,6 +152,18 @@ export default function AdminPromptsPage() {
       if (historyRes.ok) setCostsHistory(await historyRes.json());
     } catch (err) {
       console.error("Erro ao carregar dados de custos:", err);
+    }
+  }
+
+  async function fetchUsersQuotas() {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/governance/costs/users_quotas/`, { headers: getHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setUsersQuotas(data);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar quotas de usuários:", err);
     }
   }
 
@@ -199,6 +212,7 @@ export default function AdminPromptsPage() {
       });
       if (res.ok) {
         fetchCostsData();
+        fetchUsersQuotas();
         setSuccess(true);
         setTimeout(() => setSuccess(false), 2000);
       }
@@ -216,6 +230,7 @@ export default function AdminPromptsPage() {
       });
       if (res.ok) {
         fetchCostsData();
+        fetchUsersQuotas();
         setSuccess(true);
         setTimeout(() => setSuccess(false), 2000);
       }
@@ -1229,7 +1244,7 @@ export default function AdminPromptsPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {(costsSummary?.users_quotas || []).map((u: any) => (
+                        {(usersQuotas || []).map((u: any) => (
                           <tr key={u.user_id} className="border-b border-[#F1E9DB]/50 hover:bg-[#FDF9F0]/30 transition-all group">
                             <td className="px-4 py-6">
                               <div className="font-bold text-xs text-[#1A1A1A]">{u.email}</div>

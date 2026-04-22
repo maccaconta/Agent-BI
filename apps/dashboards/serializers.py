@@ -29,6 +29,7 @@ class DashboardSerializer(serializers.ModelSerializer):
             "config",
             "tags",
             "is_public",
+            "content",
             "created_at",
             "updated_at",
         ]
@@ -37,9 +38,12 @@ class DashboardSerializer(serializers.ModelSerializer):
             "current_version_id",
             "current_version_number",
             "cloudfront_url",
+            "content",
             "created_at",
             "updated_at",
         ]
+
+    content = serializers.ReadOnlyField(source="current_version.html_content")
 
 
 class DashboardCreateSerializer(serializers.ModelSerializer):

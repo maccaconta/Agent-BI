@@ -65,6 +65,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             "data_ready",
             "pending_datasets_count",
             "blueprint_widgets",
+            "dashboards",
         ]
         read_only_fields = [
             "id",
@@ -82,7 +83,15 @@ class ProjectSerializer(serializers.ModelSerializer):
             "data_ready",
             "pending_datasets_count",
             "blueprint_widgets",
+            "dashboards",
         ]
+
+    dashboards = serializers.SerializerMethodField()
+
+    def get_dashboards(self, obj) -> list:
+        from apps.dashboards.serializers import DashboardSerializer
+        dashes = obj.dashboards.filter(status="PUBLISHED").order_by("-created_at")[:5]
+        return DashboardSerializer(dashes, many=True).data
 
     data_ready = serializers.SerializerMethodField()
     pending_datasets_count = serializers.SerializerMethodField()

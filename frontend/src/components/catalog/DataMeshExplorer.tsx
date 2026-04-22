@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { 
   Database, 
   ChevronRight, 
@@ -22,7 +23,8 @@ import {
   X,
   Zap,
   CheckCircle2,
-  FileCode
+  FileCode,
+  Shuffle
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -69,6 +71,7 @@ export default function DataMeshExplorer({
   onSelect,
   compact = false 
 }: DataMeshExplorerProps) {
+  const router = useRouter();
   const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
   const [selectedSubdomain, setSelectedSubdomain] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -102,11 +105,11 @@ export default function DataMeshExplorer({
       <aside className="w-full lg:w-80 border-r border-[#F1E9DB] bg-[#FDF9F0]/20 flex flex-col">
         <div className="p-8 border-b border-[#F1E9DB]">
           <button 
-            onClick={() => onSelect?.(null as any)}
+            onClick={() => router.push('/projects')}
             className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-[#D4AF37] mb-6 hover:translate-x-1 transition-transform group"
           >
             <ArrowRight className="rotate-180" size={12} />
-            Fechar Catálogo
+            Voltar ao Portfólio
           </button>
           
           <div className="flex items-center gap-3 mb-4">
@@ -144,7 +147,7 @@ export default function DataMeshExplorer({
               >
                 <div className="flex items-center gap-3">
                   <div className={`p-1.5 rounded-lg ${selectedDomain === domain.id ? 'bg-[#1A1A1A] text-[#D4AF37]' : 'bg-[#F9F9F9]'}`}>
-                    <FolderOpen size={12} />
+                    <Layers size={12} />
                   </div>
                   <span className="text-[10px] font-black uppercase truncate">{domain.name}</span>
                 </div>
@@ -163,9 +166,11 @@ export default function DataMeshExplorer({
                       <button 
                         key={sub.id}
                         onClick={() => setSelectedSubdomain(sub.id)}
-                        className={`w-full flex items-center gap-3 p-2.5 rounded-xl transition-all ${selectedSubdomain === sub.id ? 'text-[#D4AF37] font-black' : 'text-[#8C8C8C] hover:text-[#1A1A1A]'}`}
+                        className={`w-full flex items-center gap-3 p-2.5 rounded-xl transition-all ${selectedSubdomain === sub.id ? 'bg-[#FDF9F0] border border-[#F1E9DB] text-[#D4AF37] font-black shadow-sm' : 'text-[#8C8C8C] hover:bg-white hover:text-[#1A1A1A]'}`}
                       >
-                        <div className="w-1 h-1 rounded-full bg-current" />
+                        <div className={`p-1 rounded-md ${selectedSubdomain === sub.id ? 'bg-[#D4AF37] text-white' : 'bg-transparent text-current'}`}>
+                          <Shuffle size={10} />
+                        </div>
                         <span className="text-[10px] uppercase truncate">{sub.name}</span>
                       </button>
                     ))}
@@ -432,11 +437,6 @@ function DatasetCard({ dataset, domains, subdomains, onSelect, onViewColumns }: 
              }`}>
                {dataset.confidentiality}
              </div>
-             {subdomainName && (
-               <div className="px-2 py-0.5 rounded bg-[#FDF9F0] text-[#D4AF37] text-[8px] font-black uppercase border border-[#F1E9DB]">
-                 {subdomainName}
-               </div>
-             )}
           </div>
         </div>
       </div>
@@ -453,9 +453,13 @@ function DatasetCard({ dataset, domains, subdomains, onSelect, onViewColumns }: 
           <span className="truncate">Linhagem: {dataset.lineage || 'Origem Direta'}</span>
         </div>
         {(domainName || subdomainName) && (
-          <div className="flex items-center gap-2 text-[8px] font-black text-[#1A1A1A] uppercase tracking-widest opacity-60">
-            <Layers size={10} className="text-[#D4AF37]" />
-            <span className="truncate">{domainName} {subdomainName ? `> ${subdomainName}` : ''}</span>
+          <div className="flex items-center gap-2 flex-wrap">
+             <div className="flex items-center gap-1.5 px-2 py-1 bg-[#FDF9F0] border border-[#D4AF37]/30 rounded-md">
+               <Layers size={10} className="text-[#D4AF37]" />
+               <span className="text-[8px] font-black text-[#D4AF37] uppercase tracking-widest">
+                 {subdomainName || domainName}
+               </span>
+             </div>
           </div>
         )}
       </div>

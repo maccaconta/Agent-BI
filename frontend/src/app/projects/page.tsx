@@ -75,7 +75,7 @@ export default function ProjectsPage() {
     <motion.div initial={false} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="w-full">
       <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
         <div>
-          <h1 className="text-3xl font-serif font-black text-lux-text tracking-tight transition-colors">Portfólio de Dados Corporativos</h1>
+          <h1 className="text-3xl font-serif font-black text-lux-text tracking-tight transition-colors">Portfólio de Relatórios Corporativos</h1>
           <p className="text-lux-muted text-sm mt-1">Selecione um domínio do catálogo para iniciar sua análise executiva.</p>
         </div>
         {!isVisualizador && (

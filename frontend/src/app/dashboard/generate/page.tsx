@@ -219,10 +219,22 @@ function DashboardContent() {
 
           if (data.dashboards && data.dashboards.length > 0) {
             setActiveDashboardId(data.dashboards[0].id);
+            
+            // --- NOVO: Carregar abas existentes ---
+            if (tabs.length === 0) {
+               const existingTabs = data.dashboards.map((d: any) => ({
+                 id: String(d.id),
+                 name: d.name,
+                 content: d.content,
+                 isBlueprint: d.status === "PUBLISHED"
+               }));
+               setTabs(existingTabs);
+               setActiveTabId(String(data.dashboards[0].id));
+            }
+
             // Injetar Blueprint Widgets se o projeto for BLUEPRINT
             if (data.status === "BLUEPRINT" && data.blueprint_widgets && data.blueprint_widgets.length > 0 && plannedWidgets.length === 0) {
                // Blueprint carregado
-               // Ordenação padronizada: KPIs primeiro
                const sortedWidgets = [...data.blueprint_widgets].sort((a: any, b: any) => {
                  if (a.type === 'BIGNUMBER' && b.type !== 'BIGNUMBER') return -1;
                  if (a.type !== 'BIGNUMBER' && b.type === 'BIGNUMBER') return 1;
@@ -385,8 +397,14 @@ function DashboardContent() {
 
         // --- UX: Abrir abas SQL automaticamente ---
         const newModeMap: Record<string, 'PROMPT' | 'SQL'> = {};
-        plannedWidgets.forEach(w => { newModeMap[w.id] = 'SQL'; });
-        setWidgetViewMode(newModeMap);
+        if (data.results && Array.isArray(data.results)) {
+           data.results.forEach((res: any) => {
+              newModeMap[res.widget_id] = 'SQL';
+           });
+        } else {
+           plannedWidgets.forEach(w => { newModeMap[w.id] = 'SQL'; });
+        }
+        setWidgetViewMode(prev => ({ ...prev, ...newModeMap }));
         
         const dashboardIdStr = String(data.dashboard_id);
         const newTab = {
@@ -930,7 +948,7 @@ function DashboardContent() {
                            </div>
                            <div className="flex items-center gap-1 bg-black/5 p-1 rounded-xl border border-black/5">
                               <button onClick={() => setWidgetViewMode(prev => ({ ...prev, [widget.id]: 'PROMPT' }))} className={`px-2.5 py-1 rounded-lg text-[8px] font-black transition-all ${viewMode === 'PROMPT' ? 'bg-lux-text text-white shadow-md' : 'text-lux-muted hover:text-lux-text'}`}>PROMPT</button>
-                              <button onClick={() => tabs.length > 0 && setWidgetViewMode(prev => ({ ...prev, [widget.id]: 'SQL' }))} disabled={tabs.length === 0} className={`px-2.5 py-1 rounded-lg text-[8px] font-black transition-all ${viewMode === 'SQL' ? 'bg-lux-accent text-black shadow-md' : 'text-lux-muted hover:text-lux-accent disabled:opacity-30'}`}>SQL</button>
+                              <button onClick={() => setWidgetViewMode(prev => ({ ...prev, [widget.id]: 'SQL' }))} disabled={tabs.length === 0 && !(widget as any).sql} className={`px-2.5 py-1 rounded-lg text-[8px] font-black transition-all ${viewMode === 'SQL' ? 'bg-lux-accent text-black shadow-md' : 'text-lux-muted hover:text-lux-accent disabled:opacity-30'}`}>SQL</button>
                            </div>
                         </div>
                       </div>
