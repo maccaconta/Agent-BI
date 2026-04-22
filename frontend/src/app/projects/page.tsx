@@ -4,13 +4,17 @@ import { motion } from "framer-motion";
 import { FolderKanban, Plus, Clock, Search, Workflow, Loader2, Database } from "lucide-react";
 import Link from "next/link";
 import { getBackendJsonHeaders } from "@/lib/backendAuth";
-
-export default function ProjectsList() {
+import { useAuth } from "@/contexts/AuthContext";
+export default function ProjectsPage() {
   const [projects, setProjects] = useState<any[]>([]);
+  const [domains, setDomains] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [domains, setDomains] = useState<any[]>([]);
   const [selectedDomain, setSelectedDomain] = useState("all");
+  const { getRole } = useAuth();
+
+  const currentRole = getRole();
+  const isVisualizador = currentRole === "VIEWER";
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -30,7 +34,7 @@ export default function ProjectsList() {
 
     const fetchDomains = async () => {
       try {
-        const res = await fetch("/api/v1/projects/domains", {
+        const res = await fetch("/api/v1/projects/domains/", {
           headers: getBackendJsonHeaders()
         });
         const data = await res.json();
@@ -74,9 +78,11 @@ export default function ProjectsList() {
           <h1 className="text-3xl font-serif font-black text-lux-text tracking-tight transition-colors">Portfólio de Dados Corporativos</h1>
           <p className="text-lux-muted text-sm mt-1">Selecione um domínio do catálogo para iniciar sua análise executiva.</p>
         </div>
-        <Link href="/projects/new" className="flex items-center gap-2 bg-lux-text text-lux-bg px-6 py-3 rounded-xl text-sm font-bold shadow-lg hover:scale-105 transition-transform">
-          <Plus size={18} /> Cadastrar Um Projeto Novo
-        </Link>
+        {!isVisualizador && (
+          <Link href="/projects/new" className="flex items-center gap-2 bg-lux-text text-lux-bg px-6 py-3 rounded-xl text-sm font-bold shadow-lg hover:scale-105 transition-transform">
+            <Plus size={18} /> Cadastrar Um Projeto Novo
+          </Link>
+        )}
       </div>
 
       <div className="mb-8 flex flex-col md:flex-row gap-4">
@@ -116,9 +122,11 @@ export default function ProjectsList() {
           <FolderKanban className="mx-auto text-lux-muted/30 mb-6" size={64} />
           <h3 className="text-xl font-bold text-lux-text mb-2">Nenhum projeto encontrado</h3>
           <p className="text-lux-muted mb-8">Comece criando o primeiro projeto de inteligência do seu domínio.</p>
-          <Link href="/projects/new" className="text-lux-text font-bold border-b-2 border-lux-text pb-1 hover:opacity-70 transition-opacity">
-            Criar Novo Projeto →
-          </Link>
+          {!isVisualizador && (
+            <Link href="/projects/new" className="text-lux-text font-bold border-b-2 border-lux-text pb-1 hover:opacity-70 transition-opacity">
+              Criar Novo Projeto →
+            </Link>
+          )}
         </div>
       ) : (
         <div className="space-y-16">
@@ -138,12 +146,16 @@ export default function ProjectsList() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {groupedProjects[domain].map((p) => {
                   const isBlueprint = p.status === "BLUEPRINT";
+                  
+                  // Visualizadores só acessam Blueprints (Relatórios prontos)
+                  const canAccess = !isVisualizador || isBlueprint;
+                  
                   const targetHref = isBlueprint 
                     ? `/dashboard/generate?project_id=${p.id}` 
-                    : `/projects/${p.id}/sources`;
+                    : (isVisualizador ? "#" : `/projects/${p.id}/sources`);
 
                   return (
-                    <Link href={targetHref} key={p.id}>
+                    <Link href={targetHref} key={p.id} className={!canAccess ? "cursor-not-allowed opacity-60 grayscale scale-95" : ""}>
                       <motion.div 
                         whileHover={{ y: -6, scale: 1.01 }}
                         whileTap={{ scale: 0.98 }}

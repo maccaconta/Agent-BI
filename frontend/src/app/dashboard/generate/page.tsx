@@ -38,6 +38,7 @@ import {
 } from "lucide-react";
 import DevHUD from '@/components/layout/DevHUD';
 import { useRouter, useSearchParams } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 import { getProjectRelationshipsKey, readProjectSources, writeProjectSources } from "@/lib/projectSources";
 import { getBackendJsonHeaders, getBackendAuthHeaders } from "@/lib/backendAuth";
 import { ProjectHeaderStandard } from "@/components/project/ProjectHeaderStandard";
@@ -72,7 +73,10 @@ interface DashboardTab {
 }
 
 function DashboardContent() {
-  const router = useRouter();
+  const { user, getRole } = useAuth();
+  const currentRole = getRole();
+  const isVisualizador = currentRole === "VIEWER";
+  const isAdmin = user?.is_super_admin || currentRole === "ADMIN" || currentRole === "OWNER";
   const [projectId, setProjectId] = useState<string | null>(null);
   const [projectDraft, setProjectDraft] = useState<Record<string, string> | null>(null);
   const [globalPrompt, setGlobalPrompt] = useState("");
@@ -478,6 +482,7 @@ function DashboardContent() {
     // Captura headers de auth para injetar no iframe (essencial para AWS 401 fix)
     const authHeaders = getBackendAuthHeaders();
     const authToken = authHeaders.Authorization || "";
+    const tenantSlug = authHeaders["X-Tenant-Slug"] || "";
 
     if (fragment && fragment.trim().startsWith("<!DOCTYPE")) {
       return fragment;
@@ -516,10 +521,14 @@ function DashboardContent() {
           <script>
             window.AgentBI_Context = { 
                 datasets: ${JSON.stringify(datasets)},
-                authToken: "${authToken}"
+                authToken: "${authToken}",
+                tenantSlug: "${tenantSlug}"
             };
             window.AgentBI = {
                 renderWidget: async (containerId, sql, type, title) => {
+                    console.log("[AgentBI] Renderizando Widget:", { title, type, containerId });
+                    console.log("[AgentBI] Contexto de Auth:", window.AgentBI_Context);
+                    
                     const container = document.getElementById(containerId);
                     if(!container) return;
                     container.innerHTML = '<div class="flex items-center justify-center h-full opacity-20"><div class="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-500"></div></div>';
@@ -545,7 +554,8 @@ function DashboardContent() {
                             method: 'POST',
                             headers: { 
                                 'Content-Type': 'application/json',
-                                'Authorization': window.AgentBI_Context.authToken || ''
+                                'Authorization': window.AgentBI_Context.authToken || '',
+                                'X-Tenant-Slug': window.AgentBI_Context.tenantSlug || ''
                             },
                             body: JSON.stringify({ 
                                 sql, 
@@ -822,12 +832,13 @@ function DashboardContent() {
       </header>
 
       <div className="flex w-full flex-1 min-h-0 overflow-hidden relative border-t border-lux-border/10">
-        <div style={{ width: plannerWidth }} className="flex-shrink-0 flex flex-col bg-white/40 dark:bg-black/20 backdrop-blur-xl border-r border-lux-border/20 overflow-hidden">
-          <div className="p-6 border-b border-lux-border/10 flex items-center justify-between shrink-0">
-             <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-lux-text text-lux-bg flex items-center justify-center shadow-lg"><LayoutDashboard size={18} /></div>
-                <h2 className="text-sm font-black uppercase tracking-widest text-lux-text">Planner</h2>
-             </div>
+        {!isVisualizador && (
+          <div style={{ width: plannerWidth }} className="flex-shrink-0 flex flex-col bg-white/40 dark:bg-black/20 backdrop-blur-xl border-r border-lux-border/20 overflow-hidden">
+            <div className="p-6 border-b border-lux-border/10 flex items-center justify-between shrink-0">
+               <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-lux-text text-lux-bg flex items-center justify-center shadow-lg"><LayoutDashboard size={18} /></div>
+                  <h2 className="text-sm font-black uppercase tracking-widest text-lux-text">Planner</h2>
+               </div>
              <button onClick={() => setIsDrawerOpen(true)} className="flex items-center gap-2 bg-lux-accent/10 border border-lux-accent/30 text-lux-accent px-3 py-1.5 rounded-xl text-[10px] font-black uppercase shadow-sm">
                <Database size={12} /><span>Catalog</span>
              </button>
@@ -1053,8 +1064,11 @@ function DashboardContent() {
             </div>
           </div>
         </div>
+        )}
 
-        <div onMouseDown={startResizing} className={`w-1 cursor-col-resize z-[30] ${isResizing ? 'bg-lux-accent' : 'bg-transparent hover:bg-lux-border/30'}`} />
+        {!isVisualizador && (
+          <div onMouseDown={startResizing} className={`w-1 cursor-col-resize z-[30] ${isResizing ? 'bg-lux-accent' : 'bg-transparent hover:bg-lux-border/30'}`} />
+        )}
 
         <div className="flex-1 min-w-0 bg-[#f8f9fa] dark:bg-[#0c0c0e] flex flex-col relative overflow-hidden">
             <div className="h-14 bg-white/80 dark:bg-lux-card/80 backdrop-blur-xl border-b border-lux-border/10 flex items-center px-6 gap-2 shrink-0 z-40 relative">

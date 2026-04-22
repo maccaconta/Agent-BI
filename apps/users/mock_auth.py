@@ -49,6 +49,8 @@ class LocalFastMockAuthentication(BaseAuthentication):
                             is_super_admin=True,
                             primary_tenant=tenant
                         )
+                        user.set_password("admin")
+                        user.save()
                 
                 # Garante que o admin mock tenha o tenant correto setado como primário
                 if not user.primary_tenant:
@@ -56,15 +58,20 @@ class LocalFastMockAuthentication(BaseAuthentication):
                     user.save()
                 
                 # 3. Garante vínculo e role de OWNER no tenant alvo
-                member, _ = TenantMember.objects.get_or_create(
+                member, created = TenantMember.objects.get_or_create(
                     user=user,
                     tenant=tenant,
                     defaults={"role": RoleChoices.OWNER, "is_active": True}
                 )
                 
-                if not member.is_active:
+                if not created and (member.role != RoleChoices.OWNER or not member.is_active):
+                    member.role = RoleChoices.OWNER
                     member.is_active = True
                     member.save()
+
+                if not user.is_super_admin:
+                    user.is_super_admin = True
+                    user.save()
 
                 request.tenant = tenant
                 return (user, None)

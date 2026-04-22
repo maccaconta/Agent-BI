@@ -160,6 +160,7 @@ class GlobalAIConfig(TimeStampedModel):
     compliance_rules = models.TextField(blank=True, verbose_name="Diretrizes de Compliance")
     
     language = models.CharField(max_length=10, default="pt-BR", verbose_name="Idioma")
+    session_timeout_minutes = models.IntegerField(default=15, verbose_name="Timeout de Sessão (min)")
     is_active = models.BooleanField(default=True, verbose_name="Ativo")
 
     class Meta:

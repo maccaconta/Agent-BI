@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import DataDomain, Project
+from .models import DataDomain, DataSubDomain, Project
 
 class DataDomainSerializer(serializers.ModelSerializer):
     tenant_name = serializers.ReadOnlyField(source='tenant.name')
@@ -16,6 +16,14 @@ class DataDomainSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
+
+class DataSubDomainSerializer(serializers.ModelSerializer):
+    domain_name = serializers.ReadOnlyField(source='domain.name')
+
+    class Meta:
+        model = DataSubDomain
+        fields = ['id', 'domain', 'domain_name', 'name', 'description']
+
 class ProjectDomainSerializer(serializers.ModelSerializer):
     """Serializer simplificado para listagem dentro de domínios"""
     class Meta:
@@ -26,6 +34,7 @@ class ProjectDomainSerializer(serializers.ModelSerializer):
 class ProjectSerializer(serializers.ModelSerializer):
     tenant_name = serializers.ReadOnlyField(source="tenant.name")
     domain_name = serializers.ReadOnlyField(source="domain.name")
+    subdomain_name = serializers.ReadOnlyField(source="subdomain.name")
 
     class Meta:
         model = Project
@@ -35,6 +44,8 @@ class ProjectSerializer(serializers.ModelSerializer):
             "tenant_name",
             "domain",
             "domain_name",
+            "subdomain",
+            "subdomain_name",
             "name",
             "description",
             "domain_data_owner",
@@ -60,6 +71,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             "tenant",
             "tenant_name",
             "domain_name",
+            "subdomain_name",
             "s3_path",
             "glue_database",
             "athena_workgroup",
@@ -120,6 +132,7 @@ class ProjectIntakeCreateSerializer(serializers.Serializer):
     objective = serializers.CharField(required=False, allow_blank=True, default="")
     specialist_prompt_id = serializers.UUIDField(required=False, allow_null=True)
     domain_id = serializers.UUIDField(required=False, allow_null=True)
+    subdomain_id = serializers.UUIDField(required=False, allow_null=True)
     analysis_max_rows = serializers.IntegerField(required=False, default=5000)
 
     def validate_dashboard(self, value: str) -> str:

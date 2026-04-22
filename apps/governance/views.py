@@ -9,12 +9,15 @@ import os
 from django.conf import settings
 # Remover import temporário do spectacular para evitar conflitos de introspecção
 from apps.shared_models import PromptTemplate
-from apps.governance.models import GlobalAIConfig
-from apps.governance.serializers import PromptTemplateSerializer, GlobalAIConfigSerializer
+from apps.governance.models import GlobalAIConfig, AgentSystemPrompt
+from apps.governance.serializers import (
+    PromptTemplateSerializer, GlobalAIConfigSerializer, AgentSystemPromptSerializer
+)
+from apps.ai_engine.services.prompt_service import PromptService
 from django.db.models import Sum, Count, F, Q, Value
 from django.db.models.functions import TruncDate, Coalesce
 from apps.audit.models import ExecutionTrace
-from apps.users.models import UsageQuota, User
+from apps.users.models import UsageQuota, User, TenantMember
 from apps.projects.models import Project
 from apps.governance.services.pricing_service import PricingService
 from rest_framework.decorators import action
@@ -180,27 +183,134 @@ class CostGovernanceViewSet(viewsets.ViewSet):
                 "consumed_tokens": total_consumed,
                 "max_limit": q.max_tokens_monthly_limit,
                 "percent_used": round((total_consumed / q.max_tokens_monthly_limit * 100), 2) if q.max_tokens_monthly_limit > 0 else 0,
+                "max_logins": q.max_logins_limit,
+                "total_logins": q.total_logins_count,
                 "cost_usd": cost
             })
         return Response(data)
 
     @action(detail=False, methods=['post'])
     def update_limit(self, request):
-        """Atualiza o limite de tokens de um usuário."""
+        """Atualiza o limite de tokens e logins de um usuário."""
         user_id = request.data.get("user_id")
         new_limit = request.data.get("limit")
+        new_login_limit = request.data.get("login_limit")
         
-        if not user_id or new_limit is None:
-            return Response({"error": "user_id e limit são obrigatórios"}, status=400)
+        if not user_id:
+            return Response({"error": "user_id é obrigatório"}, status=400)
             
-        quota = UsageQuota.objects.filter(user_id=user_id).first()
-        if not quota:
-            quota = UsageQuota.objects.create(user_id=user_id, max_tokens_monthly_limit=new_limit)
-        else:
+        quota, _ = UsageQuota.objects.get_or_create(user_id=user_id)
+        
+        if new_limit is not None:
             quota.max_tokens_monthly_limit = new_limit
-            quota.save()
+        if new_login_limit is not None:
+            quota.max_logins_limit = new_login_limit
             
-        return Response({"status": "success", "new_limit": quota.max_tokens_monthly_limit})
+        quota.save()
+            
+        return Response({
+            "status": "success", 
+            "new_limit": quota.max_tokens_monthly_limit,
+            "new_login_limit": quota.max_logins_limit
+        })
+
+    @action(detail=False, methods=['post'])
+    def update_user_role(self, request):
+        """Atualiza o papel (role) do usuário no tenant atual ou primário."""
+        user_id = request.data.get("user_id")
+        new_role = request.data.get("role")
+        
+        if not user_id or not new_role:
+            return Response({"error": "user_id e role são obrigatórios"}, status=400)
+            
+        role_map = {
+            "Administrador": "ADMIN",
+            "Criador": "ANALYST",
+            "Visualizador": "VIEWER"
+        }
+        
+        backend_role = role_map.get(new_role, new_role)
+        
+        if backend_role not in ["ADMIN", "ANALYST", "APPROVER", "VIEWER"]:
+            return Response({"error": "Role inválido"}, status=400)
+            
+        user = User.objects.filter(id=user_id).first()
+        if not user:
+            return Response({"error": "Usuário não encontrado"}, status=404)
+            
+        tenant = user.primary_tenant
+        if not tenant:
+            return Response({"error": "Usuário não possui tenant primário"}, status=400)
+            
+        membership, created = TenantMember.objects.get_or_create(
+            user=user, 
+            tenant=tenant,
+            defaults={"role": backend_role}
+        )
+        if not created:
+            membership.role = backend_role
+            membership.save()
+            
+        # Também atualiza a flag is_super_admin se for Administrador
+        if backend_role == "ADMIN":
+            user.is_super_admin = True
+            user.save(update_fields=["is_super_admin"])
+        elif user.is_super_admin:
+            user.is_super_admin = False
+            user.save(update_fields=["is_super_admin"])
+            
+        return Response({
+            "status": "success", 
+            "new_role": new_role,
+            "backend_role": backend_role
+        })
+
+    @action(detail=False, methods=['post'])
+    def invite_user(self, request):
+        """Convida um novo usuário (criação via convite)."""
+        email = request.data.get("email")
+        role = request.data.get("role", "Visualizador")
+        
+        if not email:
+            return Response({"error": "E-mail é obrigatório"}, status=400)
+            
+        # Simulação de convite/registro simplificado para o ambiente local
+        user, created = User.objects.get_or_create(
+            email=email,
+            defaults={
+                "username": email.split("@")[0],
+                "is_active": True
+            }
+        )
+        
+        # Garantir Quota
+        UsageQuota.objects.get_or_create(user=user)
+        
+        # Definir Role
+        self.update_user_role(request=request) # Reaproveita a lógica de role
+        
+        return Response({
+            "status": "success",
+            "message": "Usuário convidado e configurado com sucesso.",
+            "user_id": str(user.id),
+            "created": created
+        })
+
+    @action(detail=False, methods=['post'])
+    def delete_user(self, request):
+        """Remove (desativa) um usuário do sistema."""
+        user_id = request.data.get("user_id")
+        if not user_id:
+            return Response({"error": "user_id é obrigatório"}, status=400)
+            
+        user = User.objects.filter(id=user_id).first()
+        if not user:
+            return Response({"error": "Usuário não encontrado"}, status=404)
+            
+        user.is_active = False
+        user.save(update_fields=["is_active"])
+        
+        return Response({"status": "success", "message": "Usuário desativado com sucesso."})
 
     @action(detail=False, methods=['post'])
     def purge_analytical_cache(self, request):
@@ -234,3 +344,26 @@ class CostGovernanceViewSet(viewsets.ViewSet):
             "message": "Higiene de dados concluída. O ambiente analítico foi resetado.",
             "details": results
         })
+
+
+class AgentSystemPromptViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para manutenção manual dos prompts de sistema dos agentes técnicos.
+    Fase 2 da Governança Dinâmica.
+    """
+    queryset = AgentSystemPrompt.objects.all()
+    serializer_class = AgentSystemPromptSerializer
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+    pagination_class = None
+
+    def get_queryset(self):
+        return AgentSystemPrompt.objects.all().order_by('name')
+
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        PromptService.invalidate_cache(instance.agent_key)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        PromptService.invalidate_cache(instance.agent_key)

@@ -3,12 +3,20 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
+interface Membership {
+  tenant_id: string;
+  tenant_name: string;
+  tenant_slug: string;
+  role: "OWNER" | "ADMIN" | "ANALYST" | "APPROVER" | "VIEWER";
+}
+
 interface User {
   id: string;
   email: string;
   full_name: string;
   is_super_admin: boolean;
   primary_tenant_slug?: string;
+  memberships?: Membership[];
 }
 
 interface AuthContextType {
@@ -66,8 +74,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     document.cookie = "agent_bi_access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
 
     setUser(null);
-    router.push("/login");
+    router.push("/");
   };
+
+  const [timeoutMs, setTimeoutMs] = useState(15 * 60 * 1000);
+
+  // Busca configuração global de timeout
+  useEffect(() => {
+    if (!user) return;
+    
+    const fetchTimeout = async () => {
+      try {
+        const token = localStorage.getItem("agent_bi_access_token");
+        const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000'}/api/v1/governance/global-config/`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const configs = Array.isArray(data) ? data : (data.results || []);
+          if (configs.length > 0) {
+            const minutes = configs[0].session_timeout_minutes || 15;
+            console.log(`⏱️ Timeout de sessão sincronizado: ${minutes} min`);
+            setTimeoutMs(minutes * 60 * 1000);
+          }
+        }
+      } catch (err) {
+        console.error("Falha ao sincronizar timeout:", err);
+      }
+    };
+
+    fetchTimeout();
+  }, [user]);
+
+  // ─── Monitoramento de Inatividade ───
+  useEffect(() => {
+    if (!user) return;
+
+    let timeoutId: NodeJS.Timeout;
+
+    const resetTimer = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        console.warn("Sessão expirada por inatividade.");
+        logout();
+      }, timeoutMs);
+    };
+
+    // Eventos que resetam o timer de inatividade
+    const events = ["mousedown", "mousemove", "keypress", "scroll", "touchstart"];
+    events.forEach(event => document.addEventListener(event, resetTimer));
+
+    // Inicia o timer
+    resetTimer();
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      events.forEach(event => document.removeEventListener(event, resetTimer));
+    };
+  }, [user, timeoutMs]);
 
   return (
     <AuthContext.Provider value={{ user, loading, login, logout }}>
@@ -81,5 +145,14 @@ export function useAuth() {
   if (context === undefined) {
     throw new Error("useAuth must be used within an AuthProvider");
   }
-  return context;
+
+  // Helper para verificar o role no tenant atual
+  const getRole = (tenantSlug?: string) => {
+    if (context.user?.is_super_admin) return "ADMIN";
+    const slug = tenantSlug || context.user?.primary_tenant_slug;
+    const membership = context.user?.memberships?.find(m => m.tenant_slug === slug);
+    return membership?.role || "VIEWER";
+  };
+
+  return { ...context, getRole };
 }

@@ -8,9 +8,10 @@ from rest_framework.response import Response
 from apps.audit.signals import audit_event
 from apps.users.permissions import IsTenantAnalyst, IsTenantMember, TenantObjectPermission
 
-from .models import DataDomain, Project
+from .models import DataDomain, DataSubDomain, Project
 from .serializers import (
     DataDomainSerializer,
+    DataSubDomainSerializer,
     ProjectIntakeCreateSerializer,
     ProjectSerializer,
 )
@@ -32,11 +33,7 @@ class DataDomainViewSet(viewsets.ModelViewSet):
     ordering_fields = ["created_at", "name"]
 
     def get_queryset(self):
-        queryset = super().get_queryset().annotate(project_count=Count("projects"))
-        
-        # Log de debug para rastreamento no servidor Django
-        print(f"[DEBUG] DataDomain Query | Total: {queryset.count()}")
-        
+        queryset = super().get_queryset().annotate(project_count=Count("projects")).order_by("-created_at")
         return queryset
 
     def perform_create(self, serializer):
@@ -48,10 +45,21 @@ class DataDomainViewSet(viewsets.ModelViewSet):
 
 
 @extend_schema(tags=["Governança & Data Mesh"])
+class DataSubDomainViewSet(viewsets.ModelViewSet):
+    """ViewSet para gestão de Subdomínios de Dados."""
+
+    queryset = DataSubDomain.objects.all().order_by("-created_at")
+    serializer_class = DataSubDomainSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["domain"]
+    search_fields = ["name", "description"]
+
+
+@extend_schema(tags=["Governança & Data Mesh"])
 class ProjectViewSet(viewsets.ModelViewSet):
     """ViewSet de projetos com endpoint de intake para criação via frontend."""
 
-    queryset = Project.objects.filter(is_deleted=False)
+    queryset = Project.objects.filter(is_deleted=False).order_by("-created_at")
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["status", "domain"]
     search_fields = ["name", "description", "domain_data_owner"]
@@ -61,7 +69,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
         queryset = (
             super()
             .get_queryset()
-            .select_related("tenant", "domain", "created_by", "updated_by")
+            .select_related("tenant", "domain", "subdomain", "created_by", "updated_by")
         )
         if _is_platform_admin(self.request.user):
             return queryset
@@ -96,32 +104,38 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
             dashboard_name = payload["dashboard"]
             domain_id = payload.get("domain_id")
+            subdomain_id = payload.get("subdomain_id")
             domain_name = payload.get("dataDomain", "Geral")
+            subdomain_name = ""
             
+            # Resolução de Domínio
             if domain_id:
                 try:
                     domain = DataDomain.objects.get(id=domain_id, tenant=tenant)
-                    domain_name = domain.name # Sincroniza o nome para o metadata
+                    domain_name = domain.name 
                 except DataDomain.DoesNotExist:
-                    # Fallback para criação por nome se o ID for inválido
                     domain, _ = DataDomain.objects.get_or_create(
-                        tenant=tenant,
-                        name=domain_name,
-                        defaults={"owner": request.user}
+                        tenant=tenant, name=domain_name, defaults={"owner": request.user}
                     )
             else:
                 domain, _ = DataDomain.objects.get_or_create(
-                    tenant=tenant,
-                    name=domain_name,
-                    defaults={
-                        "description": f"Domínio criado automaticamente para {dashboard_name}",
-                        "owner": request.user,
-                    },
+                    tenant=tenant, name=domain_name,
+                    defaults={"description": f"Domínio automático", "owner": request.user},
                 )
+
+            # Resolução de Subdomínio
+            subdomain = None
+            if subdomain_id:
+                try:
+                    subdomain = DataSubDomain.objects.get(id=subdomain_id, domain=domain)
+                    subdomain_name = subdomain.name
+                except DataSubDomain.DoesNotExist:
+                    pass
 
             intake_metadata = {
                 "dashboard": payload["dashboard"],
                 "dataDomain": domain_name,
+                "subdomain": subdomain_name,
                 "domainDataOwner": payload.get("domainDataOwner", ""),
                 "confidentiality": payload.get("confidentiality", ""),
                 "crawlFrequency": payload.get("crawlFrequency", ""),
@@ -132,7 +146,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
             # 4. Checa Duplicidade (Unique Constraint)
             if Project.objects.filter(tenant=tenant, name=dashboard_name, is_deleted=False).exists():
-                print(f"[PROJECT_VIEW] ⚠️ Projeto já existe: {dashboard_name} no tenant {tenant.slug}")
+                print(f"[PROJECT_VIEW] [WARNING] Projeto ja existe: {dashboard_name} no tenant {tenant.slug}")
                 return Response(
                     {"detail": f"Já existe um projeto ativo com o nome '{dashboard_name}' neste tenant."},
                     status=status.HTTP_400_BAD_REQUEST,
@@ -141,6 +155,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
             project = Project.objects.create(
                 tenant=tenant,
                 domain=domain,
+                subdomain=subdomain,
                 name=dashboard_name,
                 description=payload.get("objective", ""),
                 domain_data_owner=payload.get("domainDataOwner", ""),
@@ -151,7 +166,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 intake_metadata=intake_metadata,
                 created_by=request.user,
             )
-            print(f"[PROJECT_VIEW] 🚀 Projeto criado com sucesso: ID={project.id}")
+            print(f"[PROJECT_VIEW] [SUCCESS] Projeto criado com sucesso: ID={project.id}")
 
             audit_event.send(
                 sender=self.__class__,
@@ -169,7 +184,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
-            print(f"[PROJECT_VIEW] ❌ Erro ao criar projeto: {str(e)}\n{error_details}")
+            print(f"[PROJECT_VIEW] [ERROR] Erro ao criar projeto: {str(e)}\n{error_details}")
             return Response(
                 {"detail": f"Erro Técnico Detectado no Backend: {str(e)} | STACK: {error_details[:300]}..."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,

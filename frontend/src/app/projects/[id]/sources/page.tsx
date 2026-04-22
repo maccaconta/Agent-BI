@@ -17,13 +17,17 @@ import {
   Info,
   ShieldCheck,
   Zap,
+  Globe,
+  RefreshCw,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import { readProjectSources, writeProjectSources, type StoredProjectSource } from "@/lib/projectSources";
+import { useAuth } from "@/contexts/AuthContext";
 import { getBackendAuthHeaders } from "@/lib/backendAuth";
 import { ProjectHeaderStandard } from "@/components/project/ProjectHeaderStandard";
 import { AWSPipelineMap } from "@/components/project/AWSPipelineMap";
+import DataMeshExplorer from "@/components/catalog/DataMeshExplorer";
 
 /**
  * SourcesPage
@@ -35,9 +39,24 @@ import { AWSPipelineMap } from "@/components/project/AWSPipelineMap";
 export default function SourcesPage() {
   const params = useParams();
   const router = useRouter();
+  const { getRole } = useAuth();
   const projectId = params.id as string;
   const [sources, setSources] = useState<StoredProjectSource[]>([]);
   const [uploading, setUploading] = useState(false);
+  const currentRole = getRole();
+  const isVisualizador = currentRole === "VIEWER";
+  const [showMeshPicker, setShowMeshPicker] = useState(false);
+  const [meshDatasets, setMeshDatasets] = useState<any[]>([]);
+  const [domains, setDomains] = useState<any[]>([]);
+  const [subdomains, setSubdomains] = useState<any[]>([]);
+  const [loadingMesh, setLoadingMesh] = useState(false);
+
+  useEffect(() => {
+    if (isVisualizador) {
+      router.replace("/projects");
+    }
+  }, [isVisualizador, router]);
+
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentDatasetId, setCurrentDatasetId] = useState<string | null>(null);
   const [processingStep, setProcessingStep] = useState<string>("");
@@ -49,42 +68,85 @@ export default function SourcesPage() {
   useEffect(() => {
     setSources(readProjectSources(projectId));
     
+    const initMesh = async () => {
+        setLoadingMesh(true);
+        await Promise.all([
+            fetchMeshDatasets(),
+            fetchDomains(),
+            fetchSubdomains()
+        ]);
+        setLoadingMesh(false);
+    };
+    initMesh();
+    
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
   }, [projectId]);
 
+  async function fetchDomains() {
+    try {
+      const res = await fetch("/api/v1/projects/domains/", { headers: getBackendAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setDomains(Array.isArray(data) ? data : (data.results || []));
+      }
+    } catch (err) { console.error(err); }
+  }
+
+  async function fetchSubdomains() {
+    try {
+      const res = await fetch("/api/v1/projects/subdomains/", { headers: getBackendAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setSubdomains(Array.isArray(data) ? data : (data.results || []));
+      }
+    } catch (err) { console.error(err); }
+  }
+
   // O cronômetro foi movido para a tela de Diagnóstico/Preview
 
-  // Polling para acompanhar o processamento no backend (Sincronia Silenciosa)
-  useEffect(() => {
-    if (currentDatasetId && isAnalyzing) {
-      const poll = async () => {
-        try {
-          const res = await fetch(`/api/v1/datasets/${currentDatasetId}/`, {
-            headers: getBackendAuthHeaders(),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.status === "READY" || data.status === "ERROR") {
-              setIsAnalyzing(false);
-              setCurrentDatasetId(null);
-              // Atualiza a lista local
-              setSources(readProjectSources(projectId));
-            }
-          }
-        } catch (err) {
-          console.error("Erro no polling do dataset:", err);
-        }
-      };
-
-      pollingRef.current = setInterval(poll, 3000);
-      poll();
-    } else {
-      if (pollingRef.current) clearInterval(pollingRef.current);
+  async function fetchMeshDatasets() {
+    try {
+      setLoadingMesh(true);
+      const res = await fetch("/api/v1/datasets/?t=" + Date.now(), {
+        headers: getBackendAuthHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMeshDatasets(Array.isArray(data) ? data : (data.results || []));
+      }
+    } catch (err) {
+      console.error("Erro ao buscar Mesh:", err);
+    } finally {
+      setLoadingMesh(false);
     }
-  }, [currentDatasetId, isAnalyzing, projectId]);
+  }
+
+  const handleLinkMeshDataset = (dataset: any) => {
+    if (sources.find(s => s.id === dataset.id)) {
+      alert("Ativo já está vinculado a este projeto.");
+      return;
+    }
+
+    const newSource: StoredProjectSource = {
+      id: dataset.id,
+      name: dataset.name,
+      type: "MESH_ASSET",
+      size: dataset.s3_original_size_bytes || 0,
+      rows: dataset.row_count || 0,
+      columns: dataset.schema_json ? Object.keys(dataset.schema_json) : [],
+      previewData: [],
+      sample: [],
+      selectedCols: dataset.schema_json ? Object.keys(dataset.schema_json) : [],
+      descriptions: {},
+      status: "READY",
+    };
+
+    saveSources([...sources, newSource]);
+    setShowMeshPicker(false);
+  };
 
   const saveSources = (items: StoredProjectSource[]) => {
     setSources(items);
@@ -233,57 +295,142 @@ export default function SourcesPage() {
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start mt-6">
         {/* Painel de Upload (Esq) */}
         <div className="xl:col-span-8 space-y-6">
-          <div
-            onClick={() => !uploading && fileInputRef.current?.click()}
-            className={`group relative border-2 border-dashed border-lux-border/30 dark:border-lux-border/50 rounded-[3rem] px-8 py-14 flex flex-col items-center justify-center bg-white/50 dark:bg-white/5 hover:bg-white/80 hover:border-lux-accent transition-all min-h-[320px] shadow-sm overflow-hidden ${uploading ? "cursor-wait" : "cursor-pointer"}`}
-          >
-            <div className="absolute inset-0 bg-gradient-to-br from-lux-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-
-            <div className="w-20 h-20 rounded-full bg-lux-text dark:bg-lux-accent text-white dark:text-black flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-2xl">
-              {uploading ? (
-                <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}>
-                  <Zap size={32} />
-                </motion.div>
-              ) : (
-                <UploadCloud size={32} />
-              )}
-            </div>
-
-            <h2 className="text-2xl md:text-3xl font-serif font-black text-lux-text dark:text-lux-accent mb-2 text-center">Mapear Nova Fonte</h2>
-            
+          <div className="relative">
             <AnimatePresence>
-              {isAnalyzing && (
+              {showMeshPicker && (
                 <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  className="flex items-center gap-2 mb-4 bg-lux-accent/10 border border-lux-accent/20 px-4 py-2 rounded-full"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  className="fixed inset-0 z-[100] bg-[#FDF9F0]/95 backdrop-blur-xl flex flex-col items-center justify-center p-6 md:p-12"
                 >
-                  <Sparkles size={14} className="text-lux-accent animate-pulse" />
-                  <span className="text-[10px] font-black text-lux-accent uppercase tracking-[0.1em]">
-                    ✨ Agent-BI está interpretando a semântica dos dados...
-                  </span>
+                  <motion.div 
+                    initial={{ y: 20 }}
+                    animate={{ y: 0 }}
+                    className="w-[98vw] h-[98vh] bg-white/95 backdrop-blur-3xl border border-[#D4AF37]/30 rounded-[3rem] p-10 md:p-16 shadow-[0_50px_150px_rgba(0,0,0,0.15)] flex flex-col relative overflow-hidden"
+                  >
+                    {/* Decorativo de Fundo Luxo */}
+                    <div className="absolute -top-40 -right-40 w-[600px] h-[600px] bg-[#D4AF37]/3 rounded-full blur-[120px] pointer-events-none" />
+                    <div className="absolute -bottom-40 -left-40 w-[600px] h-[600px] bg-[#1A1A1A]/3 rounded-full blur-[120px] pointer-events-none" />
+
+                  <div className="flex items-center justify-between mb-12 relative z-10">
+                    <div className="flex items-center gap-6">
+                      <div className="p-3 bg-[#1A1A1A] text-[#D4AF37] rounded-2xl"><Globe size={20} /></div>
+                      <div>
+                        <h3 className="text-xl font-black text-[#1A1A1A]">Data Mesh Catalog</h3>
+                        <p className="text-[10px] font-black text-[#8C8C8C] uppercase tracking-widest">Selecione um ativo governado já existente</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => setShowMeshPicker(false)}
+                      className="p-3 hover:bg-black/5 rounded-full transition-all"
+                    >
+                      <ArrowLeft size={20} />
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-hidden flex flex-col">
+                    {loadingMesh ? (
+                       <div className="flex-1 flex flex-col items-center justify-center">
+                          <RefreshCw size={48} className="text-[#D4AF37] animate-spin mb-4" />
+                          <p className="text-[10px] font-black uppercase tracking-widest text-[#8C8C8C]">Carregando Catálogo Hierárquico...</p>
+                       </div>
+                    ) : (
+                      <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+                        <DataMeshExplorer 
+                          compact={false}
+                          datasets={meshDatasets.map(d => ({
+                              id: d.id,
+                              name: d.name,
+                              domain: d.domain_id || d.domain_name,
+                              subdomain: d.subdomain_id || d.subdomain_name,
+                              owner_email: d.created_by_email,
+                              confidentiality: d.confidentiality || 'RESTRITO',
+                              row_count: d.row_count,
+                              created_at: d.created_at,
+                              source_type: d.source_type || 'CSV',
+                              lineage: typeof d.lineage_info === 'string' ? d.lineage_info : (d.lineage_info?.source || 'Origem Direta'),
+                              description: d.description || ''
+                          })) as any}
+                          domains={domains}
+                          subdomains={subdomains}
+                          onSelect={(asset) => {
+                            handleLinkMeshDataset(asset);
+                            setShowMeshPicker(false);
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-8 flex justify-end gap-4 border-t border-[#F1E9DB] pt-8">
+                     <button 
+                       onClick={() => setShowMeshPicker(false)}
+                       className="px-10 py-4 bg-[#1A1A1A] text-white rounded-full font-black text-xs uppercase tracking-[0.2em] hover:scale-105 active:scale-95 transition-all shadow-xl"
+                     >
+                       Confirmar Seleção
+                     </button>
+                  </div>
+                  </motion.div>
                 </motion.div>
               )}
             </AnimatePresence>
-            <p className="text-lux-muted dark:text-lux-muted/80 text-center max-w-md mb-8 leading-relaxed text-md font-light italic">
-              Selecione arquivos CSV ou Excel para iniciar a análise estatística local em tempo real.
-            </p>
 
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              className="hidden"
-              accept=".csv,.xlsx,.xls"
-            />
+            <div
+              onClick={() => !uploading && fileInputRef.current?.click()}
+              className={`group relative border-2 border-dashed border-lux-border/30 dark:border-lux-border/50 rounded-[3rem] px-8 py-14 flex flex-col items-center justify-center bg-white/50 dark:bg-white/5 hover:bg-white/80 hover:border-lux-accent transition-all min-h-[320px] shadow-sm overflow-hidden ${uploading ? "cursor-wait" : "cursor-pointer"}`}
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-lux-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
 
-            <button className="bg-lux-text dark:bg-lux-accent text-white dark:text-black px-10 py-4 rounded-2xl font-black text-sm shadow-xl hover:scale-105 transition-all flex items-center gap-3">
-              <Plus size={20} /> Browser de Arquivos
-            </button>
+              <div className="w-20 h-20 rounded-full bg-lux-text dark:bg-lux-accent text-white dark:text-black flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-2xl">
+                {uploading ? (
+                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}>
+                    <Zap size={32} />
+                  </motion.div>
+                ) : (
+                  <UploadCloud size={32} />
+                )}
+              </div>
+
+              <h2 className="text-2xl md:text-3xl font-serif font-black text-lux-text dark:text-lux-accent mb-2 text-center">Mapear Nova Fonte</h2>
+              
+              <AnimatePresence>
+                {isAnalyzing && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="flex items-center gap-2 mb-4 bg-lux-accent/10 border border-lux-accent/20 px-4 py-2 rounded-full"
+                  >
+                    <Sparkles size={14} className="text-lux-accent animate-pulse" />
+                    <span className="text-[10px] font-black text-lux-accent uppercase tracking-[0.1em]">
+                      ✨ Agent-BI está interpretando a semântica dos dados...
+                    </span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              <p className="text-lux-muted dark:text-lux-muted/80 text-center max-w-md mb-8 leading-relaxed text-md font-light italic">
+                Selecione arquivos CSV ou Excel para iniciar a análise estatística local em tempo real.
+              </p>
+
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                className="hidden"
+                accept=".csv,.xlsx,.xls"
+              />
+
+              <button className="bg-lux-text dark:bg-lux-accent text-white dark:text-black px-10 py-4 rounded-2xl font-black text-sm shadow-xl hover:scale-105 transition-all flex items-center gap-3">
+                <Plus size={20} /> Browser de Arquivos
+              </button>
+            </div>
           </div>
 
-          <AWSPipelineMap />
+          <AWSPipelineMap 
+            activeTab={showMeshPicker ? 'mesh' : 'sources'} 
+            onSourceClick={() => setShowMeshPicker(!showMeshPicker)} 
+          />
         </div>
 
         {/* Painel de Inventário (Dir) */}

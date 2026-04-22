@@ -22,8 +22,12 @@ import {
   Coins,
   ShieldCheck,
   TrendingUp,
-  Wallet
+  Wallet,
+  Database,
+  UserPlus
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 import { 
   AreaChart, 
   Area, 
@@ -47,19 +51,40 @@ import {
  * Atualizado com terminologia corporativa e cores de status nos switches.
  */
 export default function AdminPromptsPage() {
-  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("MASTER");
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  const [activeTab, setActiveTab] = useState<"MASTER" | "SPECIALISTS" | "COSTS">("MASTER");
+  const [specialists, setSpecialists] = useState<any[]>([]);
+  const [selectedSpecialist, setSelectedSpecialist] = useState<any | null>(null);
+  const [systemPrompts, setSystemPrompts] = useState<any[]>([]);
+  const [selectedAgent, setSelectedAgent] = useState<any | null>(null);
   const [costsSummary, setCostsSummary] = useState<any>(null);
   const [costsHistory, setCostsHistory] = useState<any[]>([]);
   const [usersQuotas, setUsersQuotas] = useState<any[]>([]);
-  const [simModel, setSimModel] = useState("AMAZON_NOVA_PRO");
-  const [specialists, setSpecialists] = useState<any[]>([]);
-  const [selectedSpecialist, setSelectedSpecialist] = useState<any>(null);
+  const [domains, setDomains] = useState<any[]>([]);
+  const [subdomains, setSubdomains] = useState<any[]>([]);
   const [cleaning, setCleaning] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [showAddDomainModal, setShowAddDomainModal] = useState(false);
+  const [showAddSubdomainModal, setShowAddSubdomainModal] = useState(false);
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [newUser, setNewUser] = useState({ email: "", role: "VIEWER" });
+  const [newDomainName, setNewDomainName] = useState("");
+  const router = useRouter();
+  const { user, getRole } = useAuth();
+
+  const currentRole = getRole();
+  const isAdmin = user?.is_super_admin || currentRole === "ADMIN" || currentRole === "OWNER";
+  const isCriador = currentRole === "ANALYST";
+  const canEdit = isAdmin;
+
+  // Redirecionamento de segurança para Visualizadores
+  useEffect(() => {
+    if (user && !isAdmin && !isCriador) {
+        router.push("/projects");
+    }
+  }, [user, isAdmin, isCriador, router]);
 
   // Ponte direta para o backend no modo Local Fast
   const BACKEND_URL = "";
@@ -74,6 +99,7 @@ export default function AdminPromptsPage() {
     top_k: 250,
     max_tokens_limit: 32000,
     ingestion_row_limit: 5000,
+    session_timeout_minutes: 15,
     is_active: true
   });
 
@@ -85,8 +111,36 @@ export default function AdminPromptsPage() {
   useEffect(() => {
     fetchGlobalPrompt();
     fetchSpecialists();
+    fetchSystemPrompts();
     fetchCostsData();
+    fetchDomains();
   }, []);
+
+  const fetchDomains = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/projects/domains/?t=${Date.now()}`, {
+        headers: getHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDomains(Array.isArray(data) ? data : (data.results || []));
+      }
+    } catch (err) {
+      console.error("Erro ao carregar domínios:", err);
+    }
+  }
+
+  async function fetchSubdomains(domainId: string) {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/projects/subdomains/?domain=${domainId}`, { headers: getHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setSubdomains(Array.isArray(data) ? data : (data.results || []));
+      }
+    } catch (err) {
+      console.error("Erro ao carregar subdomínios:", err);
+    }
+  }
 
   async function fetchCostsData() {
     try {
@@ -95,20 +149,53 @@ export default function AdminPromptsPage() {
 
       const historyRes = await fetch(`${BACKEND_URL}/api/v1/governance/costs/history/`, { headers: getHeaders() });
       if (historyRes.ok) setCostsHistory(await historyRes.json());
-
-      const quotasRes = await fetch(`${BACKEND_URL}/api/v1/governance/costs/users_quotas/`, { headers: getHeaders() });
-      if (quotasRes.ok) setUsersQuotas(await quotasRes.json());
     } catch (err) {
       console.error("Erro ao carregar dados de custos:", err);
     }
   }
 
-  const updateQuotaLimit = async (userId: string, limit: number) => {
+  const handleAddDomain = async () => {
+    if (!newDomainName) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/projects/domains/`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ name: newDomainName })
+      });
+      if (res.ok) {
+        setNewDomainName("");
+        setShowAddDomainModal(false);
+        fetchDomains();
+      }
+    } catch (err) {
+      console.error("Erro ao adicionar domínio:", err);
+    }
+  };
+
+  const handleAddSubdomain = async () => {
+    if (!newDomainName || !subdomains[0]?.domain) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/projects/subdomains/`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ domain: subdomains[0].domain, name: newDomainName })
+      });
+      if (res.ok) {
+        setNewDomainName("");
+        setShowAddSubdomainModal(false);
+        fetchSubdomains(subdomains[0].domain);
+      }
+    } catch (err) {
+      console.error("Erro ao adicionar subdomínio:", err);
+    }
+  };
+
+  const updateQuotaLimit = async (userId: string, limit: number, loginLimit?: number) => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/v1/governance/costs/update_limit/`, {
         method: "POST",
         headers: getHeaders(),
-        body: JSON.stringify({ user_id: userId, limit })
+        body: JSON.stringify({ user_id: userId, limit, login_limit: loginLimit })
       });
       if (res.ok) {
         fetchCostsData();
@@ -116,7 +203,62 @@ export default function AdminPromptsPage() {
         setTimeout(() => setSuccess(false), 2000);
       }
     } catch (err) {
-      setError("Falha ao atualizar limite");
+      setError("Falha ao atualizar limites");
+    }
+  };
+
+  const handleUpdateRole = async (userId: string, role: string) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/governance/costs/update_user_role/`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ user_id: userId, role })
+      });
+      if (res.ok) {
+        fetchCostsData();
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 2000);
+      }
+    } catch (err) {
+      setError("Falha ao atualizar papel do usuário");
+    }
+  };
+
+  const handleCreateUser = async (email: string, role: string) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/governance/costs/invite_user/`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ email, role })
+      });
+      if (res.ok) {
+        fetchCostsData();
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 2000);
+      } else {
+        const data = await res.json();
+        setError(data.error || "Erro ao convidar usuário");
+      }
+    } catch (err) {
+      setError("Falha na rede ao convidar usuário");
+    }
+  };
+
+  const handleDeleteUser = async (userId: string, email: string) => {
+    if (!window.confirm(`Deseja revogar o acesso de ${email}?`)) return;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/governance/costs/delete_user/`, {
+        method: "POST",
+        headers: getHeaders(),
+        body: JSON.stringify({ user_id: userId })
+      });
+      if (res.ok) {
+        fetchCostsData();
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 2000);
+      }
+    } catch (err) {
+      setError("Falha ao remover usuário");
     }
   };
 
@@ -125,38 +267,44 @@ export default function AdminPromptsPage() {
     const url = `${BACKEND_URL}/api/v1/governance/prompt-templates/?_t=${timestamp}`;
     
     try {
-      const res = await fetch(url, {
-        headers: getHeaders(),
-        cache: 'no-store'
-      });
-      
+      const res = await fetch(url, { headers: getHeaders(), cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
-        // Como desativamos a paginação no backend, 'data' agora deve ser um array direto
         const rawResults = Array.isArray(data) ? data : (data.results || []);
-        
-        // Filtra por categoria, mas aceita variações ou apenas a presença do texto 'SPECIALIST'
         const filtered = rawResults.filter((s: any) => 
-            !s.category || // Se não tiver categoria, mostra (para debug)
+            !s.category || 
             s.category.toUpperCase().includes("SPECIALIST") || 
-            s.category.includes("Especialista")
+            s.category.toUpperCase().includes("ESPECIALISTA") ||
+            s.category.toUpperCase().includes("PERSONA") ||
+            s.category.toUpperCase().includes("COGNITIVA")
         );
-        
-        console.log("🔍 Especialistas carregados:", filtered.length);
         setSpecialists(filtered);
-        if (filtered.length > 0 && (!selectedSpecialist || !filtered.find((f: any) => f.id === selectedSpecialist.id))) {
-            setSelectedSpecialist(filtered[0]);
-        }
       }
     } catch (err: any) {
       console.error("Erro ao carregar especialistas:", err);
     }
   }
 
+  async function fetchSystemPrompts() {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/v1/governance/system-prompts/`, { headers: getHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : (data.results || []);
+        setSystemPrompts(list);
+        if (list.length > 0 && !selectedAgent) {
+          setSelectedAgent(list[0]);
+        }
+      }
+    } catch (err) {
+      console.error("Erro ao carregar prompts de sistema:", err);
+    }
+  }
+
   async function fetchGlobalPrompt() {
     try {
       setLoading(true);
-      const res = await fetch(`${BACKEND_URL}/api/v1/governance/system-prompts/`, {
+      const res = await fetch(`${BACKEND_URL}/api/v1/governance/global-config/`, {
         headers: getHeaders()
       });
       if (res.ok) {
@@ -178,6 +326,7 @@ export default function AdminPromptsPage() {
             top_k: p.top_k ?? 250,
             max_tokens_limit: p.max_tokens_limit ?? 32000,
             ingestion_row_limit: p.ingestion_row_limit ?? 5000,
+            session_timeout_minutes: p.session_timeout_minutes ?? 15,
             is_active: p.is_active ?? true
           });
         }
@@ -199,8 +348,8 @@ export default function AdminPromptsPage() {
       if (activeTab === "MASTER") {
           const isUpdate = !!prompt.id;
           const url = isUpdate 
-            ? `${BACKEND_URL}/api/v1/governance/system-prompts/${prompt.id}/` 
-            : `${BACKEND_URL}/api/v1/governance/system-prompts/`;
+            ? `${BACKEND_URL}/api/v1/governance/global-config/${prompt.id}/` 
+            : `${BACKEND_URL}/api/v1/governance/global-config/`;
           
           const method = isUpdate ? "PATCH" : "POST";
 
@@ -225,6 +374,18 @@ export default function AdminPromptsPage() {
           });
           if (!res.ok) throw new Error("Erro ao salvar especialista.");
           fetchSpecialists();
+      } else if (activeTab === "SYSTEM_PROMPTS" && selectedAgent) {
+          const res = await fetch(`${BACKEND_URL}/api/v1/governance/system-prompts/${selectedAgent.id}/`, {
+            method: "PATCH",
+            headers: getHeaders(),
+            body: JSON.stringify({
+              content: selectedAgent.content,
+              description: selectedAgent.description,
+              version: selectedAgent.version
+            })
+          });
+          if (!res.ok) throw new Error("Erro ao salvar prompt do agente.");
+          fetchSystemPrompts();
       }
 
       setSuccess(true);
@@ -308,13 +469,15 @@ export default function AdminPromptsPage() {
       </div>
 
       {/* 1. Título e Status */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-4xl font-black tracking-tighter text-[#1A1A1A] font-serif">Centro de Governança de IA</h1>
-          <p className="text-[#8C8C8C] mt-2 max-w-xl text-sm leading-relaxed tracking-tight border-l-2 border-[#D4AF37] pl-4">
-            Defina a persona cognitiva, os especialistas de domínio e as diretrizes de compliance bancário.
-          </p>
-        </div>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-4xl font-black tracking-tighter text-[#1A1A1A] font-serif">Centro de Governança de IA</h1>
+            <p className="text-[#8C8C8C] mt-2 max-w-xl text-sm leading-relaxed tracking-tight border-l-2 border-[#D4AF37] pl-4">
+              {canEdit 
+                ? "Defina a persona cognitiva, os especialistas de domínio e as diretrizes de compliance bancário." 
+                : "Visualização das diretrizes e políticas de governança ativas (Modo de Leitura)."}
+            </p>
+          </div>
 
         <div className="flex flex-col items-end gap-2">
           {success && (
@@ -335,7 +498,7 @@ export default function AdminPromptsPage() {
            <button 
               onClick={() => setActiveTab("MASTER")}
               className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "MASTER" ? "bg-[#1A1A1A] text-white shadow-lg" : "text-[#8C8C8C] hover:bg-white"}`}>
-              Configurações Master
+              Governança
            </button>
            <button 
               onClick={() => setActiveTab("SPECIALISTS")}
@@ -343,22 +506,48 @@ export default function AdminPromptsPage() {
               Especialistas
            </button>
            <button 
+              onClick={() => setActiveTab("SYSTEM_PROMPTS")}
+              className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "SYSTEM_PROMPTS" ? "bg-[#1A1A1A] text-white shadow-lg" : "text-[#8C8C8C] hover:bg-white"}`}>
+              Prompts do Sistema
+           </button>
+           <button 
               onClick={() => setActiveTab("COSTS")}
               className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "COSTS" ? "bg-[#1A1A1A] text-white shadow-lg" : "text-[#8C8C8C] hover:bg-white"}`}>
               Gestão de Custos
            </button>
+           {isAdmin && (
+             <button 
+                onClick={() => setActiveTab("DOMAINS")}
+                className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "DOMAINS" ? "bg-[#1A1A1A] text-white shadow-lg" : "text-[#8C8C8C] hover:bg-white"}`}>
+                Áreas e Domínios
+             </button>
+           )}
+           {isAdmin && (
+             <button 
+                onClick={() => setActiveTab("USERS")}
+                className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "USERS" ? "bg-[#1A1A1A] text-white shadow-lg" : "text-[#8C8C8C] hover:bg-white"} flex items-center gap-2`}>
+                <Users size={12} /> Gestão de Usuários
+             </button>
+           )}
         </div>
 
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-2 px-8 py-3 bg-[#1A1A1A] text-white rounded-full font-black text-[11px] uppercase tracking-widest hover:scale-[1.02] hover:shadow-[0_10px_20px_rgba(212,175,55,0.15)] transition-all disabled:opacity-50 active:scale-95 group shadow-lg"
-          >
-            {saving ? <RefreshCw className="animate-spin" size={14} /> : <Save size={14} className="text-[#D4AF37] group-hover:scale-110 transition-transform" />}
-            {saving ? "Salvando..." : "Salvar Alterações"}
-          </button>
-        </div>
+        {canEdit && (
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center gap-2 px-8 py-3 bg-[#1A1A1A] text-white rounded-full font-black text-[11px] uppercase tracking-widest hover:scale-[1.02] hover:shadow-[0_10px_20px_rgba(212,175,55,0.15)] transition-all disabled:opacity-50 active:scale-95 group shadow-lg"
+            >
+              {saving ? <RefreshCw className="animate-spin" size={14} /> : <Save size={14} className="text-[#D4AF37] group-hover:scale-110 transition-transform" />}
+              {saving ? "Salvando..." : "Salvar Alterações"}
+            </button>
+          </div>
+        )}
+        {!canEdit && (
+          <div className="flex items-center gap-2 text-[#D4AF37] font-black text-[10px] uppercase tracking-[0.2em] bg-[#FDF9F0] px-6 py-3 rounded-full border border-[#D4AF37]/20 shadow-sm">
+             <ShieldCheck size={14} /> Somente Leitura
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
@@ -383,8 +572,9 @@ export default function AdminPromptsPage() {
                     <input 
                       type="text" 
                       value={prompt.persona_title}
+                      readOnly={!canEdit}
                       onChange={(e) => setPrompt({...prompt, persona_title: e.target.value})}
-                      className="w-full p-6 bg-[#F9F9F9] border-2 border-transparent focus:border-[#F1E9DB] focus:bg-white rounded-[1.75rem] text-md font-bold transition-all outline-none shadow-inner"
+                      className={`w-full p-6 bg-[#F9F9F9] border-2 border-transparent focus:border-[#F1E9DB] focus:bg-white rounded-[1.75rem] text-md font-bold transition-all outline-none shadow-inner ${!canEdit ? 'opacity-80 cursor-not-allowed' : ''}`}
                       placeholder="Ex: Consultor Estratégico de Negócios"
                     />
                   </div>
@@ -394,8 +584,9 @@ export default function AdminPromptsPage() {
                     <textarea 
                       rows={6}
                       value={prompt.persona_description}
+                      readOnly={!canEdit}
                       onChange={(e) => setPrompt({...prompt, persona_description: e.target.value})}
-                      className="w-full p-8 bg-[#F9F9F9] border-2 border-transparent focus:border-[#F1E9DB] focus:bg-white rounded-[2rem] text-sm leading-relaxed transition-all outline-none resize-none font-serif text-[#333] shadow-inner"
+                      className={`w-full p-8 bg-[#F9F9F9] border-2 border-transparent focus:border-[#F1E9DB] focus:bg-white rounded-[2rem] text-sm leading-relaxed transition-all outline-none resize-none font-serif text-[#333] shadow-inner ${!canEdit ? 'opacity-80 cursor-not-allowed' : ''}`}
                       placeholder="Descreva detalhadamente como o Agente de IA deve raciocinar e interagir..."
                     />
                   </div>
@@ -459,7 +650,6 @@ export default function AdminPromptsPage() {
                   {/* Detailed Inference Parameters */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-[#F9F9F9] p-8 rounded-[2.5rem] border border-[#F1E9DB]">
                     
-                    {/* Temperature Slider */}
                     <div className="space-y-6">
                       <div className="flex items-center justify-between">
                         <label className="text-[10px] uppercase tracking-[0.2em] font-black text-[#1A1A1A] flex items-center gap-2">
@@ -478,14 +668,8 @@ export default function AdminPromptsPage() {
                         onChange={(e) => setPrompt({...prompt, temperature: parseFloat(e.target.value)})}
                         className="w-full h-2 bg-white border border-[#F1E9DB] rounded-full appearance-none cursor-pointer accent-[#D4AF37]"
                       />
-                      <div className="flex justify-between text-[8px] text-[#8C8C8C] font-black uppercase tracking-tight">
-                        <span>Preciso (0.0)</span>
-                        <span>Equilibrado</span>
-                        <span>Criativo (1.0)</span>
-                      </div>
                     </div>
 
-                    {/* Top P Slider */}
                     <div className="space-y-6">
                       <div className="flex items-center justify-between">
                         <label className="text-[10px] uppercase tracking-[0.2em] font-black text-[#1A1A1A] flex items-center gap-2">
@@ -504,29 +688,7 @@ export default function AdminPromptsPage() {
                         onChange={(e) => setPrompt({...prompt, top_p: parseFloat(e.target.value)})}
                         className="w-full h-2 bg-white border border-[#F1E9DB] rounded-full appearance-none cursor-pointer accent-[#1A1A1A]"
                       />
-                      <div className="flex justify-between text-[8px] text-[#8C8C8C] font-black uppercase tracking-tight">
-                        <span>Focado</span>
-                        <span>Diversificado</span>
-                      </div>
                     </div>
-
-                    {/* Top K Control */}
-                    <div className="space-y-6 md:col-span-2 pt-4 border-t border-[#F1E9DB]/50">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[10px] uppercase tracking-[0.2em] font-black text-[#1A1A1A] flex items-center gap-2">
-                           Top K (Diversidade Técnica)
-                        </label>
-                        <div className="flex items-center gap-2 text-sm font-mono font-black text-[#D4AF37] bg-white border border-[#F1E9DB] p-2 px-4 rounded-xl shadow-sm">
-                           <input 
-                            type="number" 
-                            value={prompt.top_k}
-                            onChange={(e) => setPrompt({...prompt, top_k: parseInt(e.target.value)})}
-                            className="bg-transparent text-right outline-none w-16"
-                           />
-                        </div>
-                      </div>
-                    </div>
-
                   </div>
                 </div>
               </section>
@@ -571,11 +733,37 @@ export default function AdminPromptsPage() {
                       onChange={(e) => setPrompt({...prompt, ingestion_row_limit: parseInt(e.target.value)})}
                       className="w-full h-3 bg-white border border-[#F1E9DB] rounded-full appearance-none cursor-pointer accent-[#1A1A1A] hover:scale-[1.01] transition-transform"
                     />
-                    <div className="flex justify-between mt-4 text-[9px] text-[#8C8C8C] font-black uppercase tracking-[0.2em]">
-                      <span className="opacity-50">Experimental (500)</span>
-                      <span className="text-[#D4AF37] font-black border-b-2 border-[#D4AF37]">Batch Corporativo (5k)</span>
-                      <span className="opacity-50">Big Data (100k)</span>
+                  </div>
+                </div>
+
+                <div className="space-y-8 bg-[#FDF9F0]/30 p-8 rounded-[2.5rem] border border-[#F1E9DB]/50 mb-8">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div>
+                      <label className="text-xs uppercase tracking-[0.2em] font-black text-[#1A1A1A] block mb-2 flex items-center gap-2">
+                        Timeout de Inatividade (Sessão) <Info size={14} className="text-[#D4AF37]" />
+                      </label>
+                      <p className="text-xs text-[#8C8C8C] leading-relaxed max-w-md italic">
+                        Redireciona para a tela de apresentação após o tempo selecionado sem interações.
+                      </p>
                     </div>
+                    <div className="flex items-center gap-4 bg-white border border-[#F1E9DB] p-4 px-6 rounded-2xl shadow-sm text-[#1A1A1A]">
+                      <ShieldCheck size={20} className="text-[#D4AF37]" />
+                      <span className="text-lg font-mono font-black tracking-tighter">
+                        {prompt.session_timeout_minutes} <span className="text-[#8C8C8C] text-xs">Minutos</span>
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="relative pt-4">
+                    <input 
+                      type="range" 
+                      min="1" 
+                      max="120" 
+                      step="1"
+                      value={prompt.session_timeout_minutes}
+                      onChange={(e) => setPrompt({...prompt, session_timeout_minutes: parseInt(e.target.value)})}
+                      className="w-full h-3 bg-white border border-[#F1E9DB] rounded-full appearance-none cursor-pointer accent-[#D4AF37] hover:scale-[1.01] transition-transform"
+                    />
                   </div>
                 </div>
 
@@ -591,6 +779,150 @@ export default function AdminPromptsPage() {
                 </div>
               </section>
             </>
+          ) : activeTab === "DOMAINS" ? (
+            <section className="bg-white border border-[#F1E9DB] p-10 rounded-[3.5rem] shadow-sm animate-in fade-in slide-in-from-right-4">
+               <div className="flex items-center justify-between mb-10">
+                  <div className="flex items-center gap-4">
+                    <div className="p-4 bg-[#FDF9F0] text-[#D4AF37] rounded-3xl"><Database size={24} /></div>
+                    <div>
+                      <h2 className="text-2xl font-black tracking-tight text-[#1A1A1A]">Domínios de Dados</h2>
+                      <p className="text-[10px] font-black text-[#8C8C8C] uppercase tracking-widest">Governança de Propriedade e Áreas de Negócio</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                        setNewDomainName("");
+                        setShowAddDomainModal(true);
+                    }}
+                    className="px-8 py-3 bg-[#1A1A1A] text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-[#333] transition-all shadow-xl"
+                  >
+                    + Novo Domínio Master
+                  </button>
+               </div>
+
+               {/* Modal de Novo Domínio */}
+               {showAddDomainModal && (
+                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                   <div className="bg-white w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl border border-[#F1E9DB] animate-in zoom-in-95 duration-300">
+                     <h3 className="text-xl font-black text-[#1A1A1A] mb-2">Novo Domínio Data Mesh</h3>
+                     <p className="text-[10px] font-black text-[#8C8C8C] uppercase tracking-widest mb-8">Defina um novo agrupamento corporativo</p>
+                     
+                     <input 
+                       type="text" 
+                       placeholder="Ex: Comercial, Operações..."
+                       value={newDomainName}
+                       onChange={(e) => setNewDomainName(e.target.value)}
+                       className="w-full bg-[#F9F9F9] border-2 border-[#F1E9DB] p-4 rounded-2xl text-xs font-bold outline-none focus:border-[#D4AF37] mb-6 transition-all"
+                       autoFocus
+                     />
+
+                     <div className="flex items-center gap-3">
+                       <button 
+                         onClick={() => setShowAddDomainModal(false)}
+                         className="flex-1 py-4 bg-[#F9F9F9] text-[#8C8C8C] font-black text-[10px] uppercase rounded-2xl hover:bg-gray-100 transition-all"
+                       >
+                         Cancelar
+                       </button>
+                       <button 
+                         onClick={handleAddDomain}
+                         className="flex-1 py-4 bg-[#D4AF37] text-white font-black text-[10px] uppercase rounded-2xl hover:scale-105 transition-all shadow-lg"
+                       >
+                         Confirmar
+                       </button>
+                     </div>
+                   </div>
+                 </div>
+               )}
+
+               {/* Modal de Subdomínio */}
+               {showAddSubdomainModal && (
+                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                   <div className="bg-white w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl border border-[#F1E9DB] animate-in zoom-in-95 duration-300">
+                     <h3 className="text-xl font-black text-[#1A1A1A] mb-2">Nova Área de Negócio</h3>
+                     <p className="text-[10px] font-black text-[#8C8C8C] uppercase tracking-widest mb-8">Subdomínio sob {domains.find(d => d.id === subdomains[0]?.domain)?.name}</p>
+                     
+                     <input 
+                       type="text" 
+                       placeholder="Ex: Logística, Vendas Diretas..."
+                       value={newDomainName}
+                       onChange={(e) => setNewDomainName(e.target.value)}
+                       className="w-full bg-[#F9F9F9] border-2 border-[#F1E9DB] p-4 rounded-2xl text-xs font-bold outline-none focus:border-[#D4AF37] mb-6 transition-all"
+                       autoFocus
+                     />
+
+                     <div className="flex items-center gap-3">
+                       <button 
+                         onClick={() => setShowAddSubdomainModal(false)}
+                         className="flex-1 py-4 bg-[#F9F9F9] text-[#8C8C8C] font-black text-[10px] uppercase rounded-2xl hover:bg-gray-100 transition-all"
+                       >
+                         Cancelar
+                       </button>
+                       <button 
+                         onClick={handleAddSubdomain}
+                         className="flex-1 py-4 bg-[#1A1A1A] text-white font-black text-[10px] uppercase rounded-2xl hover:scale-105 transition-all shadow-lg"
+                       >
+                         Adicionar Área
+                       </button>
+                     </div>
+                   </div>
+                 </div>
+               )}
+
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                  <div className="space-y-4">
+                     <p className="text-[10px] font-black text-[#D4AF37] uppercase tracking-widest mb-4">1. Selecione o Domínio Master</p>
+                     <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                        {domains.map(d => (
+                           <div 
+                             key={d.id}
+                             onClick={() => fetchSubdomains(d.id)}
+                             className={`p-6 rounded-3xl border-2 cursor-pointer transition-all flex items-center justify-between group ${subdomains.length > 0 && subdomains[0].domain === d.id ? "bg-[#1A1A1A] border-transparent text-white" : "bg-[#F9F9F9] border-transparent hover:border-[#F1E9DB]"}`}
+                           >
+                              <div className="flex items-center gap-4">
+                                 <div className={`p-3 rounded-2xl ${subdomains.length > 0 && subdomains[0].domain === d.id ? "bg-white/10" : "bg-white"}`}><Database size={18} /></div>
+                                 <div className="font-black text-sm uppercase tracking-tight">{d.name}</div>
+                              </div>
+                              <span className="text-[9px] font-black opacity-40 group-hover:opacity-100">{d.project_count || 0} Projetos</span>
+                           </div>
+                        ))}
+                     </div>
+                  </div>
+
+                  <div className="space-y-4 bg-[#FDF9F0]/30 p-8 rounded-[3rem] border border-[#F1E9DB]">
+                     <div className="flex items-center justify-between mb-6">
+                        <p className="text-[10px] font-black text-[#1A1A1A] uppercase tracking-widest">2. Subdomínios (Áreas)</p>
+                        {subdomains.length > 0 && (
+                            <button 
+                                onClick={() => {
+                                    setNewDomainName("");
+                                    setShowAddSubdomainModal(true);
+                                }}
+                                className="text-[9px] font-black uppercase text-[#D4AF37] hover:underline"
+                            >
+                                + Adicionar Área
+                            </button>
+                        )}
+                     </div>
+                     
+                     <div className="space-y-3">
+                        {subdomains.length > 0 ? subdomains.map(s => (
+                           <div key={s.id} className="p-5 bg-white border border-[#F1E9DB] rounded-2xl flex items-center justify-between shadow-sm group">
+                              <span className="text-xs font-bold text-[#1A1A1A]">{s.name}</span>
+                              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                 <button className="text-red-400 hover:text-red-600 transition-colors">
+                                    <Trash2 size={14} />
+                                 </button>
+                              </div>
+                           </div>
+                        )) : (
+                           <div className="py-12 text-center">
+                              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#8C8C8C] opacity-50">Selecione um domínio para gerenciar áreas</p>
+                           </div>
+                        )}
+                     </div>
+                  </div>
+               </div>
+             </section>
           ) : activeTab === "COSTS" ? (
              <div className="lg:col-span-12 space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700">
                 {/* Dashboard de KPIs Financeiros */}
@@ -601,7 +933,6 @@ export default function AdminPromptsPage() {
                         <span className="text-[10px] font-black uppercase tracking-widest text-[#8C8C8C]">Gasto Total (Mês)</span>
                       </div>
                       <div className="text-3xl font-serif font-black text-[#1A1A1A]">$ {costsHistory.reduce((acc, curr) => acc + curr.cost_usd, 0).toFixed(2)}</div>
-                      <div className="text-[9px] font-bold text-emerald-500 mt-2 flex items-center gap-1"><TrendingUp size={10} /> +2.4% vs anterior</div>
                    </div>
                    <div className="bg-white border border-[#F1E9DB] p-6 rounded-[2rem] shadow-sm">
                       <div className="flex items-center gap-3 mb-4">
@@ -609,7 +940,6 @@ export default function AdminPromptsPage() {
                         <span className="text-[10px] font-black uppercase tracking-widest text-[#8C8C8C]">Tokens Processados</span>
                       </div>
                       <div className="text-3xl font-serif font-black text-[#1A1A1A]">{(costsHistory.reduce((acc, curr) => acc + curr.tokens, 0) / 1000).toFixed(1)}k</div>
-                      <div className="text-[9px] font-bold text-[#8C8C8C] mt-2 italic">Acumulado em {costsHistory.length} dias</div>
                    </div>
                    <div className="bg-white border border-[#F1E9DB] p-6 rounded-[2rem] shadow-sm">
                       <div className="flex items-center gap-3 mb-4">
@@ -617,7 +947,6 @@ export default function AdminPromptsPage() {
                         <span className="text-[10px] font-black uppercase tracking-widest text-[#8C8C8C]">Status de Compliance</span>
                       </div>
                       <div className="text-xl font-black text-emerald-600 uppercase tracking-tighter">SOB CONTROLE</div>
-                      <div className="text-[9px] font-bold text-[#8C8C8C] mt-2">Zero bloqueios por quota hoje</div>
                    </div>
                    <div className="bg-white border border-[#F1E9DB] p-6 rounded-[2rem] shadow-sm">
                       <div className="flex items-center gap-3 mb-4">
@@ -625,7 +954,6 @@ export default function AdminPromptsPage() {
                         <span className="text-[10px] font-black uppercase tracking-widest text-[#8C8C8C]">Eficiência (USD/1k)</span>
                       </div>
                       <div className="text-3xl font-serif font-black text-[#1A1A1A]">$ 0.042</div>
-                      <div className="text-[9px] font-bold text-[#D4AF37] mt-2 italic">Amazon Nova Pro</div>
                    </div>
                 </div>
 
@@ -637,7 +965,6 @@ export default function AdminPromptsPage() {
                           <h3 className="text-lg font-black text-[#1A1A1A]">Evolução de Consumo</h3>
                           <p className="text-[10px] font-black text-[#8C8C8C] uppercase tracking-[0.1em]">Gastos diários em USD</p>
                         </div>
-                        <div className="px-4 py-1.5 bg-[#F9F9F9] border border-[#F1E9DB] rounded-full text-[9px] font-black uppercase text-[#8C8C8C]">Últimos 30 Dias</div>
                       </div>
                       <div className="h-[300px] w-full">
                         <ResponsiveContainer width="100%" height="100%">
@@ -649,29 +976,13 @@ export default function AdminPromptsPage() {
                               </linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1E9DB" opacity={0.5} />
-                            <XAxis 
-                              dataKey="date" 
-                              axisLine={false} 
-                              tickLine={false} 
-                              tick={{fontSize: 9, fontWeight: 700, fill: '#8C8C8C'}} 
-                              dy={10}
-                            />
-                            <YAxis 
-                              hide 
-                            />
+                            <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 9, fontWeight: 700, fill: '#8C8C8C'}} />
+                            <YAxis hide />
                             <Tooltip 
-                              contentStyle={{backgroundColor: '#1A1A1A', border: 'none', borderRadius: '12px', color: '#fff'}}
-                              itemStyle={{color: '#D4AF37', fontWeight: 900, fontSize: '12px'}}
-                              labelStyle={{color: '#8C8C8C', fontSize: '10px', textTransform: 'uppercase', marginBottom: '4px'}}
+                               contentStyle={{backgroundColor: '#1A1A1A', border: 'none', borderRadius: '12px', color: '#fff'}}
+                               itemStyle={{color: '#D4AF37', fontWeight: 900, fontSize: '12px'}}
                             />
-                            <Area 
-                              type="monotone" 
-                              dataKey="cost_usd" 
-                              stroke="#D4AF37" 
-                              strokeWidth={3} 
-                              fillOpacity={1} 
-                              fill="url(#colorCost)" 
-                            />
+                            <Area type="monotone" dataKey="cost_usd" stroke="#D4AF37" strokeWidth={3} fillOpacity={1} fill="url(#colorCost)" />
                           </AreaChart>
                         </ResponsiveContainer>
                       </div>
@@ -682,7 +993,7 @@ export default function AdminPromptsPage() {
                       <p className="text-[10px] font-black text-[#8C8C8C] uppercase tracking-[0.1em] mb-8">Consumo acumulado por projeto</p>
                       
                       <div className="space-y-6 overflow-y-auto max-h-[300px] custom-scrollbar pr-4">
-                        {(costsSummary?.by_project || []).map((proj: any, idx: number) => (
+                        {(costsSummary?.by_project || []).map((proj: any) => (
                            <div key={proj.project_id} className="flex flex-col gap-2 group">
                               <div className="flex items-center justify-between font-black text-[11px] uppercase tracking-tighter">
                                  <span className="text-[#1A1A1A]">{proj.name}</span>
@@ -696,89 +1007,12 @@ export default function AdminPromptsPage() {
                               </div>
                            </div>
                         ))}
-                        {(!costsSummary?.by_project || costsSummary.by_project.length === 0) && (
-                          <div className="h-full flex items-center justify-center text-[#8C8C8C] text-[10px] font-bold uppercase tracking-widest italic opacity-50">
-                            Nenhum domínio com consumo registrado
-                          </div>
-                        )}
                       </div>
                    </div>
                 </div>
 
-                {/* Gestão de Quotas por Usuário */}
-                <section className="bg-white border border-[#F1E9DB] p-10 rounded-[3.5rem] shadow-sm">
-                   <div className="flex items-center justify-between mb-10">
-                      <div className="flex items-center gap-4">
-                        <div className="p-4 bg-[#F9F9F9] text-[#1A1A1A] rounded-3xl"><Users size={24} /></div>
-                        <div>
-                          <h2 className="text-2xl font-black tracking-tight">Governança de Quotas</h2>
-                          <p className="text-[10px] font-black text-[#D4AF37] uppercase tracking-widest">Controle Individual de Consumo</p>
-                        </div>
-                      </div>
-                      <button className="flex items-center gap-2 px-5 py-2.5 bg-[#F9F9F9] border border-[#F1E9DB] rounded-full text-[10px] font-black uppercase tracking-widest text-[#8C8C8C] hover:border-[#1A1A1A] hover:text-[#1A1A1A] transition-all">
-                        <RefreshCw size={12} /> Sincronizar Quotas
-                      </button>
-                   </div>
-
-                   <div className="overflow-hidden border border-[#F1E9DB] rounded-[2rem]">
-                      <table className="w-full text-left border-collapse">
-                        <thead className="bg-[#F9F9F9]">
-                          <tr className="border-b border-[#F1E9DB]">
-                            <th className="px-8 py-5 text-[10px] font-black text-[#8C8C8C] uppercase tracking-widest">Colaborador</th>
-                            <th className="px-8 py-5 text-[10px] font-black text-[#8C8C8C] uppercase tracking-widest">Consumo Real (USD)</th>
-                            <th className="px-8 py-5 text-[10px] font-black text-[#8C8C8C] uppercase tracking-widest">Barra de Limite</th>
-                            <th className="px-8 py-5 text-[10px] font-black text-[#8C8C8C] uppercase tracking-widest text-right">Configurar Teto (Tokens)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {usersQuotas.map((q) => (
-                            <tr key={q.user_id} className="border-b border-[#F1E9DB] hover:bg-[#FDF9F0]/30 transition-colors">
-                              <td className="px-8 py-6">
-                                <div className="font-black text-sm text-[#1A1A1A]">{q.email}</div>
-                                <div className="text-[10px] text-[#8C8C8C] font-bold mt-1">UUID: {q.user_id.slice(0, 8)}...</div>
-                              </td>
-                              <td className="px-8 py-6">
-                                <div className="font-serif font-black text-lg text-[#1A1A1A]">$ {q.cost_usd.toFixed(2)}</div>
-                                <div className="text-[10px] text-emerald-500 font-black uppercase">Eficiência OK</div>
-                              </td>
-                              <td className="px-8 py-6 w-[300px]">
-                                <div className="flex items-center justify-between text-[9px] font-black uppercase mb-1.5">
-                                   <span className={q.percent_used > 90 ? "text-red-500" : "text-[#8C8C8C]"}>{q.consumed_tokens.toLocaleString()} / {q.max_limit.toLocaleString()}</span>
-                                   <span className={q.percent_used > 90 ? "text-red-500 animate-pulse" : "text-[#1A1A1A]"}>{q.percent_used}%</span>
-                                </div>
-                                <div className="w-full h-2 bg-[#F9F9F9] rounded-full overflow-hidden border border-[#F1E9DB]/30 shadow-inner">
-                                   <div 
-                                      className={`h-full rounded-full transition-all duration-700 ${q.percent_used > 90 ? "bg-red-500" : q.percent_used > 70 ? "bg-amber-400" : "bg-emerald-400"}`}
-                                      style={{ width: `${Math.min(q.percent_used, 100)}%` }}
-                                   />
-                                </div>
-                              </td>
-                              <td className="px-8 py-6 text-right">
-                                <div className="flex items-center justify-end gap-3">
-                                   <input 
-                                      type="number" 
-                                      defaultValue={q.max_limit}
-                                      onBlur={(e) => updateQuotaLimit(q.user_id, parseInt(e.target.value))}
-                                      className="w-32 bg-[#F9F9F9] border-2 border-transparent focus:border-[#D4AF37] focus:bg-white p-2.5 rounded-xl text-xs font-black text-center outline-none transition-all shadow-sm"
-                                   />
-                                   <div className="p-2 bg-[#1A1A1A] text-white rounded-lg opacity-20 hover:opacity-100 cursor-pointer transition-opacity">
-                                      <Save size={14} />
-                                   </div>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                   </div>
-                </section>
-
-                {/* Simulador de Custos Multimodelo (What-if Analysis) */}
-                <section className="bg-[#1A1A1A] text-white p-12 rounded-[4rem] shadow-2xl relative overflow-hidden group">
-                   <div className="absolute -bottom-20 -right-20 p-20 opacity-10 group-hover:opacity-20 transition-opacity">
-                      <TrendingUp size={300} strokeWidth={1} />
-                   </div>
-                   
+                {/* Simulador de Custos Multimodelo */}
+                <section className="bg-[#1A1A1A] text-white p-12 rounded-[5rem] shadow-2xl relative overflow-hidden group">
                    <div className="flex flex-col lg:flex-row gap-16 relative z-10">
                       <div className="lg:w-1/3">
                         <div className="p-4 bg-white/10 w-fit rounded-3xl mb-8"><Coins size={32} className="text-[#D4AF37]" /></div>
@@ -786,17 +1020,6 @@ export default function AdminPromptsPage() {
                         <p className="text-gray-400 text-sm leading-relaxed mb-10 font-medium">
                           Descubra quanto seu consumo atual custaria se os dashboards fossem materializados em outros provedores da LLM.
                         </p>
-                        
-                        <div className="space-y-4">
-                           <div className="text-[10px] font-black uppercase tracking-widest text-gray-500">Carga de Trabalho Base</div>
-                           <div className="bg-white/5 border border-white/10 p-5 rounded-2xl">
-                              <div className="flex items-center justify-between mb-2">
-                                 <span className="text-xs text-gray-400">Tokens Acumulados</span>
-                                 <span className="text-lg font-black">{costsHistory.reduce((acc, curr) => acc + curr.tokens, 0).toLocaleString()}</span>
-                              </div>
-                              <div className="w-full h-1 bg-white/10 rounded-full" />
-                           </div>
-                        </div>
                       </div>
 
                       <div className="lg:w-2/3 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -807,31 +1030,20 @@ export default function AdminPromptsPage() {
                           { id: "CLAUDE_3_HAIKU", name: "Claude 3 Haiku", in: 0.25, out: 1.25 }
                         ].map((m) => {
                           const totalTokens = costsHistory.reduce((acc, curr) => acc + curr.tokens, 0);
-                          // Estimativa: 70% input, 30% output
-                          const estIn = totalTokens * 0.7;
-                          const estOut = totalTokens * 0.3;
-                          const estCost = (estIn / 1000000 * m.in) + (estOut / 1000000 * m.out);
+                          const estCost = (totalTokens * 0.7 / 1000000 * m.in) + (totalTokens * 0.3 / 1000000 * m.out);
                           
                           return (
-                            <div key={m.id} className={`p-8 rounded-[2.5rem] border-2 transition-all hover:scale-[1.02] ${m.recommended ? "bg-[#D4AF37] border-white/20 text-[#1A1A1A]" : "bg-white/5 border-white/5 hover:border-white/20"}`}>
-                               <div className="flex items-center justify-between mb-8">
-                                  <div className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${m.recommended ? "bg-[#1A1A1A] text-white" : "bg-white/10 text-white"}`}>
-                                     {m.recommended ? "Custo-Benefício" : "Alternativa"}
-                                  </div>
-                                  <BarChart3 size={20} />
-                               </div>
-                               <h4 className="text-lg font-black tracking-tight mb-2">{m.name}</h4>
-                               <div className="text-3xl font-serif font-black mb-8">$ {estCost.toFixed(2)}<span className="text-xs opacity-50 ml-1">/mês estim.</span></div>
-                               
-                               <div className={`text-[9px] font-black uppercase tracking-widest ${m.recommended ? "text-[#1A1A1A]/70" : "text-gray-500"} mb-2`}>Taxa Sugerida (1M Tokens)</div>
+                            <div key={m.id} className={`p-8 rounded-[2.5rem] border-2 transition-all group/card ${m.recommended ? "bg-[#D4AF37] border-white/20 text-[#1A1A1A]" : "bg-white/5 border-white/5 hover:border-white/20"}`}>
+                               <h4 className="text-lg font-black tracking-tight mb-2 uppercase">{m.name}</h4>
+                               <div className="text-4xl font-serif font-black mb-8">$ {estCost.toFixed(2)}</div>
                                <div className="grid grid-cols-2 gap-4">
-                                  <div className={`p-3 rounded-xl ${m.recommended ? "bg-[#1A1A1A]/10" : "bg-white/5"}`}>
-                                     <div className="text-[14px] font-black">$ {m.in}</div>
-                                     <div className="text-[7px] font-black uppercase opacity-60">Input</div>
+                                  <div className={`p-4 rounded-2xl ${m.recommended ? "bg-[#1A1A1A]/10" : "bg-white/5"}`}>
+                                     <div className="text-xs font-black uppercase opacity-60">Input</div>
+                                     <div className="text-lg font-black">$ {m.in}</div>
                                   </div>
-                                  <div className={`p-3 rounded-xl ${m.recommended ? "bg-[#1A1A1A]/10" : "bg-white/5"}`}>
-                                     <div className="text-[14px] font-black">$ {m.out}</div>
-                                     <div className="text-[7px] font-black uppercase opacity-60">Output</div>
+                                  <div className={`p-4 rounded-2xl ${m.recommended ? "bg-[#1A1A1A]/10" : "bg-white/5"}`}>
+                                     <div className="text-xs font-black uppercase opacity-60">Output</div>
+                                     <div className="text-lg font-black">$ {m.out}</div>
                                   </div>
                                </div>
                             </div>
@@ -841,144 +1053,299 @@ export default function AdminPromptsPage() {
                    </div>
                 </section>
 
-                {/* --- SEÇÃO DE HIGIENE E MANUTENÇÃO (SOLICITADO PELO USUÁRIO) --- */}
-                <section className="bg-white border-2 border-dashed border-red-100 p-12 rounded-[4rem] shadow-sm relative overflow-hidden group/maint mt-10">
-                  <div className="flex flex-col md:flex-row items-center justify-between gap-10">
-                    <div className="max-w-2xl">
-                      <div className="flex items-center gap-3 mb-6">
-                        <div className="p-3 bg-red-50 text-red-500 rounded-2xl">
-                           <Trash2 size={24} />
-                        </div>
-                        <h2 className="text-2xl font-black tracking-tight text-[#1A1A1A]">Higiene de Dados & Manutenção</h2>
-                      </div>
-                      <p className="text-sm text-[#8C8C8C] leading-relaxed mb-6">
-                        O sistema acumula logs de interação e cache de datasets ingeridos para performance. 
-                        A <span className="font-bold text-red-500 underline underline-offset-4 tracking-tighter uppercase text-[10px]">Limpeza Profunda</span> remove 
-                        tabelas obsoletas e rastros de execução, garantindo a integridade mestre do ambiente.
+                {/* Manutenção e Higiene de Dados */}
+                <section className="bg-red-50/50 border-2 border-dashed border-red-100 p-12 rounded-[5rem] flex flex-col md:flex-row items-center justify-between gap-10">
+                   <div className="max-w-2xl text-center md:text-left">
+                      <h2 className="text-2xl font-black tracking-tight text-[#1A1A1A] mb-4">Higiene de Dados & Manutenção</h2>
+                      <p className="text-sm text-[#8C8C8C] leading-relaxed">
+                        A <span className="text-red-600 font-black uppercase tracking-widest text-[10px]">Limpeza Profunda</span> remove datasets obsoletos e rastros de execução, resetando o cache analítico sem afetar usuários ou prompts centrais. 
                       </p>
-                      
-                      <div className="flex items-center gap-4 p-4 bg-amber-50 rounded-2xl border border-amber-100">
-                        <ShieldCheck size={20} className="text-amber-500 shrink-0" />
-                        <p className="text-[11px] font-bold text-amber-700 leading-tight">
-                          NOTA DE SEGURANÇA: Esta ação NÃO afeta usuários, projetos, especialistas ou templates. Somente dados voláteis são removidos.
-                        </p>
+                   </div>
+                   <button 
+                      onClick={handlePurgeCache}
+                      disabled={cleaning || !canEdit}
+                      className="group flex flex-col items-center gap-4 bg-white p-10 rounded-[4rem] border border-red-100 hover:border-red-500 hover:shadow-2xl transition-all disabled:opacity-50"
+                   >
+                      <div className={`p-6 rounded-full ${cleaning ? 'bg-gray-100 animate-spin' : 'bg-red-500 text-white shadow-xl shadow-red-500/20 group-hover:scale-110'} transition-all`}>
+                         <Trash2 size={32} />
+                      </div>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-red-600">Purgar Cache Analítico</span>
+                   </button>
+                </section>
+             </div>
+          ) : activeTab === "SYSTEM_PROMPTS" ? (
+             <div className="lg:col-span-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                <div className="flex flex-col lg:flex-row gap-10">
+                   {/* Sidebar: Lista de Agentes */}
+                   <aside className="lg:w-1/4 space-y-4">
+                      <div className="flex items-center gap-3 mb-6 border-b border-[#F1E9DB] pb-4">
+                         <div className="p-2 bg-[#F9F9F9] rounded-xl text-[#D4AF37]"><Cpu size={18} /></div>
+                         <h3 className="text-sm font-black text-[#1A1A1A] uppercase tracking-widest">Agentes de IA</h3>
+                      </div>
+                      <div className="space-y-2">
+                        {systemPrompts.map((agent) => (
+                           <button
+                             key={agent.agent_key}
+                             onClick={() => setSelectedAgent(agent)}
+                             className={`w-full p-6 rounded-3xl text-left transition-all border-2 flex flex-col gap-1 ${selectedAgent?.agent_key === agent.agent_key ? "bg-[#1A1A1A] border-transparent text-white shadow-xl scale-[1.02]" : "bg-white border-[#F1E9DB] text-[#1A1A1A] hover:bg-[#FDF9F0]/50"}`}
+                           >
+                             <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-60">Agente Técnico</span>
+                             <span className="text-sm font-black">{agent.name}</span>
+                           </button>
+                        ))}
+                      </div>
+                   </aside>
+
+                   {/* Editor: Conteúdo do Agent System Prompt */}
+                   <main className="flex-1 bg-white border border-[#F1E9DB] p-10 rounded-[4rem] shadow-sm relative h-fit">
+                      {selectedAgent ? (
+                        <div className="space-y-10">
+                          <div className="flex items-center gap-5 border-b border-[#F1E9DB] pb-10">
+                             <div className="p-5 bg-[#FDF9F0] text-[#D4AF37] rounded-3xl"><Sparkles size={32} /></div>
+                             <div className="flex-1">
+                                <input 
+                                  type="text" 
+                                  value={selectedAgent.name}
+                                  onChange={(e) => setSelectedAgent({...selectedAgent, name: e.target.value})}
+                                  className="text-2xl font-black tracking-tight text-[#1A1A1A] uppercase bg-transparent w-full outline-none focus:text-[#D4AF37] transition-colors"
+                                />
+                                <div className="text-[10px] font-bold text-[#8C8C8C] mt-2 uppercase tracking-widest flex items-center gap-2">
+                                  <span className="px-2 py-0.5 bg-[#F9F9F9] border border-[#F1E9DB] rounded-md">{selectedAgent.agent_key}</span>
+                                  <span>v{selectedAgent.version}</span>
+                                </div>
+                             </div>
+                          </div>
+
+                          <div className="space-y-10">
+                             <div>
+                                <label className="text-[10px] uppercase tracking-[0.25em] font-black text-[#D4AF37] mb-4 block">Descrição da Missão</label>
+                                <input 
+                                  type="text" 
+                                  value={selectedAgent.description}
+                                  onChange={(e) => setSelectedAgent({...selectedAgent, description: e.target.value})}
+                                  className="w-full p-5 bg-[#F9F9F9] border-2 border-transparent focus:border-[#F1E9DB] focus:bg-white rounded-2xl text-[12px] font-bold text-[#1A1A1A] outline-none transition-all shadow-inner"
+                                />
+                             </div>
+                             <div>
+                                <label className="text-[10px] uppercase tracking-[0.25em] font-black text-[#D4AF37] mb-4 block">Cérebro Lógico (Prompt)</label>
+                                <textarea 
+                                  rows={14}
+                                  value={selectedAgent.content}
+                                  onChange={(e) => setSelectedAgent({...selectedAgent, content: e.target.value})}
+                                  className="w-full p-10 bg-[#F9F9F9] border-2 border-transparent focus:border-[#F1E9DB] focus:bg-white rounded-[3rem] text-[14px] leading-relaxed font-serif text-[#333] shadow-inner outline-none transition-all resize-none custom-scrollbar"
+                                />
+                             </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="h-[500px] flex flex-col items-center justify-center text-[#8C8C8C] gap-6">
+                           <div className="p-10 bg-[#F9F9F9] rounded-full border border-dashed border-[#F1E9DB] animate-pulse"><Box size={64} className="opacity-10" /></div>
+                           <p className="text-[10px] font-black uppercase tracking-[0.5em] text-[#D4AF37]">Selecione um agente para auditar</p>
+                         </div>
+                       )}
+                    </main>
+                 </div>
+              </div>
+           ) : (activeTab === "USERS" && isAdmin) ? (
+            <div className="lg:col-span-12 space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-700">
+               <div className="bg-white border border-[#F1E9DB] p-10 rounded-[3.5rem] shadow-sm">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
+                    <div className="flex items-center gap-4">
+                      <div className="p-4 bg-[#FDF9F0] text-[#D4AF37] rounded-3xl shadow-sm"><Users size={24} /></div>
+                      <div>
+                        <h2 className="text-2xl font-black tracking-tight text-[#1A1A1A]">Colaboradores & Permissões</h2>
+                        <p className="text-[10px] font-black text-[#8C8C8C] uppercase tracking-widest">Gestão de Identidade e Quotas de Consumo</p>
                       </div>
                     </div>
-
-                    <div className="shrink-0">
+                    
+                    <div className="flex items-center gap-4">
                       <button 
-                        onClick={handlePurgeCache}
-                        disabled={cleaning}
-                        className="flex flex-col items-center gap-4 p-10 bg-white border-2 border-red-50 rounded-[3rem] hover:border-red-200 hover:shadow-xl transition-all group/btn disabled:opacity-50"
+                        onClick={() => setShowAddUserModal(true)}
+                        className="px-8 py-3 bg-[#1A1A1A] text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-xl flex items-center gap-2"
                       >
-                         <div className={`p-6 rounded-full ${cleaning ? 'bg-gray-100 rotate-180' : 'bg-red-50 group-hover/btn:bg-red-500 group-hover/btn:text-white'} transition-all duration-500`}>
-                            {cleaning ? <RefreshCw className="animate-spin" size={32} /> : <Zap size={32} />}
-                         </div>
-                         <div className="text-center">
-                            <span className="block text-[10px] font-black uppercase tracking-[0.2em] text-[#8C8C8C] mb-1">
-                               {cleaning ? "Higienizando..." : "Executar Limpeza"}
-                            </span>
-                            <span className="block text-xs font-bold text-red-500 italic">Purgar Cache Analítico</span>
-                         </div>
+                        <UserPlus size={14} className="text-[#D4AF37]" />
+                        + Novo Usuário
                       </button>
                     </div>
                   </div>
-                </section>
-             </div>
-          ) : (
+
+                  {/* Modal de Novo Usuário */}
+                  {showAddUserModal && (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                      <div className="bg-white w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl border border-[#F1E9DB] animate-in zoom-in-95 duration-300">
+                        <h3 className="text-xl font-black text-[#1A1A1A] mb-2">Novo Colaborador</h3>
+                        <p className="text-[10px] font-black text-[#8C8C8C] uppercase tracking-widest mb-8">Convite para o ecossistema</p>
+                        
+                        <div className="space-y-4">
+                          <input 
+                            type="email" 
+                            placeholder="exemplo@empresa.com"
+                            value={newUser.email}
+                            onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                            className="w-full bg-[#F9F9F9] border-2 border-[#F1E9DB] p-4 rounded-2xl text-xs font-bold outline-none focus:border-[#D4AF37] transition-all"
+                            autoFocus
+                          />
+                          <select 
+                            value={newUser.role}
+                            onChange={(e) => setNewUser({...newUser, role: e.target.value})}
+                            className="w-full bg-[#F9F9F9] border-2 border-[#F1E9DB] p-4 rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none focus:border-[#D4AF37] transition-all"
+                          >
+                            <option value="ADMIN">Administrador</option>
+                            <option value="ANALYST">Analista (Criador)</option>
+                            <option value="VIEWER">Visualizador (Executivo)</option>
+                          </select>
+                        </div>
+
+                        <div className="flex items-center gap-3 mt-8">
+                          <button 
+                            onClick={() => setShowAddUserModal(false)}
+                            className="flex-1 py-4 bg-[#F9F9F9] text-[#8C8C8C] font-black text-[10px] uppercase rounded-2xl hover:bg-gray-100 transition-all"
+                          >
+                            Cancelar
+                          </button>
+                          <button 
+                            onClick={() => {
+                              handleCreateUser(newUser.email, newUser.role);
+                              setShowAddUserModal(false);
+                            }}
+                            className="flex-1 py-4 bg-[#1A1A1A] text-white font-black text-[10px] uppercase rounded-2xl hover:scale-105 transition-all shadow-lg"
+                          >
+                            Convidar
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lista de Usuários (Simplificada para a Tab, mas mantendo o poder) */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="border-b border-[#F1E9DB] text-[10px] font-black text-[#8C8C8C] uppercase tracking-widest">
+                          <th className="px-4 py-6">Usuário</th>
+                          <th className="px-4 py-6">Acesso</th>
+                          <th className="px-4 py-6">Quota (Tokens)</th>
+                          <th className="px-4 py-6 text-right">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(costsSummary?.users_quotas || []).map((u: any) => (
+                          <tr key={u.user_id} className="border-b border-[#F1E9DB]/50 hover:bg-[#FDF9F0]/30 transition-all group">
+                            <td className="px-4 py-6">
+                              <div className="font-bold text-xs text-[#1A1A1A]">{u.email}</div>
+                              <div className="text-[9px] text-[#8C8C8C] font-black uppercase mt-1">Ativo</div>
+                            </td>
+                            <td className="px-4 py-6">
+                               <select 
+                                 value={u.role}
+                                 onChange={(e) => handleUpdateRole(u.user_id, e.target.value)}
+                                 className="bg-transparent border-none text-[10px] font-black uppercase tracking-widest text-[#1A1A1A] focus:ring-0 cursor-pointer"
+                               >
+                                  <option value="ADMIN">Administrador</option>
+                                  <option value="ANALYST">Analista</option>
+                                  <option value="VIEWER">Visualizador</option>
+                               </select>
+                            </td>
+                            <td className="px-4 py-6">
+                               <div className="flex items-center gap-2">
+                                  <span className="text-xs font-mono font-black">{(u.max_limit / 1000).toFixed(0)}k</span>
+                                  <div className="w-20 h-1 bg-gray-100 rounded-full overflow-hidden">
+                                     <div className="h-full bg-[#D4AF37]" style={{ width: `${u.percent_used}%` }} />
+                                  </div>
+                               </div>
+                            </td>
+                            <td className="px-4 py-6 text-right">
+                               <button 
+                                 onClick={() => handleDeleteUser(u.user_id, u.email)}
+                                 className="p-2 text-[#8C8C8C] hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
+                               >
+                                 <Trash2 size={16} />
+                               </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+               </div>
+            </div>
+           ) : (
              <div className="lg:col-span-12">
                 {!selectedSpecialist ? (
                    <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-                      <div className="flex items-center justify-between mb-10 border-b border-[#F1E9DB] pb-6">
+                      <div className="flex items-center justify-between mb-12 border-b border-[#F1E9DB] pb-8">
                         <div>
-                          <h3 className="text-2xl font-serif font-black text-[#1A1A1A] tracking-tight">Especialistas</h3>
-                          <p className="text-[10px] text-[#8C8C8C] font-black tracking-[0.2em] uppercase mt-1">Biblioteca de Capacidades Disponíveis</p>
+                          <h3 className="text-3xl font-serif font-black text-[#1A1A1A] tracking-tight">Biblioteca de Especialistas</h3>
+                          <p className="text-[10px] text-[#8C8C8C] font-black tracking-[0.25em] uppercase mt-1">Conhecimento de Domínio Ativo</p>
                         </div>
-                        <span className="px-5 py-2 bg-[#FDF9F0] text-[#D4AF37] text-[10px] font-black rounded-full border border-[#F1E9DB] shadow-sm">
-                           {specialists.length} TOTAL
+                        <span className="px-6 py-2.5 bg-[#FDF9F0] text-[#D4AF37] text-[10px] font-black rounded-full border border-[#F1E9DB] shadow-sm">
+                           {specialists.length} MÓDULOS ATIVOS
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                         {specialists.map((s) => (
                           <button
                             key={s.id}
                             onClick={() => setSelectedSpecialist(s)}
-                            className="bg-white border border-[#F1E9DB] p-8 rounded-[2.5rem] flex flex-col items-center text-center group hover:bg-[#FDF9F0]/30 hover:border-[#D4AF37]/50 hover:shadow-xl hover:-translate-y-1 transition-all"
+                            className="bg-white border border-[#F1E9DB] p-10 rounded-[3rem] flex flex-col items-center text-center group hover:border-[#D4AF37]/50 hover:shadow-2xl hover:-translate-y-2 transition-all"
                           >
-                            <div className="p-5 bg-[#F9F9F9] text-[#8C8C8C] rounded-[1.75rem] mb-6 group-hover:bg-[#1A1A1A] group-hover:text-[#D4AF37] transition-all shadow-sm">
-                               <Cpu size={32} />
+                            <div className="p-6 bg-[#F9F9F9] text-[#8C8C8C] rounded-[2rem] mb-8 group-hover:bg-[#1A1A1A] group-hover:text-[#D4AF37] transition-all shadow-sm">
+                               <Cpu size={40} />
                             </div>
-                            <h4 className="font-black text-sm uppercase tracking-tight text-[#1A1A1A] group-hover:text-[#1A1A1A] transition-colors">{s.name}</h4>
-                            <p className="text-[9px] font-black uppercase tracking-widest text-[#8C8C8C] mt-2 opacity-60 group-hover:opacity-100">{s.category}</p>
-                            <div className="mt-6 w-full h-[1px] bg-[#F1E9DB] opacity-40" />
-                            <div className="mt-4 text-[10px] font-bold text-[#D4AF37] opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
-                               Editar Parâmetros →
+                            <h4 className="font-black text-sm uppercase tracking-tight text-[#1A1A1A]">{s.name}</h4>
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#D4AF37] mt-3">{s.category}</p>
+                            <div className="mt-8 pt-6 w-full border-t border-[#F1E9DB]/50 text-[10px] font-black text-[#8C8C8C] opacity-0 group-hover:opacity-100 transition-all">
+                               AUDITAR PARÂMETROS →
                             </div>
                           </button>
                         ))}
                       </div>
                    </section>
                 ) : (
-                    <section className="bg-white border border-[#F1E9DB] p-8 rounded-[2.5rem] shadow-[0_30px_60px_rgba(0,0,0,0.03)] animate-in fade-in zoom-in-95 duration-500 relative overflow-hidden h-fit">
-                      <div className="absolute top-0 right-0 p-8 opacity-[0.03] rotate-12">
-                         <Sparkles size={180} />
-                      </div>
-
-                      <div className="flex flex-col md:flex-row items-center gap-6 mb-8 relative z-10 border-b border-[#F1E9DB] pb-8">
-                        <button 
-                          onClick={() => setSelectedSpecialist(null)}
-                          className="p-3 bg-[#F9F9F9] text-[#8C8C8C] hover:bg-[#1A1A1A] hover:text-white rounded-2xl transition-all shadow-sm group/back"
-                        >
-                          <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+                  <section className="bg-white border border-[#F1E9DB] p-12 rounded-[4.5rem] shadow-sm animate-in fade-in zoom-in-95 duration-500">
+                    <div className="flex items-center justify-between mb-12">
+                      <div className="flex items-center gap-6">
+                        <button onClick={() => setSelectedSpecialist(null)} className="p-3 bg-white border border-[#F1E9DB] rounded-full hover:bg-[#1A1A1A] hover:text-white transition-all">
+                           <ArrowLeft size={16} />
                         </button>
-
-                        <div className="p-4 bg-[#1A1A1A] text-[#D4AF37] rounded-3xl shadow-lg ring-4 ring-[#D4AF37]/10 flex-shrink-0">
-                          <Sparkles size={24} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h2 className="text-xl font-black tracking-tighter text-[#1A1A1A] uppercase truncate">{selectedSpecialist.name}</h2>
-                          <div className="group/field mt-2 relative">
-                            <input 
-                              type="text" 
-                              value={selectedSpecialist.description}
-                              onChange={(e) => setSelectedSpecialist({...selectedSpecialist, description: e.target.value})}
-                              className="w-full bg-transparent border-none p-0 text-[11px] font-bold text-[#8C8C8C] uppercase tracking-widest outline-none focus:text-[#1A1A1A] transition-colors"
-                              placeholder="Defina o propósito deste especialista..."
-                            />
-                            <div className="absolute -bottom-1 left-0 w-0 h-[1px] bg-[#D4AF37] transition-all group-focus-within/field:w-20" />
-                          </div>
-                        </div>
-
-                        <div className="flex gap-2">
-                           <button 
-                             onClick={() => handleDeleteSpecialist(selectedSpecialist.id)}
-                             disabled={saving}
-                             className="p-4 bg-red-50 text-red-400 hover:bg-red-500 hover:text-white rounded-2xl transition-all shadow-sm disabled:opacity-50"
-                           >
-                             <Trash2 size={18} />
-                           </button>
+                        <div>
+                          <h3 className="text-3xl font-serif font-black text-[#1A1A1A] tracking-tight">{selectedSpecialist.name}</h3>
+                          <p className="text-[11px] text-[#D4AF37] font-black tracking-widest uppercase">{selectedSpecialist.category} • Auditing Mode</p>
                         </div>
                       </div>
+                      <div className="flex items-center gap-4">
+                        <button onClick={() => handleDeleteSpecialist(selectedSpecialist.id)} className="p-4 text-red-100 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all">
+                           <Trash2 size={24} />
+                        </button>
+                      </div>
+                    </div>
 
-                      <div className="relative z-10">
-                        <label className="text-[10px] uppercase tracking-[0.25em] font-black text-[#D4AF37] mb-3 block flex items-center gap-2">
-                           <Cpu size={12} /> Lógica de Raciocínio (Prompt Context)
-                        </label>
-                        <textarea 
-                          rows={14}
-                          value={selectedSpecialist.content}
-                          onChange={(e) => setSelectedSpecialist({...selectedSpecialist, content: e.target.value})}
-                          className="w-full p-6 bg-[#F9F9F9] border-2 border-transparent focus:border-[#F1E9DB] focus:bg-white rounded-[2rem] text-[13px] leading-relaxed font-serif text-[#333] shadow-inner outline-none transition-all resize-none custom-scrollbar"
-                          placeholder="Descreva as regras que este especialista deve seguir..."
+                    <div className="space-y-12">
+                      <div>
+                        <label className="text-[10px] uppercase tracking-[0.3em] font-black text-[#8C8C8C] mb-4 block">Descrição do Expert</label>
+                        <input 
+                          type="text" 
+                          value={selectedSpecialist.description}
+                          onChange={(e) => setSelectedSpecialist({...selectedSpecialist, description: e.target.value})}
+                          className="w-full p-6 bg-[#F9F9F9] border-2 border-transparent focus:border-[#F1E9DB] focus:bg-white rounded-[2rem] text-sm font-bold text-[#1A1A1A] outline-none transition-all shadow-inner"
                         />
                       </div>
-                    </section>
+                      <div>
+                        <label className="text-[10px] uppercase tracking-[0.3em] font-black text-[#8C8C8C] mb-4 block">Lógica de Reconhecimento de Padrão (Custom Prompt)</label>
+                        <textarea 
+                          rows={15}
+                          value={selectedSpecialist.content}
+                          onChange={(e) => setSelectedSpecialist({...selectedSpecialist, content: e.target.value})}
+                          className="w-full p-10 bg-[#F9F9F9] border-2 border-transparent focus:border-[#F1E9DB] focus:bg-white rounded-[3rem] text-[14px] leading-relaxed font-serif text-[#333] shadow-inner outline-none transition-all resize-none custom-scrollbar"
+                        />
+                      </div>
+                    </div>
+                  </section>
                 )}
-                </div>
+             </div>
           )}
         </div>
-
       </div>
     </div>
   );

@@ -25,17 +25,29 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await response.json();
+      let data;
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        data = await response.json();
+      } else {
+        // Se não for JSON (ex: erro 500 retornando HTML), pegamos o texto puro ou damos erro padrão
+        const text = await response.text();
+        console.error("Erro não-JSON recebido:", text);
+        throw new Error("Erro interno do servidor. Favor verificar os logs do sistema.");
+      }
 
       if (!response.ok) {
-        throw new Error(data.detail || "Falha na autenticação. Verifique suas credenciais.");
+        // Lida com erros estruturados do DRF (detail) ou erros de campo
+        const errorMessage = data.detail || (data.non_field_errors && data.non_field_errors[0]) || "Falha na autenticação. Verifique suas credenciais.";
+        throw new Error(errorMessage);
       }
 
       // data contém { access, refresh, user: { ... } }
       login(data.access, data.refresh, data.user);
       
     } catch (err: any) {
-      setError(err.message);
+      console.error("Login catch:", err);
+      setError(err.message || "Ocorreu um erro inesperado ao tentar logar.");
     } finally {
       setLoading(false);
     }

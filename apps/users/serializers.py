@@ -148,6 +148,29 @@ class AgentBITokenObtainPairSerializer(TokenObtainPairSerializer):
 
     def validate(self, attrs):
         data = super().validate(attrs)
+        
+        # ─── Governança de Acessos (Login Quota) ───
+        try:
+            from apps.users.models import UsageQuota
+            quota, _ = UsageQuota.objects.get_or_create(user=self.user)
+            
+            # Super Admins não possuem trava de login total
+            if not self.user.is_super_admin:
+                if quota.total_logins_count >= quota.max_logins_limit:
+                    raise serializers.ValidationError({
+                        "detail": f"Limite de acessos atingido ({quota.max_logins_limit}). Favor contatar o administrador do sistema."
+                    })
+            
+            # Incrementar contador de logins
+            quota.total_logins_count += 1
+            quota.save(update_fields=["total_logins_count", "updated_at"])
+        except serializers.ValidationError as e:
+            raise e
+        except Exception as e:
+            # Falhas na quota não devem impedir o login se for erro de sistema/db,
+            # mas registramos o erro no log para auditoria.
+            print(f"⚠️ Erro ao validar quota de login para {self.user.email}: {str(e)}")
+
         # Atualizar last_active_at
         self.user.last_active_at = timezone.now()
         self.user.save(update_fields=["last_active_at"])

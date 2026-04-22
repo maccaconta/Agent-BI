@@ -9,9 +9,32 @@ from apps.datasets.models import Dataset, DatasetVersion
 
 class DatasetSerializer(serializers.ModelSerializer):
     """Serializer completo para exibição e diagnóstico."""
-    created_by_name = serializers.ReadOnlyField(source="created_by.first_name")
+    created_by_name = serializers.SerializerMethodField()
+    created_by_email = serializers.SerializerMethodField()
+    domain_id = serializers.SerializerMethodField()
+    domain_name = serializers.SerializerMethodField()
+    subdomain_id = serializers.SerializerMethodField()
+    subdomain_name = serializers.SerializerMethodField()
     is_ready = serializers.ReadOnlyField()
     sqlite_table = serializers.SerializerMethodField()
+    
+    def get_created_by_name(self, obj):
+        return obj.created_by.first_name if obj.created_by else None
+
+    def get_created_by_email(self, obj):
+        return obj.created_by.email if obj.created_by else None
+
+    def get_domain_id(self, obj):
+        return str(obj.domain.id) if obj.domain else None
+
+    def get_domain_name(self, obj):
+        return obj.domain.name if obj.domain else None
+
+    def get_subdomain_id(self, obj):
+        return str(obj.subdomain.id) if obj.subdomain else None
+
+    def get_subdomain_name(self, obj):
+        return obj.subdomain.name if obj.subdomain else None
     
     # Campos Virtuais para Escrita
     descriptions = serializers.DictField(required=False, write_only=True)
@@ -27,7 +50,9 @@ class DatasetSerializer(serializers.ModelSerializer):
             "glue_table", "glue_database", "schema_json", "sample_json",
             "sqlite_table", "row_count", "column_count", "parquet_size_bytes",
             "processing_error", "processing_started_at", "processing_finished_at",
-            "created_by_name", "is_ready", "created_at", "updated_at",
+            "created_by_name", "created_by_email", "domain_id", "domain_name", 
+            "subdomain_id", "subdomain_name", "confidentiality", "lineage_info",
+            "is_ready", "created_at", "updated_at",
             "descriptions", "semanticFlags", "selectedCols"
         ]
         read_only_fields = ["status", "s3_parquet_path", "glue_table", "sample_json", "sqlite_table"]

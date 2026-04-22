@@ -47,6 +47,7 @@ class CopilotGenerateAPIView(APIView):
 
 
 class CopilotSQLPreviewAPIView(APIView):
+    permission_classes = [AllowAny]
 
     @extend_schema(
         tags=["ai"],

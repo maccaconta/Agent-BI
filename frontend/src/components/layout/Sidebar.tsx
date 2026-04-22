@@ -28,35 +28,24 @@ interface SidebarProps {
   onClose: () => void;
 }
 
-const UserGroupIcon = ({ size }: { size: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-    <circle cx="9" cy="7" r="4" />
-    <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-  </svg>
-);
-
-const DOMAINS = [
-  { id: "fin", name: "Financeiro", icon: <BarChart3 size={18} />, color: "border-blue-500" },
-  { id: "hr", name: "Recursos Humanos", icon: <UserGroupIcon size={18} />, color: "border-purple-500" },
-  { id: "sale", name: "Vendas e CRM", icon: <Globe size={18} />, color: "border-green-500" },
-  { id: "ops", name: "Operacoes Logisticas", icon: <Compass size={18} />, color: "border-orange-500" },
-];
+// Itens de dominio suspensos para manter a interface limpa
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const params = useParams();
   const pathname = usePathname();
   const router = useRouter();
-  const { logout } = useAuth();
+  const { user, getRole, logout } = useAuth();
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+
+  const currentRole = getRole();
+  const isAdmin = user?.is_super_admin || currentRole === "ADMIN" || currentRole === "OWNER";
+  const isCriador = currentRole === "ANALYST";
+  const isVisualizador = currentRole === "VIEWER";
 
   const menuItems = [
     { name: "1. Governanca Corporativa", icon: <ShieldCheck size={18} />, path: `/projects/${params.id}` },
-    { name: "2. Ingestao AWS", icon: <Database size={18} />, path: `/projects/${params.id}/sources` },
-    { name: "3. Transformacao", icon: <Shuffle size={18} />, path: `/projects/${params.id}/sources/preview` },
-    { name: "4. Contexto Semantico", icon: <Cpu size={18} />, path: `/projects/${params.id}/insights` },
-    { name: "5. Agente BI", icon: <Sparkles size={18} />, path: `/dashboard/generate` },
+    { name: "2. Fontes de Dados AWS", icon: <Database size={18} />, path: `/projects/${params.id}/sources` },
+    { name: "3. Agente BI Generativo", icon: <Sparkles size={18} />, path: `/dashboard/generate?project_id=${params.id}` },
   ];
 
   return (
@@ -93,31 +82,73 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               </button>
             </div>
 
+            {params.id && !isVisualizador && (
+              <div className="mb-10">
+                <p className="text-[10px] uppercase font-bold text-lux-muted mb-4 tracking-[0.2em] px-2 flex items-center gap-2">
+                  <Compass size={12} /> Etapas do projeto
+                </p>
+                <div className="space-y-1">
+                  {menuItems.map((item) => (
+                    <Link
+                      key={item.path}
+                      href={item.path}
+                      onClick={onClose}
+                      className={`flex items-center justify-between p-4 rounded-2xl transition-all group ${
+                        pathname === item.path
+                          ? "bg-lux-text text-lux-bg shadow-xl scale-105"
+                          : "text-lux-muted hover:bg-lux-border/20 hover:text-lux-text"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {item.icon}
+                        <span className="text-sm font-semibold tracking-tight">{item.name}</span>
+                      </div>
+                      <ChevronRight size={14} className={`transition-transform group-hover:translate-x-1 ${pathname === item.path ? "opacity-100" : "opacity-0"}`} />
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="mb-10">
               <p className="text-[10px] uppercase font-bold text-lux-muted mb-4 tracking-[0.2em] px-2 flex items-center gap-2">
-                <Compass size={12} /> Etapas do projeto
+                <Globe size={12} /> Ativos de Dados
               </p>
-              <div className="space-y-1">
-                {menuItems.map((item) => (
-                  <Link
-                    key={item.path}
-                    href={item.path}
+              <Link
+                href="/catalog"
+                onClick={onClose}
+                className={`flex items-center justify-between p-4 rounded-2xl transition-all group ${
+                  pathname === "/catalog"
+                    ? "bg-[#1A1A1A] text-white shadow-xl"
+                    : "text-lux-muted hover:bg-lux-border/20 hover:text-lux-text"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <BookOpen size={18} />
+                  <span className="text-sm font-semibold tracking-tight">Catálogo de Dados</span>
+                </div>
+                <div className="px-2 py-0.5 bg-[#D4AF37] text-[8px] font-black text-white rounded-md uppercase tracking-tighter">Mesh</div>
+              </Link>
+            </div>
+
+            {params.id && isVisualizador && (
+              <div className="mb-10">
+                 <Link
+                    href={`/dashboard/generate?project_id=${params.id}`}
                     onClick={onClose}
                     className={`flex items-center justify-between p-4 rounded-2xl transition-all group ${
-                      pathname === item.path
+                      pathname?.includes("/dashboard/generate")
                         ? "bg-lux-text text-lux-bg shadow-xl scale-105"
                         : "text-lux-muted hover:bg-lux-border/20 hover:text-lux-text"
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      {item.icon}
-                      <span className="text-sm font-semibold tracking-tight">{item.name}</span>
+                      <Sparkles size={18} />
+                      <span className="text-sm font-semibold tracking-tight">Análise e Relatórios BI</span>
                     </div>
-                    <ChevronRight size={14} className={`transition-transform group-hover:translate-x-1 ${pathname === item.path ? "opacity-100" : "opacity-0"}`} />
                   </Link>
-                ))}
               </div>
-            </div>
+            )}
 
 
             <div className="pt-6 border-t border-lux-border/20">
@@ -125,18 +156,20 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <p className="text-[10px] uppercase font-bold text-lux-muted mb-4 tracking-[0.2em] px-2 flex items-center gap-2">
                   <Settings size={12} /> Administração
                 </p>
-                <Link 
-                  href="/admin/prompts"
-                  onClick={onClose}
-                  className={`flex items-center gap-3 p-4 rounded-2xl transition-all ${
-                    pathname === "/admin/prompts"
-                      ? "bg-[#D4AF37] text-white shadow-lg"
-                      : "text-lux-muted hover:bg-[#FDF9F0] hover:text-[#D4AF37]"
-                  }`}
-                >
-                  <Cpu size={18} />
-                  <span className="text-sm font-bold tracking-tight">Centro de Governança de IA</span>
-                </Link>
+                {(isAdmin || isCriador) && (
+                  <Link 
+                    href="/admin/prompts"
+                    onClick={onClose}
+                    className={`flex items-center gap-3 p-4 rounded-2xl transition-all ${
+                      pathname === "/admin/prompts"
+                        ? "bg-[#D4AF37] text-white shadow-lg"
+                        : "text-lux-muted hover:bg-[#FDF9F0] hover:text-[#D4AF37]"
+                    }`}
+                  >
+                    <Cpu size={18} />
+                    <span className="text-sm font-bold tracking-tight">Governança</span>
+                  </Link>
+                )}
                 <button 
                   onClick={() => setIsHelpOpen(true)}
                   className="w-full mt-2 flex items-center gap-3 p-4 rounded-2xl transition-all text-lux-muted hover:bg-[#FDF9F0] hover:text-[#D4AF37]"

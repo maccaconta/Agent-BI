@@ -98,11 +98,8 @@ class IncrementalDashboardAgentService:
                 "cols": ds.get("column_count"),
                 "temporal": is_temp
             })
-        # --- NOVO: Captura de Auditoria ---
         context["audit_trail"] = {
             "orchestrator_thought": "",
-            "pandas_code": "",
-            "pandas_thought": "",
             "nl2sql_sql": "",
             "nl2sql_thought": ""
         }
@@ -201,10 +198,7 @@ class IncrementalDashboardAgentService:
         context["routing_decision"] = routing_decision
         context["audit_trail"]["orchestrator_thought"] = routing_decision.get("reasoning", "")
         
-        if route_selected == "ROUTE_PANDAS_DISABLED": # Desativado conforme solicitado
-            pass
-            
-        elif route_selected == "ROUTE_KB_RAG" and not context.get("specialist_insights"):
+        if route_selected == "ROUTE_KB_RAG" and not context.get("specialist_insights"):
             # Caso a rota seja KB_RAG e já não tenhamos consultado acima (redundância de segurança)
             rag_assistant = RAGKnowledgeAgent()
             r_result = rag_assistant.query_knowledge(context.get("currentUserPrompt", ""), "\n".join(rag_snippets), trace=trace)
@@ -229,11 +223,6 @@ class IncrementalDashboardAgentService:
             if trace:
                 trace.log_thought("NL2SQL Specialist", f"SQL construído para atender: {context.get('currentUserPrompt')}\nLogica: {n_result.get('description')}")
 
-        # --- NOVO: Ajuste de Rota do SQL Final ---
-        if context.get("materialized_table"):
-            # Se houve materialização, forçamos o SQL final a ler da tabela enriquecida
-            context["specialist_sql"] = f"SELECT * FROM {context['materialized_table']}"
-            context["specialist_insights"] += f"\n\nFONTE DE DADOS: Os KPIs calculados foram consolidados na tabela '{context['materialized_table']}'."
         # ---------------------------
 
         strict_bedrock = bool(request_data.get("requireBedrock", False))
@@ -246,7 +235,7 @@ class IncrementalDashboardAgentService:
         system_prompt = self._build_super_system_prompt(context)
         user_message = self._build_user_message(context)
         
-        msg = f"Contexto analítico preparado. Perfis Pandas/Estatísticos carregados para {len(ds_stats)} datasets."
+        msg = f"Contexto analítico preparado com KPIs e Regras de Negócio para {len(ds_stats)} datasets."
         if has_temporal:
             msg += " (Incluindo análise de tendência temporal)."
 

@@ -6,7 +6,7 @@ Dataset: fonte de dados ingerida, processada e catalogada no Glue.
 import uuid
 from django.db import models
 from apps.users.models import TimeStampedModel, User
-from apps.projects.models import Project
+from apps.projects.models import Project, DataDomain, DataSubDomain, ConfidentialityChoices
 
 
 class DatasetSourceType(models.TextChoices):
@@ -116,6 +116,29 @@ class Dataset(TimeStampedModel):
         verbose_name="Query SQL de Extração",
     )
 
+    # Data Mesh Governance (Snapshot at ingestion time)
+    lineage_info = models.JSONField(
+        default=dict, blank=True,
+        verbose_name="Linhagem e Origem",
+        help_text="Dados sobre a origem do arquivo, IP, email, etc."
+    )
+    domain = models.ForeignKey(
+        DataDomain, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="ingested_datasets",
+        verbose_name="Domínio snapshot"
+    )
+    subdomain = models.ForeignKey(
+        DataSubDomain, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="ingested_datasets",
+        verbose_name="Subdomínio snapshot"
+    )
+    confidentiality = models.CharField(
+        max_length=100,
+        choices=ConfidentialityChoices.choices,
+        default=ConfidentialityChoices.CORPORATIVO,
+        verbose_name="Confidencialidade"
+    )
+
     # Metadata
     tags = models.JSONField(default=list, blank=True)
     partition_columns = models.JSONField(
@@ -187,3 +210,35 @@ class DatasetVersion(TimeStampedModel):
 
     def __str__(self):
         return f"{self.dataset.name} v{self.version_number}"
+
+
+class DatasetPermission(TimeStampedModel):
+    """
+    Permissões de compartilhamento de datasets entre usuários.
+    Garante o acesso "Read & Use" para usuários que não são donos.
+    """
+    dataset = models.ForeignKey(
+        Dataset,
+        on_delete=models.CASCADE,
+        related_name="shared_permissions"
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="accessible_datasets"
+    )
+    granted_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="granted_permissions"
+    )
+
+    class Meta:
+        db_table = "dataset_permissions"
+        unique_together = [("dataset", "user")]
+        verbose_name = "Permissão de Dataset"
+        verbose_name_plural = "Permissões de Datasets"
+
+    def __str__(self):
+        return f"{self.user.email} can access {self.dataset.name}"

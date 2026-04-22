@@ -8,6 +8,8 @@ from pathlib import Path
 from uuid import uuid4
 
 from django.conf import settings
+from django.db.models import Q
+from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -44,7 +46,7 @@ class DatasetViewSet(viewsets.ModelViewSet):
         project_id = self.request.query_params.get("project_id")
         if project_id:
             qs = qs.filter(project_id=project_id)
-        return qs.select_related("project", "created_by")
+        return qs.select_related("project", "created_by").order_by("-created_at")
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -158,17 +160,64 @@ class DatasetViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
 
-        dataset = Dataset.objects.create(
+        # Metadados de Governança (Data Mesh)
+        lineage_data = {
+            "source_ip": request.META.get('REMOTE_ADDR'),
+            "user_agent": request.META.get('HTTP_USER_AGENT'),
+            "upload_timestamp": str(timezone.now()),
+            "origin": "Agent-BI Web Ingestion",
+            "owner_email": request.user.email
+        }
+
+        # Lógica de Sobreposição (Overwrite): 
+        # Busca dataset existente com mesmo nome, projeto e usuário que não esteja excluído.
+        existing_dataset = Dataset.objects.filter(
             project=project,
             name=dataset_name,
-            source_type="CSV" if ext == "csv" else "EXCEL",
-            status=DatasetStatus.PENDING,
-            s3_raw_path=s3_path,
-            s3_original_filename=file.name,
-            s3_original_size_bytes=file.size,
-            glue_database=project.glue_database,
             created_by=request.user,
-        )
+            is_deleted=False
+        ).first()
+
+        if existing_dataset:
+            dataset = existing_dataset
+            dataset.source_type = "CSV" if ext == "csv" else "EXCEL"
+            dataset.status = DatasetStatus.PENDING
+            dataset.s3_raw_path = s3_path
+            dataset.s3_original_filename = file.name
+            dataset.s3_original_size_bytes = file.size
+            dataset.processing_error = ""
+            
+            # Atualiza Metadados de Governança (Snapshot)
+            dataset.lineage_info = lineage_data
+            dataset.domain = project.domain
+            dataset.subdomain = project.subdomain
+            dataset.confidentiality = project.data_confidentiality
+            
+            dataset.save(update_fields=[
+                "source_type", "status", "s3_raw_path", 
+                "s3_original_filename", "s3_original_size_bytes", 
+                "processing_error", "lineage_info", "domain", 
+                "subdomain", "confidentiality", "updated_at"
+            ])
+            logger.info("Dataset '%s' já existe para o usuário %s no projeto %s. Iniciando sobreposição.", 
+                        dataset_name, request.user.email, project.id)
+        else:
+            dataset = Dataset.objects.create(
+                project=project,
+                name=dataset_name,
+                source_type="CSV" if ext == "csv" else "EXCEL",
+                status=DatasetStatus.PENDING,
+                s3_raw_path=s3_path,
+                s3_original_filename=file.name,
+                s3_original_size_bytes=file.size,
+                glue_database=project.glue_database,
+                created_by=request.user,
+                # Governança
+                lineage_info=lineage_data,
+                domain=project.domain,
+                subdomain=project.subdomain,
+                confidentiality=project.data_confidentiality
+            )
 
         trace_id = request.data.get("trace_id")
         process_dataset_task.delay(str(dataset.id), trace_id=trace_id)

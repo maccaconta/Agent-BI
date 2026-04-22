@@ -4,21 +4,25 @@ import React from "react";
 import { motion } from "framer-motion";
 import { Database, Cloud, Zap, Cpu, Server, ShieldCheck, ChevronRight } from "lucide-react";
 
-const PipelineNode = ({ icon: Icon, label, status, sublabel, alignment = "center" }: any) => (
-  <div className={`flex flex-col items-${alignment} gap-3 relative group`}>
+const PipelineNode = ({ icon: Icon, label, status, sublabel, alignment = "center", onClick, active }: any) => (
+  <div 
+    onClick={onClick}
+    className={`flex flex-col items-${alignment} gap-3 relative group ${onClick ? 'cursor-pointer' : 'cursor-default'}`}
+  >
     <motion.div 
-      whileHover={{ scale: 1.05, y: -5 }}
-      className="w-16 h-16 rounded-2xl bg-lux-card border border-lux-border/30 flex items-center justify-center relative shadow-2xl overflow-hidden group-hover:border-lux-accent/50 transition-all"
+      whileHover={onClick ? { scale: 1.1, y: -10 } : { scale: 1.05, y: -5 }}
+      whileTap={onClick ? { scale: 0.95 } : {}}
+      className={`w-16 h-16 rounded-2xl bg-lux-card border transition-all relative shadow-2xl overflow-hidden ${onClick ? 'border-lux-accent/40 shadow-lux-accent/10 hover:border-lux-accent group-hover:shadow-lux-accent/20' : 'border-lux-border/30 group-hover:border-lux-accent/50'} ${active ? 'ring-4 ring-lux-accent/30 bg-[#1A1A1A] text-white' : ''}`}
     >
-      <div className="absolute inset-0 bg-gradient-to-br from-lux-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-      <Icon size={28} className="text-lux-text dark:text-lux-accent relative z-10" />
+      <div className="absolute inset-0 bg-gradient-to-br from-lux-accent/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+      <Icon size={28} className={`relative z-10 ${active ? 'text-[#D4AF37]' : 'text-lux-text dark:text-lux-accent'}`} />
       
       {/* Indicador de Status */}
       <div className={`absolute top-2 right-2 w-2 h-2 rounded-full ${status === 'active' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
     </motion.div>
     
     <div className={`flex flex-col items-${alignment}`}>
-      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-lux-text">{label}</span>
+      <span className={`text-[10px] font-black uppercase tracking-[0.2em] transition-colors ${onClick ? 'group-hover:text-lux-accent' : 'text-lux-text'}`}>{label}</span>
       <span className="text-[8px] font-bold text-lux-muted uppercase opacity-60">{sublabel}</span>
     </div>
   </div>
@@ -41,7 +45,7 @@ const FlowParticles = () => (
   </div>
 );
 
-export function AWSPipelineMap() {
+export function AWSPipelineMap({ onSourceClick, activeTab }: any) {
   return (
     <div className="bg-white/40 dark:bg-white/5 border border-lux-border/20 dark:border-lux-border/40 p-10 rounded-[3.5rem] shadow-xl relative overflow-hidden group/pipeline">
       {/* Background Decorative */}
@@ -77,6 +81,8 @@ export function AWSPipelineMap() {
           label="Local Data" 
           sublabel="Staging Mode" 
           status="active" 
+          onClick={onSourceClick}
+          active={activeTab === 'sources'}
         />
         
         <FlowParticles />

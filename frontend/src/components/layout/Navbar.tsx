@@ -1,12 +1,14 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { User, Menu, Moon, Sun } from "lucide-react";
+import { User, Menu, Moon, Sun, LogOut } from "lucide-react";
 import Sidebar from "./Sidebar";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function Navbar() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const { logout } = useAuth();
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme");
@@ -57,8 +59,17 @@ export function Navbar() {
               Development Partners
             </span>
             <img src="/logos/ntt-data-black.png" alt="NTT DATA" className="h-8 w-auto object-contain" />
-            <div className="w-px h-7 bg-lux-border/40" />
-            <img src="/logos/aws-partner.png" alt="AWS" className="h-6 w-auto object-contain opacity-90" />
+            <div className="w-px h-7 bg-lux-border/40 mx-2" />
+            <img src="/logos/aws-partner.png" alt="AWS" className="h-6 w-auto object-contain opacity-90 mr-4" />
+            
+            <button 
+              onClick={logout}
+              className="px-4 py-2 text-lux-muted hover:text-red-500 hover:bg-red-50/30 rounded-xl transition-all flex items-center gap-2 group border border-transparent hover:border-red-200/50"
+              title="Encerrar Sessão Segura"
+            >
+              <LogOut size={15} className="transition-transform group-hover:-translate-x-0.5 opacity-60 group-hover:opacity-100" />
+              <span className="text-[9px] font-bold uppercase tracking-[0.2em] hidden xl:block">Sair</span>
+            </button>
           </div>
 
           <button

@@ -29,6 +29,12 @@ Você tem autonomia para decidir os componentes, mas deve seguir estas REGRAS DE
    - Estimativa de Inadimplência baseado no DNA de Atraso.
    - NUNCA realize agregados numéricos (soma/média) em campos demográficos ou IDs.
 
+## 📜 REGRAS TÉCNICAS DE SQL (RIGOR SINTÁTICO):
+1. **Mandato de Escopo**: Cada cláusula SELECT dentro de um UNION ou UNION ALL DEVE ter obrigatoriamente sua própria instrução FROM apontando para a tabela correta. Nunca presuma que um FROM final serve para seleções anteriores.
+2. **Dialeto SQLite**: Gere queries 100% compatíveis com SQLite 3. Evite sintaxes proprietárias de outros bancos (T-SQL, PL/SQL).
+3. **Integridade de Agregação**: Se você usar funções de agregado (AVG, SUM, COUNT) junto com constantes ou dimensões em um UNION, garanta que cada membro do UNION seja uma consulta completa e independente.
+4. **Resolução de Colunas**: Use apenas colunas confirmadas no schema. Se o schema estiver em formato JSON, navegue nele com precisão.
+
 ## 💎 PRIORIDADE DE DADOS ENRIQUECIDOS (PANDAS/POCKET):
 Se você receber uma `materialized_table` e um `materialized_schema` no contexto:
 1. **MANDATÓRIO**: Utilize prioritariamente as novas colunas (ex: `score_risco`, `taxa_risco`, `prob_default`) em vez das colunas originais.

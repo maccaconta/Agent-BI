@@ -3,7 +3,12 @@ from rest_framework.routers import DefaultRouter
 
 from apps.dashboards.views import DashboardViewSet
 
-router = DefaultRouter(trailing_slash=False)
+class OptionalSlashRouter(DefaultRouter):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.trailing_slash = r'(?:/)?'
+
+router = OptionalSlashRouter()
 router.register(r"", DashboardViewSet, basename="dashboard")
 
 urlpatterns = [

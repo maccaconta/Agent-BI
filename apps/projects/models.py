@@ -36,9 +36,35 @@ class DataDomain(TimeStampedModel):
         unique_together = [("tenant", "name")]
         verbose_name = "Domínio de Dados"
         verbose_name_plural = "Domínios de Dados"
+        ordering = ["name"]
 
     def __str__(self):
         return f"{self.name} | {self.tenant.slug}"
+
+
+class DataSubDomain(TimeStampedModel):
+    """
+    Subdomínio de Dados: Especialização dentro de um domínio.
+    Ex: Financeiro -> Contas a Pagar, RH -> Recrutamento.
+    """
+    domain = models.ForeignKey(
+        DataDomain,
+        on_delete=models.CASCADE,
+        related_name="subdomains",
+        verbose_name="Domínio Pai"
+    )
+    name = models.CharField(max_length=100, verbose_name="Nome do Subdomínio")
+    description = models.TextField(blank=True, verbose_name="Descrição")
+
+    class Meta:
+        db_table = "data_subdomains"
+        unique_together = [("domain", "name")]
+        verbose_name = "Subdomínio de Dados"
+        verbose_name_plural = "Subdomínios de Dados"
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.domain.name} > {self.name}"
 
 
 class ProjectStatus(models.TextChoices):
@@ -46,6 +72,14 @@ class ProjectStatus(models.TextChoices):
     BLUEPRINT = "BLUEPRINT", "Blueprint"
     ARCHIVED = "ARCHIVED", "Arquivado"
     SUSPENDED = "SUSPENDED", "Suspenso"
+
+
+class ConfidentialityChoices(models.TextChoices):
+    CORPORATIVO = "Corporativo", "Corporativo"
+    DOMINIO = "Dominio", "Dominio"
+    SUBDOMINIO = "Subdominio", "Subdominio"
+    CONFIDENCIAL = "Confidencial", "Confidencial"
+    ALTAMENTE_RESTRITO = "Altamente Restrito", "Altamente Restrito"
 
 
 class Project(TimeStampedModel):
@@ -67,6 +101,14 @@ class Project(TimeStampedModel):
         related_name="projects",
         verbose_name="Domínio de Dados"
     )
+    subdomain = models.ForeignKey(
+        DataSubDomain,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="projects",
+        verbose_name="Subdomínio de Dados"
+    )
     name = models.CharField(max_length=255, verbose_name="Nome")
     description = models.TextField(blank=True, verbose_name="Descrição")
     domain_data_owner = models.CharField(
@@ -76,7 +118,8 @@ class Project(TimeStampedModel):
     )
     data_confidentiality = models.CharField(
         max_length=100,
-        blank=True,
+        choices=ConfidentialityChoices.choices,
+        default=ConfidentialityChoices.CORPORATIVO,
         verbose_name="Confidencialidade dos Dados",
     )
     crawler_frequency = models.CharField(
@@ -167,16 +210,22 @@ class Project(TimeStampedModel):
         return f"{self.name} ({self.tenant.slug})"
 
     def save(self, *args, **kwargs):
-        # Auto-gerar paths AWS baseados no tenant + project slug
+        # Auto-gerar paths AWS baseados na hierarquia: tenant / domínio / subdomínio / projeto
         if not self.s3_path and self.tenant:
+            tenant_slug = self.tenant.slug
+            domain_slug = self.domain.name.lower().replace(" ", "-") if self.domain else "no-domain"
+            subdomain_slug = self.subdomain.name.lower().replace(" ", "-") if self.subdomain else "no-subdomain"
             project_slug = self.name.lower().replace(" ", "-")[:50]
+            
             s3_prefix = self.tenant.s3_prefix or "agent-bi-local"
-            self.s3_path = f"{s3_prefix}/{project_slug}"
+            # Estrutura Hierárquica Data Mesh
+            self.s3_path = f"{s3_prefix}/{domain_slug}/{subdomain_slug}/{project_slug}"
 
         if not self.glue_database and self.tenant:
+            domain_slug = self.domain.name.lower().replace(" ", "_") if self.domain else "no_domain"
             project_slug = self.name.lower().replace(" ", "_")[:50]
             glue_prefix = self.tenant.glue_database_prefix or "agent_bi_local"
-            self.glue_database = f"{glue_prefix}_{project_slug}"
+            self.glue_database = f"{glue_prefix}_{domain_slug}_{project_slug}"
 
         if not self.athena_workgroup and self.tenant:
             self.athena_workgroup = self.tenant.athena_workgroup or "primary"

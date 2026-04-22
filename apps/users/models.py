@@ -268,6 +268,16 @@ class UsageQuota(TimeStampedModel):
         verbose_name="Limite mensal de Tokens"
     )
     
+    # Controle de Sessão
+    total_logins_count = models.PositiveIntegerField(
+        default=0,
+        verbose_name="Contador Total de Logins"
+    )
+    max_logins_limit = models.PositiveIntegerField(
+        default=100,
+        verbose_name="Limite Total de Logins"
+    )
+    
     reset_date = models.DateField(
         auto_now_add=True,
         verbose_name="Data de Reinício"

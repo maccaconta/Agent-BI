@@ -10,7 +10,8 @@ import {
   MessageSquareQuote, 
   ChevronRight,
   Database,
-  LayoutDashboard
+  LayoutDashboard,
+  LogOut
 } from "lucide-react";
 
 /**
@@ -45,11 +46,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   };
 
   const menuItems = [
-    { name: "Dashboard Admin", icon: LayoutDashboard, href: "/admin" },
-    { name: "Global System Prompts", icon: MessageSquareQuote, href: "/admin/prompts" },
+    { name: "Governança", icon: MessageSquareQuote, href: "/admin/prompts" },
     { name: "Gestão de Usuários", icon: Users, href: "/admin/users" },
     { name: "Domínios de Dados", icon: Database, href: "/admin/domains" },
-    { name: "Configurações", icon: Settings, href: "/admin/settings" },
   ];
 
   return (
@@ -110,6 +109,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
 
           <div className="flex items-center gap-6">
+              {/* Partner Logos */}
+              <div className="hidden lg:flex items-center gap-4 px-4 py-2 rounded-2xl bg-white/60 dark:bg-lux-card/40 border border-lux-border/40 shadow-sm">
+                <img src="/logos/ntt-data-black.png" alt="NTT DATA" className="h-6 w-auto object-contain dark:invert" />
+                <div className="w-px h-5 bg-lux-border/40" />
+                <img src="/logos/aws-partner.png" alt="AWS" className="h-5 w-auto object-contain opacity-90" />
+              </div>
+
               {/* Theme Toggle Button */}
               <button 
                 onClick={toggleDarkMode}
@@ -123,9 +129,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <span className="text-xs font-bold tracking-tight">Administrador NTT</span>
                 <span className="text-[10px] text-[#D4AF37] dark:text-lux-accent uppercase font-bold tracking-widest">Master Tenant</span>
              </div>
-             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#D4AF37] to-[#B8860B] dark:from-lux-accent dark:to-lux-border flex items-center justify-center text-white font-bold shadow-lg shadow-[#D4AF37]/20 border-2 border-white dark:border-lux-border">
-                AD
-             </div>
+             
+             {/* Logout Button */}
+             <button 
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    localStorage.removeItem("agent_bi_access_token");
+                    localStorage.removeItem("agent_bi_refresh_token");
+                    localStorage.removeItem("agent_bi_user");
+                    window.location.href = "/";
+                  }
+                }}
+                className="p-3 bg-red-50 text-red-500 hover:bg-red-600 hover:text-white rounded-2xl transition-all shadow-sm group"
+                title="Encerrar Sessão de Admin"
+              >
+                <LogOut size={18} className="group-hover:-translate-x-0.5 transition-transform" />
+             </button>
           </div>
         </header>
 

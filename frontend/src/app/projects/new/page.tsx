@@ -22,6 +22,7 @@ type ProjectDraft = {
   crawlFrequency: string;
   objective: string;
   specialist_prompt_id?: string | null;
+  subdomain_id?: string | null;
 };
 
 export default function NewProjectWorkspace() {
@@ -38,12 +39,15 @@ export default function NewProjectWorkspace() {
     crawlFrequency: "",
     objective: "",
     specialist_prompt_id: null,
+    subdomain_id: null,
   });
 
   const [specialists, setSpecialists] = useState<any[]>([]);
   const [fetchingSpecialists, setFetchingSpecialists] = useState(false);
   const [domains, setDomains] = useState<any[]>([]);
   const [fetchingDomains, setFetchingDomains] = useState(false);
+  const [subdomains, setSubdomains] = useState<any[]>([]);
+  const [fetchingSubdomains, setFetchingSubdomains] = useState(false);
   const [showAgentPrompt, setShowAgentPrompt] = useState(false);
   
   const isFormValid = !!(
@@ -89,9 +93,13 @@ export default function NewProjectWorkspace() {
         if (res.ok) {
           const data = await res.json();
           const results = Array.isArray(data) ? data : (data.results || []);
-          // Filtro flexível para especialistas
+          // Filtro robusto e permissivo para especialistas
           setSpecialists(results.filter((s: any) => 
-            s.category?.toUpperCase().includes("SPECIALIST") || s.category?.includes("Especialista")
+            !s.category ||
+            s.category.toUpperCase().includes("SPECIALIST") || 
+            s.category.toUpperCase().includes("ESPECIALISTA") ||
+            s.category.toUpperCase().includes("PERSONA") ||
+            s.category.toUpperCase().includes("COGNITIVA")
           ));
         }
       } catch (err) {
@@ -104,6 +112,8 @@ export default function NewProjectWorkspace() {
     async function fetchDomains() {
       try {
         setFetchingDomains(true);
+        // Garante que a URL não tenha barra final se necessário, mas o backend agora aceita ambos.
+        // Adicionando timestamp para evitar cache agressivo.
         const res = await fetch("/api/v1/projects/domains/?t=" + Date.now(), {
           headers: getBackendJsonHeaders()
         });
@@ -129,6 +139,23 @@ export default function NewProjectWorkspace() {
     fetchSpecs();
     fetchDomains();
   }, []);
+
+  async function fetchSubdomains(domainId: string) {
+    try {
+      setFetchingSubdomains(true);
+      const res = await fetch(`/api/v1/projects/subdomains/?domain=${domainId}&t=${Date.now()}`, {
+        headers: getBackendJsonHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSubdomains(Array.isArray(data) ? data : (data.results || []));
+      }
+    } catch (err) {
+      console.error("Erro ao buscar subdomínios:", err);
+    } finally {
+      setFetchingSubdomains(false);
+    }
+  }
 
   const persistDraft = (draft: ProjectDraft) => {
     sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
@@ -167,6 +194,7 @@ export default function NewProjectWorkspace() {
           objective: form.objective,
           specialist_prompt_id: form.specialist_prompt_id || null,
           domain_id: form.domain_id || null,
+          subdomain_id: form.subdomain_id || null,
         }),
       });
 
@@ -247,13 +275,19 @@ export default function NewProjectWorkspace() {
                 required
                 value={form.domain_id || ""}
                 onChange={(e) => {
-                   const d = domains.find(dom => dom.id === e.target.value);
-                   setForm(prev => ({ 
-                     ...prev, 
-                     domain_id: e.target.value || null,
-                     dataDomain: d ? d.name : "" 
-                   }));
-                }}
+                    const d = domains.find(dom => dom.id === e.target.value);
+                    setForm(prev => ({ 
+                      ...prev, 
+                      domain_id: e.target.value || null,
+                      subdomain_id: null, // Reset subdomain when domain changes
+                      dataDomain: d ? d.name : "" 
+                    }));
+                    if (e.target.value) {
+                      fetchSubdomains(e.target.value);
+                    } else {
+                      setSubdomains([]);
+                    }
+                 }}
                 className="glass-input w-full p-3 text-sm border border-lux-border/60 bg-lux-card/50 text-lux-text hover:bg-lux-bg transition-colors shadow-inner cursor-pointer appearance-none"
               >
                 <option value="">{fetchingDomains ? "Buscando domínios..." : "Selecione o Área de Negócio..."}</option>
@@ -270,6 +304,23 @@ export default function NewProjectWorkspace() {
 
             <div className="md:col-span-1">
               <label className="text-xs font-bold text-lux-text mb-2 flex items-center gap-2">
+                <Target size={14} className="text-lux-muted" /> Área / Subdomínio
+              </label>
+              <select
+                disabled={!form.domain_id}
+                value={form.subdomain_id || ""}
+                onChange={(e) => updateField("subdomain_id", e.target.value || null)}
+                className="glass-input w-full p-3 text-sm border border-lux-border/60 bg-lux-card/50 text-lux-text hover:bg-lux-bg transition-colors shadow-inner cursor-pointer appearance-none disabled:opacity-50"
+              >
+                <option value="">{fetchingSubdomains ? "Buscando áreas..." : "Selecione a Área..."}</option>
+                {subdomains.map(s => (
+                   <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="md:col-span-1">
+              <label className="text-xs font-bold text-lux-text mb-2 flex items-center gap-2">
                 <Building2 size={14} className="text-lux-muted" /> Domain Data Owner
               </label>
               <input
@@ -277,7 +328,7 @@ export default function NewProjectWorkspace() {
                 type="text"
                 value={form.domainDataOwner}
                 onChange={(e) => updateField("domainDataOwner", e.target.value)}
-                placeholder="Ex: Gestor do dominio financeiro"
+                placeholder="Ex: marcelo.maccaferri@nttdata.com"
                 className="glass-input w-full p-3 text-[11px] font-medium border border-lux-border/60 bg-lux-card/50 hover:bg-lux-bg transition-colors shadow-inner"
               />
             </div>
@@ -297,9 +348,11 @@ export default function NewProjectWorkspace() {
                 className="glass-input w-full p-2.5 font-bold text-xs border border-lux-border/60 bg-lux-bg text-lux-text hover:bg-lux-card transition-colors cursor-pointer appearance-none"
               >
                 <option value="">Selecione...</option>
-                <option>Uso Interno Geral</option>
-                <option>Restrito Depto</option>
+                <option>Corporativo</option>
+                <option>Dominio</option>
+                <option>Subdominio</option>
                 <option>Confidencial</option>
+                <option>Altamente Restrito</option>
               </select>
             </div>
 
