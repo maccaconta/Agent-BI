@@ -18,7 +18,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
-APPEND_SLASH = True
+APPEND_SLASH = False
 
 # Banco local rápido para desenvolvimento
 from decouple import config

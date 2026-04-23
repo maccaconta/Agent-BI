@@ -317,32 +317,67 @@ class CostGovernanceViewSet(viewsets.ViewSet):
     def purge_analytical_cache(self, request):
         """
         LIMPEZA PROFUNDA (Higiene de Dados):
-        Remove o banco analítico temporário e os logs de execução.
-        NÃO afeta usuários, projetos ou templates.
+        Remove Datasets, arquivos físicos, versões e logs de execução.
+        NÃO afeta usuários, projetos ou templates de prompts.
         """
-        results = {"database": "skipped", "traces": 0}
+        from apps.datasets.models import Dataset, DatasetVersion
+        from apps.ai_engine.models import ReportPrompt
+        import shutil
+
+        results = {
+            "database_analytical": "skipped",
+            "traces_deleted": 0,
+            "datasets_deleted": 0,
+            "files_removed": 0,
+            "materializations_reset": 0
+        }
         
-        # 1. Limpeza do Banco Analítico (SQLite de Datasets)
+        # 1. Limpeza do Banco Analítico (SQLite temporário de agregação)
         db_path = getattr(settings, "LOCAL_ANALYTICS_SQLITE_PATH", None)
         if db_path and os.path.exists(db_path):
             try:
-                # Fechamos conexões se houver (opcional, OS.remove resolve se não houver lock ativo)
                 os.remove(db_path)
-                results["database"] = "purged"
+                results["database_analytical"] = "purged"
             except Exception as e:
-                results["database"] = f"error: {str(e)}"
+                results["database_analytical"] = f"error: {str(e)}"
 
-        # 2. Limpeza de Logs de Execução (Audit Traces)
+        # 2. Limpeza de Logs de Execução (ExecutionTrace)
         try:
-            count = ExecutionTrace.objects.count()
-            ExecutionTrace.objects.all().delete()
-            results["traces"] = count
+            results["traces_deleted"] = ExecutionTrace.objects.all().delete()[0]
         except Exception as e:
-            results["traces"] = f"error: {str(e)}"
+            results["traces_deleted"] = f"error: {str(e)}"
+
+        # 3. Limpeza de Arquivos Físicos e Registros de Datasets
+        try:
+            datasets = Dataset.objects.all()
+            results["datasets_deleted"] = datasets.count()
+            
+            # Remove arquivos físicos se estiverem no media local
+            media_root = settings.MEDIA_ROOT
+            dataset_dir = os.path.join(media_root, "datasets")
+            if os.path.exists(dataset_dir):
+                shutil.rmtree(dataset_dir)
+                os.makedirs(dataset_dir, exist_ok=True)
+                results["files_removed"] = "directory_purged"
+
+            # Deleta registros ( cascade deleta versões )
+            datasets.delete()
+        except Exception as e:
+            results["datasets_deleted"] = f"error: {str(e)}"
+
+        # 4. Reset de Materializações (limpa o cache de widgets para evitar dados órfãos)
+        try:
+            results["materializations_reset"] = ReportPrompt.objects.update(
+                materialized_data=None, 
+                status="PLANNED",
+                processing_error=""
+            )
+        except Exception as e:
+            results["materializations_reset"] = f"error: {str(e)}"
 
         return Response({
             "status": "success",
-            "message": "Higiene de dados concluída. O ambiente analítico foi resetado.",
+            "message": "Higiene de dados concluída. O ambiente analítico foi resetado com sucesso.",
             "details": results
         })
 

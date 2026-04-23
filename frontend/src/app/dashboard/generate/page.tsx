@@ -350,7 +350,9 @@ function DashboardContent() {
     window.dispatchEvent(new CustomEvent('agent-bi-trace', { detail: { traceId: trace_id } }));
 
     try {
-      const response = await fetch("/api/v1/ai/report-prompt/materialize", {
+      // FORÇADO: Fala diretamente com o Django na porta 8000 para evitar erro de proxy no Windows
+      const baseUrl = "http://127.0.0.1:8000";
+      const response = await fetch(`${baseUrl}/api/v1/ai/report-prompt/materialize`, {
         method: "POST",
         headers: getBackendJsonHeaders(),
         body: JSON.stringify({

@@ -21,6 +21,7 @@ import {
   Box,
   Coins,
   ShieldCheck,
+  Lock,
   TrendingUp,
   Wallet,
   Database,
@@ -94,6 +95,23 @@ export default function AdminPromptsPage() {
     persona_title: "Analista Financeiro Sênior",
     persona_description: "Você é um analista financeiro sênior especializado em identificar relações ocultas em dados e gerar insights estratégicos.",
     compliance_rules: "",
+    pii_keywords_json: {
+      "nome": "MASK_NAME",
+      "nm_cliente": "MASK_NAME",
+      "sobrenome": "MASK_NAME",
+      "cpf": "MASK_ID",
+      "cnpj": "MASK_ID",
+      "email": "MASK_EMAIL",
+      "contato": "MASK_EMAIL",
+      "telefone": "MASK_PHONE",
+      "celular": "MASK_PHONE",
+      "endereco": "REDACTED",
+      "logradouro": "REDACTED",
+      "senha": "REDACTED",
+      "password": "REDACTED",
+      "credit_card": "REDACTED",
+      "cartao": "REDACTED"
+    } as any,
     temperature: 0.3,
     top_p: 0.9,
     top_k: 250,
@@ -336,6 +354,7 @@ export default function AdminPromptsPage() {
             persona_title: p.persona_title || "",
             persona_description: p.persona_description || "",
             compliance_rules: p.compliance_rules || "",
+            pii_keywords_json: p.pii_keywords_json || {},
             temperature: p.temperature ?? 0.3,
             top_p: p.top_p ?? 0.9,
             top_k: p.top_k ?? 250,
@@ -440,22 +459,25 @@ export default function AdminPromptsPage() {
     setCleaning(true);
     setError(null);
     try {
-      const res = await fetch(`${BACKEND_URL}/api/v1/governance/costs/purge_analytical_cache/`, {
+      // Bypass do proxy: chamando direto na porta 8000 para evitar timeout de socket
+      const res = await fetch(`http://127.0.0.1:8000/api/v1/governance/costs/purge_analytical_cache/`, {
         method: "POST",
         headers: getHeaders()
       });
       
       if (res.ok) {
         const data = await res.json();
-        alert(`Sucesso! ${data.message}\nDetalhes: ${JSON.stringify(data.details)}`);
+        alert(`Sucesso! ${data.message}`);
         fetchCostsData();
         setSuccess(true);
         setTimeout(() => setSuccess(false), 3000);
       } else {
-        throw new Error("Erro ao realizar limpeza.");
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Erro ao realizar limpeza profunda.");
       }
     } catch (err: any) {
-      setError(err.message);
+      console.error("Erro na purga:", err);
+      setError(err.message || "Falha ao realizar higienização.");
     } finally {
       setCleaning(false);
     }
@@ -483,90 +505,93 @@ export default function AdminPromptsPage() {
         </Link>
       </div>
 
-      {/* 1. Título e Status */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-4xl font-black tracking-tighter text-[#1A1A1A] font-serif">Centro de Governança de IA</h1>
-            <p className="text-[#8C8C8C] mt-2 max-w-xl text-sm leading-relaxed tracking-tight border-l-2 border-[#D4AF37] pl-4">
+      {/* 1. Título e Ações Superiores */}
+      <div className="flex flex-col gap-8">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-[#F1E9DB] pb-10">
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-[2px] bg-[#D4AF37] rounded-full" />
+              <span className="text-[10px] font-black uppercase tracking-[0.4em] text-[#D4AF37]">Arquitetura Corporativa</span>
+            </div>
+            <h1 className="text-6xl font-black tracking-tighter text-[#1A1A1A] font-serif leading-none">
+              Centro de <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#1A1A1A] via-[#D4AF37] to-[#1A1A1A]">Governança em IA</span>
+            </h1>
+            <p className="text-[#8C8C8C] max-w-xl text-sm font-medium leading-relaxed italic">
               {canEdit 
-                ? "Defina a persona cognitiva, os especialistas de domínio e as diretrizes de compliance bancário." 
-                : "Visualização das diretrizes e políticas de governança ativas (Modo de Leitura)."}
+                ? "Gestão centralizada de diretrizes cognitivas, segurança de dados e políticas de conformidade da rede Amazonas." 
+                : "Visualização restrita de políticas e parâmetros de governança do Tenant."}
             </p>
           </div>
 
-        <div className="flex flex-col items-end gap-2">
-          {success && (
-            <div className="flex items-center gap-2 text-emerald-600 text-[10px] font-black uppercase tracking-widest animate-in slide-in-from-right-4">
-               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-               Diretrizes Publicadas com Sucesso
-            </div>
-          )}
-          {error && (
-            <div className="bg-red-50 text-red-500 text-[9px] font-black uppercase px-3 py-1 border border-red-100 rounded-full animate-pulse">{error}</div>
-          )}
+          <div className="flex items-center gap-4">
+            {canEdit && (
+              <button 
+                onClick={handleSave}
+                disabled={saving}
+                className="flex items-center gap-3 px-10 py-5 bg-[#1A1A1A] text-white rounded-[1.5rem] font-black text-[10px] uppercase tracking-[0.2em] hover:scale-105 hover:shadow-[0_20px_40px_rgba(0,0,0,0.3)] transition-all duration-500 disabled:opacity-50 active:scale-95 group shadow-2xl border border-[#D4AF37]/30"
+              >
+                {saving ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} className="text-[#D4AF37] group-hover:rotate-12 transition-transform" />}
+                {saving ? "Sincronizando..." : "Publicar Alterações"}
+              </button>
+            )}
+            
+            {!canEdit && (
+              <div className="flex items-center gap-3 text-[#D4AF37] font-black text-[10px] uppercase tracking-widest bg-white border border-[#F1E9DB] px-8 py-5 rounded-[1.5rem] shadow-sm">
+                <ShieldCheck size={16} className="animate-pulse" /> Acesso de Leitura
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Barra de Navegação Interna (Abas) */}
+        <div className="flex justify-center md:justify-start">
+          <div className="inline-flex items-center gap-1 p-1.5 bg-white/80 backdrop-blur-2xl border border-[#F1E9DB] rounded-[2rem] shadow-[0_15px_35px_rgba(0,0,0,0.05)] overflow-x-auto no-scrollbar max-w-full transition-all">
+            {[
+              { id: "MASTER", label: "Geral", icon: <ShieldCheck size={14} /> },
+              { id: "SECURITY", label: "Segurança", icon: <Lock size={14} /> },
+              { id: "SYSTEM_PROMPTS", label: "Prompts", icon: <Sparkles size={14} /> },
+              { id: "SPECIALISTS", label: "Especialistas", icon: <Database size={14} /> },
+              { id: "USERS", label: "Acessos", icon: <Users size={14} /> },
+              { id: "COSTS", label: "Custos", icon: <Coins size={14} /> }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`
+                  flex items-center gap-3 px-8 py-3.5 rounded-[1.5rem] text-[10px] font-black uppercase tracking-[0.15em] transition-all duration-500 relative whitespace-nowrap
+                  ${activeTab === tab.id 
+                    ? "bg-[#1A1A1A] text-white shadow-xl translate-y-[-2px] scale-[1.02] z-10" 
+                    : "text-[#8C8C8C] hover:bg-[#FDF9F0] hover:text-[#D4AF37]"}
+                `}
+              >
+                {tab.icon}
+                {tab.label}
+                {activeTab === tab.id && (
+                  <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-[2px] bg-[#D4AF37] rounded-full shadow-[0_0_8px_#D4AF37]" />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* 2. Abas e Ações Principais */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-[#F1E9DB]">
-        <div className="flex gap-2 p-1 bg-[#F9F9F9] border border-[#F1E9DB] rounded-2xl w-fit">
-           <button 
-              onClick={() => setActiveTab("MASTER")}
-              className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "MASTER" ? "bg-[#1A1A1A] text-white shadow-lg" : "text-[#8C8C8C] hover:bg-white"}`}>
-              Governança
-           </button>
-           <button 
-              onClick={() => setActiveTab("SPECIALISTS")}
-              className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "SPECIALISTS" ? "bg-[#1A1A1A] text-white shadow-lg" : "text-[#8C8C8C] hover:bg-white"}`}>
-              Especialistas
-           </button>
-           <button 
-              onClick={() => setActiveTab("SYSTEM_PROMPTS")}
-              className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "SYSTEM_PROMPTS" ? "bg-[#1A1A1A] text-white shadow-lg" : "text-[#8C8C8C] hover:bg-white"}`}>
-              Prompts do Sistema
-           </button>
-           <button 
-              onClick={() => setActiveTab("COSTS")}
-              className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "COSTS" ? "bg-[#1A1A1A] text-white shadow-lg" : "text-[#8C8C8C] hover:bg-white"}`}>
-              Gestão de Custos
-           </button>
-           {isAdmin && (
-             <button 
-                onClick={() => setActiveTab("DOMAINS")}
-                className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "DOMAINS" ? "bg-[#1A1A1A] text-white shadow-lg" : "text-[#8C8C8C] hover:bg-white"}`}>
-                Áreas e Domínios
-             </button>
-           )}
-           {isAdmin && (
-             <button 
-                onClick={() => setActiveTab("USERS")}
-                className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === "USERS" ? "bg-[#1A1A1A] text-white shadow-lg" : "text-[#8C8C8C] hover:bg-white"} flex items-center gap-2`}>
-                <Users size={12} /> Gestão de Usuários
-             </button>
-           )}
-        </div>
-
-        {canEdit && (
-          <div className="flex items-center gap-3">
-            <button 
-              onClick={handleSave}
-              disabled={saving}
-              className="flex items-center gap-2 px-8 py-3 bg-[#1A1A1A] text-white rounded-full font-black text-[11px] uppercase tracking-widest hover:scale-[1.02] hover:shadow-[0_10px_20px_rgba(212,175,55,0.15)] transition-all disabled:opacity-50 active:scale-95 group shadow-lg"
-            >
-              {saving ? <RefreshCw className="animate-spin" size={14} /> : <Save size={14} className="text-[#D4AF37] group-hover:scale-110 transition-transform" />}
-              {saving ? "Salvando..." : "Salvar Alterações"}
-            </button>
+        {/* Feedback de Status flutuante se necessário */}
+        {(success || error) && (
+          <div className="flex justify-end mt-2 animate-in fade-in slide-in-from-top-2">
+            {success && (
+              <div className="flex items-center gap-2 text-emerald-600 text-[9px] font-black uppercase tracking-widest bg-emerald-50 px-4 py-1.5 rounded-full border border-emerald-100">
+                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                 Publicado com Sucesso
+              </div>
+            )}
+            {error && (
+              <div className="bg-red-50 text-red-500 text-[9px] font-black uppercase px-4 py-1.5 border border-red-100 rounded-full shadow-sm">{error}</div>
+            )}
           </div>
         )}
-        {!canEdit && (
-          <div className="flex items-center gap-2 text-[#D4AF37] font-black text-[10px] uppercase tracking-[0.2em] bg-[#FDF9F0] px-6 py-3 rounded-full border border-[#D4AF37]/20 shadow-sm">
-             <ShieldCheck size={14} /> Somente Leitura
-          </div>
-        )}
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-        <div className="lg:col-span-12 space-y-10">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+          <div className="lg:col-span-12 space-y-10">
           {activeTab === "MASTER" ? (
             <>
               {/* Persona Master */}
@@ -781,17 +806,170 @@ export default function AdminPromptsPage() {
                     />
                   </div>
                 </div>
-
-                <div className="border-t border-[#F1E9DB] pt-8">
-                  <label className="text-[10px] uppercase tracking-[0.25em] font-black text-[#D4AF37] mb-4 block">Diretrizes de Compliance</label>
-                  <textarea 
-                    rows={5}
-                    value={prompt.compliance_rules}
-                    onChange={(e) => setPrompt({...prompt, compliance_rules: e.target.value})}
-                    className="w-full p-8 bg-[#F9F9F9] border-2 border-transparent rounded-[2rem] text-sm leading-relaxed font-serif focus:border-[#F1E9DB] focus:bg-white outline-none text-[#1A1A1A] placeholder:text-[#8C8C8C]/40 resize-none transition-all shadow-inner relative z-10"
-                    placeholder="Ex: 1. Proteger PII (Nomes, CPFs)...\n2. Manter tom de voz institucional...\n3. Não alucinar datas futuras..."
-                  />
+              </section>
+            </>
+          ) : activeTab === "SECURITY" ? (
+            <>
+              {/* Segurança e Blindagem de Dados */}
+              <section className="bg-white border border-[#F1E9DB] p-10 rounded-[3rem] shadow-[0_10px_30px_rgba(0,0,0,0.02)] relative group">
+                <div className="flex items-center gap-4 mb-10">
+                  <div className="p-4 bg-[#FDF9F0] text-[#D4AF37] rounded-3xl shadow-sm">
+                    <ShieldCheck size={28} />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-black tracking-tight text-[#1A1A1A]">Blindagem & Anonimização de PII</h2>
+                    <p className="text-[10px] text-[#8C8C8C] font-black tracking-[0.2em] uppercase">Controle de Privacidade de Dados</p>
+                  </div>
                 </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+                  <div className="lg:col-span-8 space-y-8">
+                    <div>
+                      <div className="flex items-center justify-between mb-6">
+                        <div>
+                          <label className="text-[10px] uppercase tracking-[0.25em] font-black text-[#D4AF37] mb-1 block">Dicionário de Blindagem PII</label>
+                          <p className="text-[11px] text-[#8C8C8C] leading-relaxed">
+                            Mapeie colunas sensíveis para estratégias de proteção automática.
+                          </p>
+                        </div>
+                        <button 
+                          onClick={() => {
+                            const newKey = `coluna_${Object.keys(prompt.pii_keywords_json).length + 1}`;
+                            setPrompt({
+                              ...prompt, 
+                              pii_keywords_json: { ...prompt.pii_keywords_json, [newKey]: "MASK_NAME" }
+                            });
+                          }}
+                          className="px-4 py-2 bg-[#1A1A1A] text-white text-[9px] font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-all shadow-lg flex items-center gap-2"
+                        >
+                          + Nova Regra
+                        </button>
+                      </div>
+
+                      <div className="bg-[#F9F9F9] rounded-[2.5rem] border border-[#F1E9DB] overflow-hidden shadow-inner">
+                        <table className="w-full text-left">
+                          <thead>
+                            <tr className="border-b border-[#F1E9DB] bg-[#FDF9F0]/50 text-[9px] font-black text-[#8C8C8C] uppercase tracking-widest">
+                              <th className="px-8 py-4">Nome da Coluna (Target)</th>
+                              <th className="px-8 py-4">Estratégia de Máscara</th>
+                              <th className="px-8 py-4 text-right">Ação</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#F1E9DB]/50">
+                            {Object.entries(prompt.pii_keywords_json).map(([key, value]: [string, any]) => (
+                              <tr key={key} className="hover:bg-white transition-colors group">
+                                <td className="px-8 py-4">
+                                  <input 
+                                    type="text" 
+                                    value={key}
+                                    onChange={(e) => {
+                                      const newKey = e.target.value;
+                                      if (newKey === key) return;
+                                      const newObj = { ...prompt.pii_keywords_json };
+                                      newObj[newKey] = value;
+                                      delete newObj[key];
+                                      setPrompt({ ...prompt, pii_keywords_json: newObj });
+                                    }}
+                                    className="bg-transparent border-none focus:ring-0 text-xs font-bold text-[#1A1A1A] w-full"
+                                  />
+                                </td>
+                                <td className="px-8 py-4">
+                                  <select 
+                                    value={value}
+                                    onChange={(e) => {
+                                      setPrompt({
+                                        ...prompt, 
+                                        pii_keywords_json: { ...prompt.pii_keywords_json, [key]: e.target.value }
+                                      });
+                                    }}
+                                    className="bg-white border border-[#F1E9DB] rounded-lg text-[10px] font-bold text-[#1A1A1A] focus:ring-1 focus:ring-[#D4AF37] outline-none p-1 px-2"
+                                  >
+                                    <option value="MASK_NAME">Nome (Jo** Silva)</option>
+                                    <option value="MASK_ID">ID/CPF (****-00)</option>
+                                    <option value="MASK_EMAIL">E-mail (a***@doc.com)</option>
+                                    <option value="MASK_PHONE">Telefone ((**) 9***)</option>
+                                    <option value="REDACTED">Remoção Total (REDACTED)</option>
+                                  </select>
+                                </td>
+                                <td className="px-8 py-4 text-right">
+                                  <button 
+                                    onClick={() => {
+                                      const newObj = { ...prompt.pii_keywords_json };
+                                      delete newObj[key];
+                                      setPrompt({ ...prompt, pii_keywords_json: newObj });
+                                    }}
+                                    className="p-2 text-[#8C8C8C] hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-4 space-y-8">
+                     <div className="bg-[#1A1A1A] p-8 rounded-[3rem] border border-white/5 shadow-2xl relative overflow-hidden">
+                        <div className="absolute -top-10 -right-10 opacity-10 rotate-12">
+                           <ShieldCheck size={180} className="text-white" />
+                        </div>
+                        <h4 className="text-[10px] font-black uppercase tracking-widest text-[#D4AF37] mb-6 flex items-center gap-2 relative z-10">
+                           <Info size={14} /> Dicas de Segurança
+                        </h4>
+                        <ul className="space-y-4 relative z-10">
+                           {[
+                             { k: "Proteção Nativa", d: "O sistema detecta padrões sensíveis mesmo se não estiverem no dicionário." },
+                             { k: "Filtro Global", d: "Regras aplicadas em tempo real na saída da IA e na visualização de dados." },
+                             { k: "Performance", d: "Estratégias de máscara são otimizadas para não impactar a latência das respostas." }
+                           ].map((item, idx) => (
+                             <li key={idx} className="space-y-1 pb-4 border-b border-white/10 last:border-0">
+                                <div className="text-[10px] font-black text-white uppercase">{item.k}</div>
+                                <p className="text-[10px] text-gray-400 leading-relaxed font-medium">{item.d}</p>
+                             </li>
+                           ))}
+                        </ul>
+                     </div>
+
+                     <div className="bg-emerald-50 border border-emerald-100 p-8 rounded-[2.5rem] flex items-start gap-5 shadow-sm">
+                        <div className="p-3 bg-white rounded-2xl text-emerald-500 shadow-sm">
+                           <CheckCircle2 size={24} />
+                        </div>
+                        <div>
+                           <h4 className="text-[11px] font-black uppercase tracking-widest text-emerald-700">Blindagem Ativa</h4>
+                           <p className="text-[10px] text-emerald-600/80 mt-2 leading-relaxed font-medium">
+                              Sua governança está configurada para proteger dados de {Object.keys(prompt.pii_keywords_json).length} campos sensíveis identificados.
+                           </p>
+                        </div>
+                     </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* Compliance Master Section */}
+              <section className="bg-white border border-[#F1E9DB] p-10 rounded-[3rem] shadow-[0_10px_30px_rgba(0,0,0,0.02)] relative group">
+                 <div className="flex items-center gap-4 mb-10">
+                    <div className="p-4 bg-[#1A1A1A] text-[#D4AF37] rounded-3xl shadow-sm">
+                      <Box size={28} />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-black tracking-tight text-[#1A1A1A]">Diretrizes de Compliance & Ética</h2>
+                      <p className="text-[10px] text-[#8C8C8C] font-black tracking-[0.2em] uppercase">Políticas Globais de Resposta</p>
+                    </div>
+                  </div>
+
+                  <div className="relative">
+                    <label className="text-[10px] uppercase tracking-[0.25em] font-black text-[#D4AF37] mb-4 block">Manual de Conduta da IA</label>
+                    <textarea 
+                      rows={8}
+                      value={prompt.compliance_rules}
+                      onChange={(e) => setPrompt({...prompt, compliance_rules: e.target.value})}
+                      className="w-full p-8 bg-[#F9F9F9] border-2 border-transparent rounded-[2rem] text-sm leading-relaxed font-serif focus:border-[#F1E9DB] focus:bg-white outline-none text-[#1A1A1A] placeholder:text-[#8C8C8C]/40 resize-none transition-all shadow-inner"
+                      placeholder="Ex: 1. Proteger PII (Nomes, CPFs)...\n2. Manter tom de voz institucional...\n3. Não alucinar datas futuras..."
+                    />
+                  </div>
               </section>
             </>
           ) : activeTab === "DOMAINS" ? (

@@ -137,11 +137,12 @@ class ReportPromptMaterializeAPIView(APIView):
     )
     def post(self, request):
         trace_id = None
-        print(f"[DEBUG] Materialize Request Data: {request.data}")
+        logger.critical(f"[ReportPromptView] >>> INICIANDO MATERIALIZAÇÃO <<< Dashboard: {request.data.get('dashboard_id')}")
+        logger.debug(f"[ReportPromptView] Payload: {request.data}")
         try:
             serializer = ReportPromptMaterializeSerializer(data=request.data)
             if not serializer.is_valid():
-                print(f"[ERROR] Serialization errors: {serializer.errors}")
+                logger.error(f"[ReportPromptView] Erro de validação no payload: {serializer.errors}")
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
             dashboard_id = serializer.validated_data.get("dashboard_id")
@@ -182,17 +183,57 @@ class ReportPromptMaterializeAPIView(APIView):
             except Exception as e:
                 logger.warning(f"[ReportPromptView] Falha ao calcular diagnóstico de payload: {e}")
 
-            return Response(result, status=status.HTTP_200_OK)
+            # --- FINAL RESPONSE RENDERING & SANITIZATION ---
+            def sanitize_for_json(obj):
+                """Garante que o objeto seja 100% serializável (sem NaN, Infinity, etc)"""
+                import math
+                if isinstance(obj, dict):
+                    return {k: sanitize_for_json(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [sanitize_for_json(i) for i in obj]
+                elif isinstance(obj, float):
+                    if math.isnan(obj) or math.isinf(obj):
+                        return None
+                    return obj
+                elif hasattr(obj, "__str__") and not isinstance(obj, (int, float, bool, str, type(None))):
+                    return str(obj)
+                return obj
+
+            try:
+                response_data = sanitize_for_json(result)
+                import json
+                from django.http import StreamingHttpResponse
+                
+                logger.info(f"[ReportPromptView] 🚀 Iniciando STREAMING da resposta final.")
+                
+                def stream_payload():
+                    yield json.dumps(response_data)
+                
+                response = StreamingHttpResponse(stream_payload(), content_type="application/json")
+                # Impede que middlewares ou proxies tentem fazer buffer da resposta
+                response["X-Accel-Buffering"] = "no"
+                response["Cache-Control"] = "no-cache"
+                return response
+                
+            except Exception as rend_err:
+                logger.error(f"[ReportPromptView] Erro na serialização JSON: {rend_err}")
+                from django.http import JsonResponse
+                return JsonResponse(
+                    {"status": "error", "detail": "Falha na serialização dos dados."}, 
+                    status=500
+                )
+
         except Exception as exc:
             import traceback
             error_details = traceback.format_exc()
-            logger.error(f"[ReportPromptView] !!! FALHA CRÍTICA !!!: {exc}\n{error_details}")
+            logger.critical(f"[ReportPromptView] !!! FALHA CRÍTICA NA MATERIALIZAÇÃO !!!: {exc}\n{error_details}")
             
-            # Garantia absoluta de retorno JSON para evitar que o Next.js receba HTML 500 default do Django
             return Response(
                 {
                     "status": "error",
-                    "detail": f"Falha na materialização: {str(exc)}", 
+                    "error": "MATERIALIZATION_SERVER_ERROR",
+                    "message": str(exc),
+                    "detail": "Erro interno durante a geração do dashboard. Verifique o console do backend para detalhes.",
                     "trace_id": trace_id,
                     "error_type": exc.__class__.__name__
                 }, 

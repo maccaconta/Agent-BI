@@ -159,6 +159,13 @@ class GlobalAIConfig(TimeStampedModel):
     ingestion_row_limit = models.IntegerField(default=5000, verbose_name="Limite de Ingestão (Linhas)")
     compliance_rules = models.TextField(blank=True, verbose_name="Diretrizes de Compliance")
     
+    pii_keywords_json = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name="Dicionário de PII (Anonimização)",
+        help_text="JSON com palavras-chave e estratégias de máscara (Ex: {'nome': 'MASK_NAME'})"
+    )
+    
     language = models.CharField(max_length=10, default="pt-BR", verbose_name="Idioma")
     session_timeout_minutes = models.IntegerField(default=15, verbose_name="Timeout de Sessão (min)")
     is_active = models.BooleanField(default=True, verbose_name="Ativo")

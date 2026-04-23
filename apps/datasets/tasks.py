@@ -126,7 +126,11 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
 
         # --- FAST SAMPLING (Performance UX) ---
         # Salva uma amostra inicial IMEDIATAMENTE antes do profiling pesado e da IA
-        dataset.sample_json = _to_json_compatible(df_full.head(100).fillna("").to_dict(orient="records"))
+        # Aplicamos anonimização imediata para evitar vazamento visual na UI de diagnóstico
+        raw_sample = _to_json_compatible(df_full.head(100).fillna("").to_dict(orient="records"))
+        
+        from apps.ai_engine.services.security_service import SecurityAnonymizerService
+        dataset.sample_json = SecurityAnonymizerService.anonymize_sample(raw_sample)
         dataset.save(update_fields=["sample_json"])
         # ----------------------------------------
 

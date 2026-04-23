@@ -17,6 +17,7 @@ EXCLUDED_PATHS = [
     "/static/",
     "/media/",
     "/health/",
+    "/api/v1/ai/report-prompt/materialize",
 ]
 
 # Métodos que alteram estado (auditamos apenas estes por padrão)

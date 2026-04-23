@@ -28,6 +28,7 @@ import { getBackendAuthHeaders } from "@/lib/backendAuth";
 import { ProjectHeaderStandard } from "@/components/project/ProjectHeaderStandard";
 import { AWSPipelineMap } from "@/components/project/AWSPipelineMap";
 import DataMeshExplorer from "@/components/catalog/DataMeshExplorer";
+import { anonymizeLocalData } from "@/lib/securityUtils";
 
 /**
  * SourcesPage
@@ -50,6 +51,7 @@ export default function SourcesPage() {
   const [domains, setDomains] = useState<any[]>([]);
   const [subdomains, setSubdomains] = useState<any[]>([]);
   const [loadingMesh, setLoadingMesh] = useState(false);
+  const [piiKeywords, setPiiKeywords] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (isVisualizador) {
@@ -73,7 +75,8 @@ export default function SourcesPage() {
         await Promise.all([
             fetchMeshDatasets(),
             fetchDomains(),
-            fetchSubdomains()
+            fetchSubdomains(),
+            fetchSecurityKeywords()
         ]);
         setLoadingMesh(false);
     };
@@ -84,6 +87,19 @@ export default function SourcesPage() {
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
   }, [projectId]);
+
+  async function fetchSecurityKeywords() {
+    try {
+      const res = await fetch("/api/v1/governance/global-config/", { headers: getBackendAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        const config = Array.isArray(data) ? data[0] : (data.results ? data.results[0] : data);
+        if (config && config.pii_keywords_json) {
+          setPiiKeywords(config.pii_keywords_json);
+        }
+      }
+    } catch (err) { console.error("Erro ao carregar dicionário de PII:", err); }
+  }
 
   async function fetchDomains() {
     try {
@@ -181,8 +197,13 @@ export default function SourcesPage() {
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
 
-        const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: "" });
-        const columns = data.length > 0 ? Object.keys(data[0]) : [];
+        const rawData = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: "" });
+        const columns = rawData.length > 0 ? Object.keys(rawData[0]) : [];
+        
+        // --- ANONIMIZAÇÃO INSTANTÂNEA (CAMADA 0) ---
+        // Protege os dados localmente no navegador ANTES de salvar no localStorage ou exibir na UI
+        const data = anonymizeLocalData(rawData, columns, piiKeywords);
+        
         const previewData = data.slice(0, 500);
         const sample = data.slice(0, 10);
 

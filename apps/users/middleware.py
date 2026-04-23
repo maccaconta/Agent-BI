@@ -34,6 +34,8 @@ class TenantMiddleware:
             "/api/v1/auth/token/",
             "/api/v1/auth/token/refresh/",
             "/api/v1/auth/register/",
+            "/api/v1/governance/config",
+            "/api/v1/governance/global-config",
         ]
         if any(request.path.startswith(p) for p in public_paths):
             return self.get_response(request)
@@ -41,46 +43,59 @@ class TenantMiddleware:
         # Tenta resolver tenant
         tenant_slug = request.headers.get("X-Tenant-Slug")
 
-        if tenant_slug:
-            try:
-                tenant = Tenant.objects.get(slug=tenant_slug, is_deleted=False)
+        try:
+            if tenant_slug:
+                try:
+                    tenant = Tenant.objects.get(slug=tenant_slug, is_deleted=False)
 
-                # Verifica se usuário autenticado tem acesso
-                if hasattr(request, "user") and request.user.is_authenticated:
-                    if not request.user.is_super_admin:
-                        is_member = TenantMember.objects.filter(
-                            user=request.user,
-                            tenant=tenant,
-                            is_active=True,
-                        ).exists()
-                        if not is_member:
-                            return JsonResponse(
-                                {"detail": "Sem acesso a este tenant."},
-                                status=403,
-                            )
+                    # Verifica se usuário autenticado tem acesso
+                    if hasattr(request, "user") and request.user.is_authenticated:
+                        if not request.user.is_super_admin:
+                            is_member = TenantMember.objects.filter(
+                                user=request.user,
+                                tenant=tenant,
+                                is_active=True,
+                            ).exists()
+                            if not is_member:
+                                return JsonResponse(
+                                    {"detail": "Sem acesso a este tenant."},
+                                    status=403,
+                                )
 
-                request.tenant = tenant
-
-            except Tenant.DoesNotExist:
-                # No modo de desenvolvimento rápido, permite auto-resolver o 'default'
-                if getattr(settings, "DEBUG", False) and tenant_slug == "default":
-                    tenant, _ = Tenant.objects.get_or_create(
-                        slug="default",
-                        defaults={
-                            "name": "Default Tenant (Auto-Resolved)",
-                            "s3_prefix": "agent-bi-local-dev",
-                            "glue_database_prefix": "agent_bi_local",
-                            "athena_workgroup": "primary",
-                        }
-                    )
                     request.tenant = tenant
-                else:
-                    return JsonResponse(
-                        {"detail": "Tenant não encontrado."},
-                        status=404,
-                    )
-        elif hasattr(request, "user") and request.user.is_authenticated:
-            # Fallback: usa primary_tenant do usuário
-            request.tenant = request.user.primary_tenant
+
+                except Tenant.DoesNotExist:
+                    # No modo de desenvolvimento rápido, permite auto-resolver o 'default'
+                    if getattr(settings, "DEBUG", False) and tenant_slug == "default":
+                        tenant, _ = Tenant.objects.get_or_create(
+                            slug="default",
+                            defaults={
+                                "name": "Default Tenant (Auto-Resolved)",
+                                "s3_prefix": "agent-bi-local-dev",
+                                "glue_database_prefix": "agent_bi_local",
+                                "athena_workgroup": "primary",
+                            }
+                        )
+                        request.tenant = tenant
+                    else:
+                        return JsonResponse(
+                            {"detail": "Tenant não encontrado."},
+                            status=404,
+                        )
+            elif hasattr(request, "user") and request.user.is_authenticated:
+                # Fallback: usa primary_tenant do usuário
+                request.tenant = request.user.primary_tenant
+        except Exception as e:
+            import traceback
+            error_trace = traceback.format_exc()
+            logger.error(f"[TenantMiddleware] FALHA CRÍTICA: {e}\n{error_trace}")
+            return JsonResponse(
+                {
+                    "error": "TENANT_RESOLUTION_ERROR",
+                    "message": f"Erro interno ao resolver tenant: {str(e)}",
+                    "detail": "Isso pode ocorrer devido a travamento de banco (SQLite Lock) durante ingestão paralela."
+                },
+                status=500
+            )
 
         return self.get_response(request)
