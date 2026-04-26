@@ -371,9 +371,8 @@ function DashboardContent() {
     window.dispatchEvent(new CustomEvent('agent-bi-trace', { detail: { traceId: trace_id } }));
 
     try {
-      // FORÇADO: Fala diretamente com o Django na porta 8000 para evitar erro de proxy no Windows
-      const baseUrl = "http://127.0.0.1:8000";
-      const response = await fetch(`${baseUrl}/api/v1/ai/report-prompt/materialize`, {
+      // Usa URL relativa para passar pelo proxy do Next.js (funciona em qualquer ambiente)
+      const response = await fetch(`/api/v1/ai/report-prompt/materialize`, {
         method: "POST",
         headers: getBackendJsonHeaders(),
         body: JSON.stringify({

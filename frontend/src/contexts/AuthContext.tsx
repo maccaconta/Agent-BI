@@ -86,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const fetchTimeout = async () => {
       try {
         const token = localStorage.getItem("agent_bi_access_token");
-        const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://127.0.0.1:8000'}/api/v1/governance/global-config/`, {
+        const res = await fetch(`/api/v1/governance/global-config/`, {
           headers: { "Authorization": `Bearer ${token}` }
         });
         if (res.ok) {
