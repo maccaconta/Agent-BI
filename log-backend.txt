@@ -1,0 +1,115 @@
+System check identified no issues (0 silenced).
+April 23, 2026 - 10:26:54
+Django version 4.2.16, using settings 'config.settings.local_fast'
+Starting development server at http://0.0.0.0:8000/
+Quit the server with CTRL-BREAK.
+
+[DEBUG] PromptTemplate Query: category=None | count=17
+[PROJECT_VIEW] [SUCCESS] Projeto criado com sucesso: ID=6c5c694f-fc8b-4275-8dc5-f62e5983a7f2
+[2026-04-23 10:29:02,224] CRITICAL apps.ai_engine.views [ReportPromptView] >>> INICIANDO MATERIALIZAÇÃO <<< Dashboard: None
+[2026-04-23 10:29:03,284] DEBUG apps.ai_engine.views [ReportPromptView] Payload: {'dashboard_id': None, 'project_id': '6c5c694f-fc8b-4275-8dc5-f62e5983a7f2', 'widget_prompts': [{'id': 'nps_total', 'title': 'NPS Total', 'prompt': 'Qual é o NPS total dos clientes?', 'type': 'BIGNUMBER', 'subType': None, 'business_rationale': 'Medir a satisfação geral dos clientes.', 'view_mode': 'PROMPT', 'override_sql': '-- Dashboard não gerado.'}, {'id': 'media_nota_unidade', 'title': 'Média Nota Unidade', 'prompt': 'Qual é a média da nota de satisfação geral com a unidade?', 'type': 'BIGNUMBER', 'subType': None, 'business_rationale': 'Avaliar a satisfação geral com a unidade.', 'view_mode': 'PROMPT', 'override_sql': '-- Dashboard não gerado.'}, {'id': 'media_nota_suptec_agilidade', 'title': 'Média Nota Agilidade Suporte', 'prompt': 'Qual é a média da nota de agilidade do suporte técnico?', 'type': 'BIGNUMBER', 'subType': None, 'business_rationale': 'Avaliar a rapidez do suporte técnico.', 'view_mode': 'PROMPT', 'override_sql': '-- Dashboard não gerado.'}, {'id': 'media_nota_suptec_atendimento', 'title': 'Média Nota Atendimento Suporte', 'prompt': 'Qual é a média da nota de atendimento do suporte técnico?', 'type': 'BIGNUMBER', 'subType': None, 'business_rationale': 'Avaliar a qualidade do atendimento do suporte.', 'view_mode': 'PROMPT', 'override_sql': '-- Dashboard não gerado.'}, {'id': 'nps_por_mes', 'title': 'NPS por Mês', 'prompt': 'Distribuição do NPS ao longo dos meses', 'type': 'CHART', 'subType': 'LINE', 'business_rationale': 'Analisar a evolução do NPS ao longo do tempo.', 'view_mode': 'PROMPT', 'override_sql': '-- Dashboard não gerado.'}, {'id': 'notas_por_categoria', 'title': 'Notas por Categoria', 'prompt': 'Distribuição das notas por categoria de atendimento', 'type': 'CHART', 'subType': 'BAR', 'business_rationale': 'Comparar as notas entre diferentes categorias de atendimento.', 'view_mode': 'PROMPT', 'override_sql': '-- Dashboard não gerado.'}, {'id': 'top_10_clientes_nps', 'title': 'Top 10 Clientes por NPS', 'prompt': 'Lista dos 10 clientes com os melhores NPS', 'type': 'TABLE', 'subType': None, 'business_rationale': 'Identificar os clientes mais satisfeitos.', 'view_mode': 'PROMPT', 'override_sql': '-- Dashboard não gerado.'}], 'trace_id': '9609166d-c067-445f-a285-7cc091bea2df'}
+[2026-04-23 10:29:29,275] INFO apps.users.services.quota_service [QuotaService] Bypass de quota para admin: admin@agentbi.local
+[2026-04-23 10:29:29,338] DEBUG apps.audit.services.trace_service [Tracer] [9609166d-c067-445f-a285-7cc091bea2df] Análise de Dados: Calibrando modelos de análise...
+[2026-04-23 10:29:29,395] INFO apps.audit.services.trace_service [Tracer] Concluido: Análise de Dados em 53ms (Custo: $0.0)
+[2026-04-23 10:29:29,432] INFO apps.ai_engine.services.prompt_service [PromptService] Prompt técnico 'nl2sql_agent' carregado do Banco de Dados.
+[2026-04-23 10:29:29,443] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] 🚀 Modo TURBO SEGURO — disparando 7 widgets em paralelo (IA-only).
+[2026-04-23 10:29:29,494] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] 🤖 [Thread] Iniciando geração para: nps_total
+[2026-04-23 10:29:29,505] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] 🤖 [Thread] Iniciando geração para: media_nota_unidade
+[2026-04-23 10:29:29,513] INFO apps.ai_engine.agents.nl2sql_agent [Assistente_NL2SQL] Iniciando geração de SQL com contexto especializado.
+[BedrockService] 🚀 Requisitando via Model Runtime (Model ID: amazon.nova-pro-v1:0)
+[2026-04-23 10:29:29,528] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] 🤖 [Thread] Iniciando geração para: media_nota_suptec_agilidade
+[2026-04-23 10:29:29,533] INFO apps.ai_engine.agents.nl2sql_agent [Assistente_NL2SQL] Iniciando geração de SQL com contexto especializado.
+[2026-04-23 10:29:29,549] INFO apps.ai_engine.agents.nl2sql_agent [Assistente_NL2SQL] Iniciando geração de SQL com contexto especializado.
+[2026-04-23 10:29:29,574] DEBUG apps.ai_engine.services.bedrock_service [Bedrock_Converse] Parameters: temp=0.0, max=10000, top_p=0.9, top_k=250
+[BedrockService] 🚀 Requisitando via Model Runtime (Model ID: amazon.nova-pro-v1:0)
+[BedrockService] 🚀 Requisitando via Model Runtime (Model ID: amazon.nova-pro-v1:0)
+[2026-04-23 10:29:29,614] DEBUG apps.ai_engine.services.bedrock_service [Bedrock_Converse] Parameters: temp=0.0, max=10000, top_p=0.9, top_k=250
+[2026-04-23 10:29:29,632] DEBUG apps.ai_engine.services.bedrock_service [Bedrock_Converse] Parameters: temp=0.0, max=10000, top_p=0.9, top_k=250
+[BedrockService] 🚀 Iniciando invocação do modelo: amazon.nova-pro-v1:0 (Região: us-east-1)...
+[BedrockService] 🚀 Iniciando invocação do modelo: amazon.nova-pro-v1:0 (Região: us-east-1)...
+[BedrockService] 📡 Enviando request ao endpoint Bedrock (Tentativa 1)...
+[BedrockService] 📡 Enviando request ao endpoint Bedrock (Tentativa 1)...
+[BedrockService] 📦 ModelID: amazon.nova-pro-v1:0 | Payload size: approx 4571 chars
+[BedrockService] 📦 ModelID: amazon.nova-pro-v1:0 | Payload size: approx 4611 chars
+[BedrockService] 🚀 Iniciando invocação do modelo: amazon.nova-pro-v1:0 (Região: us-east-1)...
+[BedrockService] 📡 Enviando request ao endpoint Bedrock (Tentativa 1)...
+[BedrockService] 📦 ModelID: amazon.nova-pro-v1:0 | Payload size: approx 4604 chars
+[BedrockService] ✅ Resposta recebida em 1.70s.
+[2026-04-23 10:29:31,486] INFO apps.ai_engine.services.bedrock_service Bedrock converse: model=amazon.nova-pro-v1:0, input_tokens=1109, output_tokens=128, elapsed=1.70s
+[2026-04-23 10:29:31,490] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] ✅ [Thread] Geração concluída para: media_nota_suptec_agilidade
+[2026-04-23 10:29:31,494] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] ✅ [Thread] Geração concluída para: media_nota_suptec_agilidade
+[BedrockService] ✅ Resposta recebida em 1.79s.
+[2026-04-23 10:29:31,499] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] 🤖 [Thread] Iniciando geração para: media_nota_suptec_atendimento
+[2026-04-23 10:29:31,499] INFO apps.ai_engine.services.bedrock_service Bedrock converse: model=amazon.nova-pro-v1:0, input_tokens=1109, output_tokens=126, elapsed=1.79s
+[2026-04-23 10:29:31,499] INFO apps.ai_engine.agents.nl2sql_agent [Assistente_NL2SQL] Iniciando geração de SQL com contexto especializado.
+[BedrockService] 🚀 Requisitando via Model Runtime (Model ID: amazon.nova-pro-v1:0)
+[2026-04-23 10:29:31,500] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] ✅ [Thread] Geração concluída para: media_nota_unidade
+[2026-04-23 10:29:31,502] DEBUG apps.ai_engine.services.bedrock_service [Bedrock_Converse] Parameters: temp=0.0, max=10000, top_p=0.9, top_k=250
+[BedrockService] 🚀 Iniciando invocação do modelo: amazon.nova-pro-v1:0 (Região: us-east-1)...
+[2026-04-23 10:29:31,502] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] ✅ [Thread] Geração concluída para: media_nota_unidade
+[BedrockService] 📡 Enviando request ao endpoint Bedrock (Tentativa 1)...
+[2026-04-23 10:29:31,503] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] 🤖 [Thread] Iniciando geração para: nps_por_mes
+[BedrockService] 📦 ModelID: amazon.nova-pro-v1:0 | Payload size: approx 4606 chars
+[2026-04-23 10:29:31,504] INFO apps.ai_engine.agents.nl2sql_agent [Assistente_NL2SQL] Iniciando geração de SQL com contexto especializado.
+[BedrockService] 🚀 Requisitando via Model Runtime (Model ID: amazon.nova-pro-v1:0)
+[2026-04-23 10:29:31,512] DEBUG apps.ai_engine.services.bedrock_service [Bedrock_Converse] Parameters: temp=0.0, max=10000, top_p=0.9, top_k=250
+[BedrockService] 🚀 Iniciando invocação do modelo: amazon.nova-pro-v1:0 (Região: us-east-1)...
+[BedrockService] 📡 Enviando request ao endpoint Bedrock (Tentativa 1)...
+[BedrockService] 📦 ModelID: amazon.nova-pro-v1:0 | Payload size: approx 4582 chars
+[BedrockService] ✅ Resposta recebida em 2.25s.
+[2026-04-23 10:29:32,148] INFO apps.ai_engine.services.bedrock_service Bedrock converse: model=amazon.nova-pro-v1:0, input_tokens=1102, output_tokens=121, elapsed=2.25s
+[2026-04-23 10:29:32,452] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] ✅ [Thread] Geração concluída para: nps_total
+[2026-04-23 10:29:32,608] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] ✅ [Thread] Geração concluída para: nps_total
+[2026-04-23 10:29:32,681] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] 🤖 [Thread] Iniciando geração para: notas_por_categoria
+[2026-04-23 10:29:32,703] INFO apps.ai_engine.agents.nl2sql_agent [Assistente_NL2SQL] Iniciando geração de SQL com contexto especializado.
+[BedrockService] 🚀 Requisitando via Model Runtime (Model ID: amazon.nova-pro-v1:0)
+[2026-04-23 10:29:32,752] DEBUG apps.ai_engine.services.bedrock_service [Bedrock_Converse] Parameters: temp=0.0, max=10000, top_p=0.9, top_k=250
+[BedrockService] 🚀 Iniciando invocação do modelo: amazon.nova-pro-v1:0 (Região: us-east-1)...
+[BedrockService] 📡 Enviando request ao endpoint Bedrock (Tentativa 1)...
+[BedrockService] 📦 ModelID: amazon.nova-pro-v1:0 | Payload size: approx 4595 chars
+[BedrockService] ✅ Resposta recebida em 1.36s.
+[2026-04-23 10:29:32,886] INFO apps.ai_engine.services.bedrock_service Bedrock converse: model=amazon.nova-pro-v1:0, input_tokens=1107, output_tokens=126, elapsed=1.36s
+[2026-04-23 10:29:32,903] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] ✅ [Thread] Geração concluída para: media_nota_suptec_atendimento
+[2026-04-23 10:29:32,918] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] ✅ [Thread] Geração concluída para: media_nota_suptec_atendimento
+[2026-04-23 10:29:32,935] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] 🤖 [Thread] Iniciando geração para: top_10_clientes_nps
+[2026-04-23 10:29:32,948] INFO apps.ai_engine.agents.nl2sql_agent [Assistente_NL2SQL] Iniciando geração de SQL com contexto especializado.
+[BedrockService] 🚀 Requisitando via Model Runtime (Model ID: amazon.nova-pro-v1:0)
+[2026-04-23 10:29:32,977] DEBUG apps.ai_engine.services.bedrock_service [Bedrock_Converse] Parameters: temp=0.0, max=10000, top_p=0.9, top_k=250
+[BedrockService] 🚀 Iniciando invocação do modelo: amazon.nova-pro-v1:0 (Região: us-east-1)...
+[BedrockService] 📡 Enviando request ao endpoint Bedrock (Tentativa 1)...
+[BedrockService] 📦 ModelID: amazon.nova-pro-v1:0 | Payload size: approx 4575 chars
+[BedrockService] ✅ Resposta recebida em 3.20s.
+[2026-04-23 10:29:34,713] INFO apps.ai_engine.services.bedrock_service Bedrock converse: model=amazon.nova-pro-v1:0, input_tokens=1106, output_tokens=360, elapsed=3.20s
+[2026-04-23 10:29:34,713] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] ✅ [Thread] Geração concluída para: nps_por_mes
+[2026-04-23 10:29:34,714] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] ✅ [Thread] Geração concluída para: nps_por_mes
+[BedrockService] ✅ Resposta recebida em 1.82s.
+[2026-04-23 10:29:34,837] INFO apps.ai_engine.services.bedrock_service Bedrock converse: model=amazon.nova-pro-v1:0, input_tokens=1105, output_tokens=203, elapsed=1.82s
+[2026-04-23 10:29:34,839] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] ✅ [Thread] Geração concluída para: top_10_clientes_nps
+[2026-04-23 10:29:34,844] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] ✅ [Thread] Geração concluída para: top_10_clientes_nps
+[BedrockService] ✅ Resposta recebida em 3.74s.
+[2026-04-23 10:29:36,515] INFO apps.ai_engine.services.bedrock_service Bedrock converse: model=amazon.nova-pro-v1:0, input_tokens=1106, output_tokens=630, elapsed=3.74s
+[2026-04-23 10:29:36,532] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] ✅ [Thread] Geração concluída para: notas_por_categoria
+[2026-04-23 10:29:36,533] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] ✅ [Thread] Geração concluída para: notas_por_categoria
+[2026-04-23 10:29:36,534] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] ✅ 7 de 7 widgets concluídos (incluindo falhas tratadas). Tempo IA: 7.24s
+[2026-04-23 10:29:36,543] INFO apps.ai_engine.services.report_prompt_service [ReportPromptService] 📦 Preparando materialização da Versão V1
+[2026-04-23 10:29:36,616] DEBUG apps.audit.services.trace_service [Tracer] [9609166d-c067-445f-a285-7cc091bea2df] UI Designer: Layout Determinístico: Orquestrando fluxos analíticos...
+[2026-04-23 10:29:36,673] INFO apps.ai_engine.services.report_prompt_service [ReportPrompt] Renderizando dashboard via template local...
+[2026-04-23 10:29:36,784] DEBUG apps.audit.services.trace_service [Tracer] [9609166d-c067-445f-a285-7cc091bea2df] IA: Parecer Estratégico: Calibrando modelos de análise...
+[2026-04-23 10:29:36,986] INFO apps.audit.services.trace_service [Tracer] 🧠 [AWS Bedrock] Pensamento: Solicitando inferência ao modelo 0......
+[2026-04-23 10:29:37,037] INFO apps.audit.services.trace_service [Tracer] 🧠 [AWS Bedrock] Pensamento: Iniciando conversação (Converse API) com amazon.nova-pro-v1:0......
+[2026-04-23 10:29:37,074] DEBUG apps.ai_engine.services.bedrock_service [Bedrock_Converse] Parameters: temp=0.4, max=10000, top_p=0.9, top_k=250
+[BedrockService] 🚀 Iniciando invocação do modelo: amazon.nova-pro-v1:0 (Região: us-east-1)...
+[BedrockService] 📡 Enviando request ao endpoint Bedrock (Tentativa 1)...
+[BedrockService] 📦 ModelID: amazon.nova-pro-v1:0 | Payload size: approx 1723 chars
+[BedrockService] ✅ Resposta recebida em 2.93s.
+[2026-04-23 10:29:40,112] INFO apps.audit.services.trace_service [Tracer] Concluido: AWS Bedrock Converse em 0ms (Custo: $0.0007992)
+[2026-04-23 10:29:40,112] INFO apps.ai_engine.services.bedrock_service Bedrock converse: model=amazon.nova-pro-v1:0, input_tokens=378, output_tokens=207, elapsed=2.93s
+[2026-04-23 10:29:40,113] INFO apps.audit.services.trace_service [Tracer] Concluido: IA: Parecer Estratégico em 3328ms (Custo: $0.0)
+[2026-04-23 10:29:40,114] INFO apps.ai_engine.services.report_prompt_service [ReportPromptService] Debitando 9438 tokens reais para admin@agentbi.local
+[2026-04-23 10:29:40,116] INFO apps.users.services.quota_service [QuotaService] Tokens registrados para admin@agentbi.local: +7744 in, +1694 out
+[2026-04-23 10:29:40,121] INFO apps.ai_engine.services.report_prompt_service [ReportPromptService] 🎨 Renderização concluída em 0.00s.
+[2026-04-23 10:29:40,128] INFO apps.ai_engine.services.report_prompt_service [ReportPromptService] 💾 Dashboard salvo (Versão V1) em 0.01s.
+[2026-04-23 10:29:40,129] INFO apps.ai_engine.services.report_prompt_service [ReportPromptService] ✔️ Materialização total finalizada em 10.84s.
+[2026-04-23 10:29:40,130] INFO apps.ai_engine.services.report_prompt_service [ReportPromptService] ✔️ Materialização total finalizada em 10.84s. Enviando 7 resultados enxutos.
+[2026-04-23 10:29:40,130] INFO apps.ai_engine.views [ReportPromptView] Materialização concluída: 7 widgets. Payload: 23.85 KB. Tempo de Serialização: 0.0002s
+[2026-04-23 10:29:40,131] INFO apps.ai_engine.views [ReportPromptView] Enviando resposta final: 24427 bytes.

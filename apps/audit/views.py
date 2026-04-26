@@ -30,15 +30,14 @@ class ExecutionTraceViewSet(viewsets.ReadOnlyModelViewSet):
         
         while attempts < max_retries:
             try:
-                traces = self.queryset.filter(trace_id=trace_id).order_by('id')
-                # Forçamos a avaliação do queryset para disparar o erro de banco se houver lock
+                traces = list(self.queryset.filter(trace_id=trace_id).order_by('id'))
                 data = self.get_serializer(traces, many=True).data
                 return Response(data)
             except OperationalError as e:
                 attempts += 1
                 if "database is locked" in str(e).lower() and attempts < max_retries:
-                    logger.warning(f"[Audit] Banco ocupado. Tentativa {attempts}/{max_retries} em 1s...")
-                    time.sleep(1)
+                    logger.warning(f"[Audit] Banco ocupado. Tentativa {attempts}/{max_retries} em 0.2s...")
+                    time.sleep(0.2)
                     continue
                 logger.error(f"[Audit] Falha crítica de banco após {attempts} tentativas: {e}")
                 return Response([], status=200) # Retorna vazio para não quebrar a UI

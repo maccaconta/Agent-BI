@@ -49,7 +49,7 @@ class DatasetSerializer(serializers.ModelSerializer):
             "s3_original_filename", "s3_original_size_bytes",
             "glue_table", "glue_database", "schema_json", "sample_json",
             "sqlite_table", "row_count", "column_count", "parquet_size_bytes",
-            "processing_error", "processing_started_at", "processing_finished_at",
+            "processing_error", "governance_warning", "processing_started_at", "processing_finished_at",
             "created_by_name", "created_by_email", "domain_id", "domain_name", 
             "subdomain_id", "subdomain_name", "confidentiality", "lineage_info",
             "is_ready", "created_at", "updated_at",
@@ -66,8 +66,17 @@ class DatasetSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         """Customizamos a saída para incluir os campos virtuais computados."""
+        from apps.ai_engine.services.security_service import SecurityAnonymizerService
         ret = super().to_representation(instance)
         
+        # BLINDAGEM DE DADOS: Anonimiza o sample_json que vai para o Preview do Catálogo
+        if ret.get("sample_json"):
+            try:
+                ret["sample_json"] = SecurityAnonymizerService.anonymize_sample(ret["sample_json"])
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Falha ao anonimizar sample no serializer: {e}")
+
         # Injeta descriptions
         schema = instance.schema_json or {}
         cols = schema.get("columns", [])
@@ -144,6 +153,17 @@ class DatasetSchemaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Dataset
         fields = ["id", "name", "schema_json", "sample_json", "status"]
+
+    def to_representation(self, instance):
+        from apps.ai_engine.services.security_service import SecurityAnonymizerService
+        ret = super().to_representation(instance)
+        if ret.get("sample_json"):
+            try:
+                ret["sample_json"] = SecurityAnonymizerService.anonymize_sample(ret["sample_json"])
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Falha ao anonimizar sample no DatasetSchemaSerializer: {e}")
+        return ret
 
 
 class PresignedUploadSerializer(serializers.Serializer):

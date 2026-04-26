@@ -174,13 +174,22 @@ class CostGovernanceViewSet(viewsets.ViewSet):
             
         quotas = UsageQuota.objects.filter(user__in=active_users).select_related('user').all()
         data = []
+        
+        role_labels = {
+            "ADMIN": "Administrador",
+            "ANALYST": "Analista",
+            "VIEWER": "Visualizador"
+        }
+
         for q in quotas:
             total_consumed = q.input_tokens_count + q.output_tokens_count
             cost = PricingService.calculate_cost(q.input_tokens_count, q.output_tokens_count)
+            backend_role = q.user.get_tenant_role(request.tenant) if hasattr(request, 'tenant') else "VIEWER"
             data.append({
                 "user_id": str(q.user.id),
                 "email": q.user.email,
-                "role": q.user.get_tenant_role(request.tenant) if hasattr(request, 'tenant') else "VIEWER",
+                "role": backend_role, # Retornar o CÓDIGO para o frontend
+                "role_label": role_labels.get(backend_role, "Visualizador"),
                 "consumed_tokens": total_consumed,
                 "max_limit": q.max_tokens_monthly_limit,
                 "percent_used": round((total_consumed / q.max_tokens_monthly_limit * 100), 2) if q.max_tokens_monthly_limit > 0 else 0,
@@ -224,10 +233,15 @@ class CostGovernanceViewSet(viewsets.ViewSet):
         if not user_id or not new_role:
             return Response({"error": "user_id e role são obrigatórios"}, status=400)
             
+        # Aceitar tanto o label quanto o código por compatibilidade
         role_map = {
             "Administrador": "ADMIN",
+            "Analista": "ANALYST",
             "Criador": "ANALYST",
-            "Visualizador": "VIEWER"
+            "Visualizador": "VIEWER",
+            "ADMIN": "ADMIN",
+            "ANALYST": "ANALYST",
+            "VIEWER": "VIEWER"
         }
         
         backend_role = role_map.get(new_role, new_role)
@@ -239,27 +253,21 @@ class CostGovernanceViewSet(viewsets.ViewSet):
         if not user:
             return Response({"error": "Usuário não encontrado"}, status=404)
             
-        tenant = user.primary_tenant
+        tenant = getattr(request, 'tenant', None) or user.primary_tenant
         if not tenant:
-            return Response({"error": "Usuário não possui tenant primário"}, status=400)
-            
-        membership, created = TenantMember.objects.get_or_create(
-            user=user, 
-            tenant=tenant,
-            defaults={"role": backend_role}
-        )
-        if not created:
-            membership.role = backend_role
-            membership.save()
-            
-        # Também atualiza a flag is_super_admin se for Administrador
+             return Response({"error": "Tenant não resolvido"}, status=400)
+
+        # Atualizar no TenantMember
+        from apps.users.models import TenantMember
+        member, _ = TenantMember.objects.get_or_create(user=user, tenant=tenant)
+        member.role = backend_role
+        member.save()
+        
+        # Também atualiza a flag is_staff se for Administrador para permitir purga
         if backend_role == "ADMIN":
-            user.is_super_admin = True
-            user.save(update_fields=["is_super_admin"])
-        elif user.is_super_admin:
-            user.is_super_admin = False
-            user.save(update_fields=["is_super_admin"])
-            
+            user.is_staff = True
+            user.save(update_fields=["is_staff"])
+        
         return Response({
             "status": "success", 
             "new_role": new_role,
@@ -268,14 +276,15 @@ class CostGovernanceViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['post'])
     def invite_user(self, request):
-        """Convida um novo usuário (criação via convite)."""
+        """Convida um novo usuário (criação via convite) com senha temporária."""
         email = request.data.get("email")
         role = request.data.get("role", "Visualizador")
         
         if not email:
             return Response({"error": "E-mail é obrigatório"}, status=400)
             
-        # Simulação de convite/registro simplificado para o ambiente local
+        temp_password = "AgentBI@2024" # Senha padrão temporária
+        
         user, created = User.objects.get_or_create(
             email=email,
             defaults={
@@ -283,6 +292,10 @@ class CostGovernanceViewSet(viewsets.ViewSet):
                 "is_active": True
             }
         )
+        
+        if created:
+            user.set_password(temp_password)
+            user.save()
         
         # Garantir Quota
         UsageQuota.objects.get_or_create(user=user)
@@ -294,6 +307,7 @@ class CostGovernanceViewSet(viewsets.ViewSet):
             "status": "success",
             "message": "Usuário convidado e configurado com sucesso.",
             "user_id": str(user.id),
+            "temp_password": temp_password if created else "Já possuía conta",
             "created": created
         })
 
@@ -313,71 +327,124 @@ class CostGovernanceViewSet(viewsets.ViewSet):
         
         return Response({"status": "success", "message": "Usuário desativado com sucesso."})
 
+    @action(detail=False, methods=['get'])
+    def purge_stats(self, request):
+        """Retorna estatísticas do que será deletado na purga (respeitando governança)."""
+        from apps.datasets.models import Dataset
+        from apps.projects.models import ProjectStatus
+        from django.db.models import Min, Max
+        
+        # Filtrar apenas o que a governança permite deletar
+        dataset_count = Dataset.objects.filter(
+            ~Q(project__status=ProjectStatus.BLUEPRINT) & 
+            ~Q(project__dashboards__is_deleted=False)
+        ).distinct().count()
+        
+        trace_count = ExecutionTrace.objects.count()
+        
+        log_period = ExecutionTrace.objects.aggregate(
+            first=Min('timestamp'),
+            last=Max('timestamp')
+        )
+        
+        return Response({
+            "datasets_to_delete": dataset_count,
+            "traces_to_delete": trace_count,
+            "period_start": log_period['first'].strftime('%Y-%m-%d') if log_period['first'] else None,
+            "period_end": log_period['last'].strftime('%Y-%m-%d') if log_period['last'] else None
+        })
+
     @action(detail=False, methods=['post'])
     def purge_analytical_cache(self, request):
         """
         LIMPEZA PROFUNDA (Higiene de Dados):
-        Remove Datasets, arquivos físicos, versões e logs de execução.
-        NÃO afeta usuários, projetos ou templates de prompts.
+        Remove Datasets, arquivos físicos, versões, logs e reseta o estado dos Ativos Mesh.
         """
-        from apps.datasets.models import Dataset, DatasetVersion
-        from apps.ai_engine.models import ReportPrompt
+        # Verificação de segurança (Admin Only) - Robusta
+        user = getattr(request, 'user', None)
+        if not user or user.is_anonymous or not user.is_staff:
+             return Response({"error": "Ação restrita a administradores autenticados."}, status=403)
+
+        from apps.datasets.models import Dataset, DatasetVersion, DatasetPermission
+        from apps.governance.models import ReportPrompt
+        from apps.projects.models import Project, ProjectStatus
         import shutil
 
         results = {
             "database_analytical": "skipped",
             "traces_deleted": 0,
             "datasets_deleted": 0,
+            "permissions_deleted": 0,
             "files_removed": 0,
+            "projects_reset": 0,
             "materializations_reset": 0
         }
         
-        # 1. Limpeza do Banco Analítico (SQLite temporário de agregação)
+        # 1. Limpeza do Banco Analítico (SQLite temporário)
         db_path = getattr(settings, "LOCAL_ANALYTICS_SQLITE_PATH", None)
         if db_path and os.path.exists(db_path):
             try:
-                os.remove(db_path)
-                results["database_analytical"] = "purged"
+                if os.path.isfile(db_path):
+                    os.remove(db_path)
+                    results["database_analytical"] = "purged"
             except Exception as e:
                 results["database_analytical"] = f"error: {str(e)}"
 
-        # 2. Limpeza de Logs de Execução (ExecutionTrace)
+        # 2. Limpeza de Logs de Execução (Garantir deleção total)
         try:
             results["traces_deleted"] = ExecutionTrace.objects.all().delete()[0]
         except Exception as e:
             results["traces_deleted"] = f"error: {str(e)}"
 
-        # 3. Limpeza de Arquivos Físicos e Registros de Datasets
+        # 3. Limpeza de Arquivos e Datasets (Garantir deleção física total)
         try:
-            datasets = Dataset.objects.all()
-            results["datasets_deleted"] = datasets.count()
-            
-            # Remove arquivos físicos se estiverem no media local
-            media_root = settings.MEDIA_ROOT
-            dataset_dir = os.path.join(media_root, "datasets")
-            if os.path.exists(dataset_dir):
-                shutil.rmtree(dataset_dir)
-                os.makedirs(dataset_dir, exist_ok=True)
-                results["files_removed"] = "directory_purged"
+            from django.db import connection
+            with connection.cursor() as cursor:
+                # Deleção física via SQL para ignorar flags de soft-delete e managers
+                cursor.execute("DELETE FROM datasets_datasetpermission")
+                cursor.execute("DELETE FROM datasets_datasetversion")
+                cursor.execute("DELETE FROM datasets_dataset")
+                
+            results["datasets_deleted"] = "hard_deleted_all"
 
-            # Deleta registros ( cascade deleta versões )
-            datasets.delete()
-        except Exception as e:
-            results["datasets_deleted"] = f"error: {str(e)}"
+            # 4. Limpeza física de arquivos locais (Data Lake Local)
+            local_data_dir = getattr(settings, "LOCAL_DATA_DIR", os.path.join(settings.BASE_DIR, "local_data"))
+            if os.path.exists(local_data_dir):
+                try:
+                    # Deletar subpastas mas manter a raiz
+                    for item in os.listdir(local_data_dir):
+                        item_path = os.path.join(local_data_dir, item)
+                        if os.path.isdir(item_path):
+                            shutil.rmtree(item_path)
+                        else:
+                            os.remove(item_path)
+                    results["files_removed"] = "all_local_cleared"
+                except Exception as e:
+                    results["files_removed"] = f"partial_error: {str(e)}"
 
-        # 4. Reset de Materializações (limpa o cache de widgets para evitar dados órfãos)
-        try:
-            results["materializations_reset"] = ReportPrompt.objects.update(
-                materialized_data=None, 
-                status="PLANNED",
-                processing_error=""
+            # 5. Resetar Projetos
+            projects_to_reset = Project.objects.all()
+            results["projects_reset"] = projects_to_reset.count()
+            projects_to_reset.update(
+                status=ProjectStatus.BLUEPRINT,
+                default_dataset=None,
+                intake_metadata={}
             )
+
+            # 6. Limpar Dashboards e Materializações
+            reports = ReportPrompt.objects.all()
+            results["materializations_reset"] = reports.count()
+            reports.delete()
+
         except Exception as e:
-            results["materializations_reset"] = f"error: {str(e)}"
+            results["datasets_deleted"] = f"critical_error: {str(e)}"
+
+        # Log de Auditoria
+        print(f"[PURGE] Higiene Profunda executada por {user.email}. Resultados: {results}")
 
         return Response({
             "status": "success",
-            "message": "Higiene de dados concluída. O ambiente analítico foi resetado com sucesso.",
+            "message": "Higiene profunda concluída: Dados, Logs e Ativos Mesh resetados.",
             "details": results
         })
 

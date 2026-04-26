@@ -59,6 +59,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             "athena_workgroup",
             "tags",
             "created_by",
+            "created_by_name",
             "updated_by",
             "created_at",
             "updated_at",
@@ -66,6 +67,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             "pending_datasets_count",
             "blueprint_widgets",
             "dashboards",
+            "datasets_list",
         ]
         read_only_fields = [
             "id",
@@ -77,6 +79,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             "glue_database",
             "athena_workgroup",
             "created_by",
+            "created_by_name",
             "updated_by",
             "created_at",
             "updated_at",
@@ -84,6 +87,7 @@ class ProjectSerializer(serializers.ModelSerializer):
             "pending_datasets_count",
             "blueprint_widgets",
             "dashboards",
+            "datasets_list",
         ]
 
     dashboards = serializers.SerializerMethodField()
@@ -130,6 +134,15 @@ class ProjectSerializer(serializers.ModelSerializer):
     def get_pending_datasets_count(self, obj) -> int:
         from apps.datasets.models import DatasetStatus
         return obj.datasets.filter(is_deleted=False).exclude(status=DatasetStatus.READY).count()
+
+    created_by_name = serializers.ReadOnlyField(source="created_by.full_name")
+    datasets_list = serializers.SerializerMethodField()
+
+    def get_datasets_list(self, obj) -> list:
+        return [
+            {"id": d.id, "name": d.name, "status": d.status} 
+            for d in obj.datasets.filter(is_deleted=False)
+        ]
 
 
 class ProjectIntakeCreateSerializer(serializers.Serializer):

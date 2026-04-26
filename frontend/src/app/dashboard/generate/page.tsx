@@ -34,12 +34,15 @@ import {
   History,
   Edit2,
   Check,
-  GripVertical
+  GripVertical,
+  LogOut,
+  ArrowLeft
 } from "lucide-react";
 import DevHUD from '@/components/layout/DevHUD';
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { getProjectRelationshipsKey, readProjectSources, writeProjectSources } from "@/lib/projectSources";
+import { getProjectRelationshipsKey, readProjectSources, writeProjectSources, mergeProjectSources } from "@/lib/projectSources";
 import { getBackendJsonHeaders, getBackendAuthHeaders } from "@/lib/backendAuth";
 import { ProjectHeaderStandard } from "@/components/project/ProjectHeaderStandard";
 import { ProjectPhases } from "@/components/project/ProjectPhases";
@@ -73,6 +76,7 @@ interface DashboardTab {
 }
 
 function DashboardContent() {
+  const router = useRouter();
   const { user, getRole } = useAuth();
   const currentRole = getRole();
   const isVisualizador = currentRole === "VIEWER";
@@ -170,11 +174,28 @@ function DashboardContent() {
       })
       .then(res => res.json())
       .then(data => {
-        if (Array.isArray(data)) {
-          setProjectDatasets(data);
-        } else if (data.results && Array.isArray(data.results)) {
-          setProjectDatasets(data.results);
-        }
+        const rawDatasets = Array.isArray(data) ? data : (data.results || []);
+        setProjectDatasets(rawDatasets);
+
+        // Mapeia para o formato StoredProjectSource esperado pelo frontend
+        const apiMappedSources = rawDatasets.map((ds: any) => ({
+          id: ds.id,
+          name: ds.name,
+          type: ds.source_type,
+          size: ds.s3_original_size_bytes,
+          rows: ds.row_count,
+          columns: ds.schema_json?.columns?.map((c: any) => c.name) || [],
+          sample: ds.sample_json || [],
+          previewData: ds.sample_json || [],
+          status: ds.status,
+          governanceWarning: ds.governance_warning,
+          descriptions: ds.descriptions,
+          semanticFlags: ds.semanticFlags,
+          selectedCols: ds.selectedCols
+        }));
+
+        const merged = mergeProjectSources(apiMappedSources, sources);
+        setProjectSources(merged);
       })
       .catch(err => { /* erro silenciado para producao */ });
     }
@@ -847,7 +868,18 @@ function DashboardContent() {
             projectId={projectId || "PRJ-TEMP"} step={5} title="Studio Room" 
             prevHref={previousHref} prevLabel="Insights" isCompact 
           />
-          <ProjectPhases projectId={projectId || "PRJ-TEMP"} isCompact />
+          <div className="flex items-center gap-4">
+             <ProjectPhases projectId={projectId || "PRJ-TEMP"} isCompact />
+             <div className="w-[1px] h-8 bg-lux-border/10 mx-2" />
+             <Link 
+                href="/projects"
+                className="flex items-center gap-2 px-4 py-2 bg-lux-text text-lux-bg hover:bg-lux-accent transition-all rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg group"
+                title="Voltar ao Portfólio"
+             >
+                <LogOut size={14} className="group-hover:-translate-x-1 transition-transform" />
+                <span>Sair da Studio</span>
+             </Link>
+          </div>
         </div>
       </header>
 
@@ -1281,7 +1313,24 @@ function DashboardContent() {
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 overflow-y-auto px-5 pb-8 space-y-6 custom-scrollbar">
                  {projectSources.map((source) => (
                    <div key={source.id} className="space-y-4">
-                      <div className="flex items-center justify-between px-2 pt-2"><span className="text-[10px] font-black text-lux-accent uppercase truncate">{source.name}</span><button onClick={() => setSampleData({ tableName: source.name, rows: source.sample.slice(0, 5) })} className="p-1.5 hover:bg-lux-accent/10 rounded-lg text-lux-accent"><EyeIcon size={14} /></button></div>
+                      <div className="flex flex-col gap-1 px-2 pt-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black text-lux-accent uppercase truncate">{source.name}</span>
+                          <button onClick={() => setSampleData({ tableName: source.name, rows: source.sample.slice(0, 5) })} className="p-1.5 hover:bg-lux-accent/10 rounded-lg text-lux-accent">
+                             <EyeIcon size={14} />
+                          </button>
+                        </div>
+                        {source.governanceWarning && (
+                          <div className="mt-1 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                             <p className="text-[9px] text-amber-600 dark:text-amber-400 font-bold leading-tight">
+                                {source.governanceWarning}
+                             </p>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2 mt-1">
+                           <div className="text-[8px] font-black uppercase tracking-widest text-lux-muted/60">{source.rows.toLocaleString('pt-BR')} linhas ingeridas</div>
+                        </div>
+                      </div>
                       <div className="grid grid-cols-1 gap-2">
                          {source.columns.map((col: string) => (
                            <div key={col} draggable onDragStart={(e) => e.dataTransfer.setData("text/plain", col)} className="px-4 py-2 bg-lux-bg/50 dark:bg-white/5 border border-lux-border/10 rounded-2xl text-[10px] font-bold text-lux-text hover:border-lux-accent hover:scale-[1.02] transition-all cursor-grab flex items-center justify-between group shadow-sm text-left">

@@ -20,6 +20,7 @@ export interface StoredProjectSource {
   status?: string;
   aiDescription?: string;
   aiInsights?: string[];
+  governanceWarning?: string;
 }
 
 
@@ -59,6 +60,7 @@ export function normalizeProjectSource(source: Partial<StoredProjectSource>): St
     status: source.status || "READY",
     aiDescription: source.aiDescription || "",
     aiInsights: Array.isArray(source.aiInsights) ? source.aiInsights : [],
+    governanceWarning: source.governanceWarning || "",
   };
 }
 
@@ -148,6 +150,7 @@ export function mergeProjectSources(
       semanticFlags: mergedFlags,
       aiDescription: normalizedApi.aiDescription || existing.aiDescription,
       aiInsights: normalizedApi.aiInsights || existing.aiInsights,
+      governanceWarning: normalizedApi.governanceWarning || existing.governanceWarning,
     });
   });
 

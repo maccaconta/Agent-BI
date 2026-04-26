@@ -69,16 +69,18 @@ class LocalSQLiteQueryService:
 
         # 1. Tentar execução no banco ANALITICO real (Disco)
         if self.analytics_store.has_all_tables(datasets):
-            connection = sqlite3.connect(self.analytics_store.db_path)
+            # SEGURANÇA DE NÍVEL DE DRIVER: Abre em modo RO (Read Only)
+            db_uri = f"file:{self.analytics_store.db_path}?mode=ro"
+            connection = sqlite3.connect(db_uri, uri=True, check_same_thread=False)
             try:
                 connection.row_factory = sqlite3.Row
                 
-                # Injeção de ALIASES: Cria views temporárias para que o usuário possa usar o nome original
-                # sem se preocupar com sufixos técnicos.
+                # Injeção de ALIASES: Cria views temporárias
                 table_map = self._build_persisted_table_map(datasets)
                 for logical_name, physical_table in table_map.items():
                     if logical_name != physical_table:
                         try:
+                            # Nota: CREATE TEMP VIEW é permitido em conexões RO porque afeta apenas a RAM da sessão
                             connection.execute(f'CREATE TEMP VIEW IF NOT EXISTS "{logical_name}" AS SELECT * FROM "{physical_table}"')
                         except sqlite3.Error as e:
                             logger.warning(f"[SQLite] Falha ao criar alias para {logical_name}: {e}")
@@ -96,7 +98,8 @@ class LocalSQLiteQueryService:
 
         # 2. Fallback para EM MEMORIA (Amostra)
         logger.warning("[SQLite] Base total nao encontrada ou incompleta. Usando Fallback de MEMORIA (Amostra).")
-        connection = sqlite3.connect(":memory:")
+        # Conexão em memória é segura por natureza para o disco, mas aplicamos RO se possível
+        connection = sqlite3.connect(":memory:", check_same_thread=False)
         try:
             connection.row_factory = sqlite3.Row
             table_map = self._register_datasets(connection, datasets)
@@ -111,22 +114,27 @@ class LocalSQLiteQueryService:
 
 
     def _execute_sql(self, connection: sqlite3.Connection, sql: str, limit: int | None) -> dict:
+        from apps.ai_engine.services.security_service import SecurityAnonymizerService
+        
         cursor = connection.execute(sql)
         rows = cursor.fetchmany(limit or self.MAX_ROWS)
         columns = [item[0] for item in (cursor.description or [])]
         
         # Migração para Positional Mapping (Arrays em vez de Dicts)
-        # Isso garante que colunas duplicadas ou com nomes idênticos no SELECT não sejam perdidas
         serialized_rows = [
             [self._coerce_value(val) for val in row] 
             for row in rows
         ]
         
+        # APLICA BLINDAGEM DE DADOS (Layer 2 - Inbound/UI)
+        # Protege o que o usuário final vê no Dashboard e Preview
+        protected_rows = SecurityAnonymizerService.anonymize_dataframe_results(columns, serialized_rows)
+        
         return {
             "validated_sql": sql,
             "columns": columns,
-            "rows": serialized_rows,
-            "row_count": len(serialized_rows),
+            "rows": protected_rows,
+            "row_count": len(protected_rows),
         }
 
     def _build_persisted_table_map(self, datasets: list[dict]) -> dict[str, str]:

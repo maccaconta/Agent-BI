@@ -103,6 +103,7 @@ class Dataset(TimeStampedModel):
         help_text="Descrição da etapa atual (ex: Interpretando com IA...)",
     )
     processing_error = models.TextField(blank=True)
+    governance_warning = models.TextField(blank=True, verbose_name="Aviso de Governança")
     processing_started_at = models.DateTimeField(null=True, blank=True)
     processing_finished_at = models.DateTimeField(null=True, blank=True)
 

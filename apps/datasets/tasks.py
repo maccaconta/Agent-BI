@@ -80,45 +80,74 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
         dataset.processing_step = "Normalizando Formatos e Enriquecendo Tipos de Dados..."
         dataset.save(update_fields=["processing_step"])
         trace.start_step("Conversão para Parquet")
+
+        # --- BUSCA LIMITE DE GOVERNANÇA (DINÂMICO COM FALLBACK GLOBAL) ---
+        from apps.governance.models import GlobalAIConfig
+        governance_limit = None
+        try:
+            # 1. Tenta buscar configuração específica do Tenant
+            policy = GlobalAIConfig.objects.filter(tenant=dataset.project.tenant, is_active=True).first()
+            
+            # 2. Se não encontrar, tenta buscar a configuração global (sem tenant)
+            if not policy:
+                policy = GlobalAIConfig.objects.filter(tenant__isnull=True, is_active=True).first()
+                
+            if policy and policy.ingestion_row_limit:
+                governance_limit = policy.ingestion_row_limit
+                logger.info("[DatasetTask] Aplicando limite de governança: %d linhas", governance_limit)
+        except Exception as gov_err:
+            logger.warning("[DatasetTask] Falha ao buscar limite de governança: %s", gov_err)
+        # ------------------------------------------------------------------
+
         logger.info("[DatasetTask] Processando %s", ext.upper())
         
         # 1. Carregamento Único com Limites de Segurança
         try:
+            target_limit = governance_limit or parquet_svc.MAX_ROWS
+            # Tentamos ler 1 linha a mais para detectar truncamento de forma eficiente
+            read_limit = target_limit + 1
+            
             if ext == "csv":
-                # Usamos utf-8-sig por padrão para remover caracteres BOM invisíveis automaticamente
                 encoding = "utf-8-sig"
-                # Usamos sep=None com engine='python' para o Pandas detectar o delimitador automaticamente
                 try:
                     df_full = pd.read_csv(
                         io.BytesIO(raw_bytes), 
-                        sep=None, 
-                        engine="python", 
-                        encoding=encoding,
-                        nrows=parquet_svc.MAX_ROWS,
+                        sep=None, engine="python", encoding=encoding,
+                        nrows=read_limit,
                         na_values=["NULL", "null", "NaN", "nan", "N/A"],
                         keep_default_na=True,
                     )
                 except UnicodeDecodeError:
                     df_full = pd.read_csv(
                         io.BytesIO(raw_bytes), 
-                        sep=None, 
-                        engine="python", 
-                        encoding="iso-8859-1",
-                        nrows=parquet_svc.MAX_ROWS,
+                        sep=None, engine="python", encoding="iso-8859-1",
+                        nrows=read_limit,
                         na_values=["NULL", "null", "NaN", "nan", "N/A"],
                         keep_default_na=True,
                     )
             else:
-                df_full = pd.read_excel(io.BytesIO(raw_bytes), nrows=parquet_svc.MAX_ROWS)
+                df_full = pd.read_excel(io.BytesIO(raw_bytes), nrows=read_limit)
             
+            # --- DETECÇÃO DE TRUNCAMENTO (GOVERNANÇA) ---
+            if len(df_full) > target_limit:
+                # Trunca o DF para o limite configurado
+                df_full = df_full.iloc[:target_limit]
+                dataset.governance_warning = (
+                    f"⚠️ Limite de Escala Atingido: Este arquivo possui mais de {target_limit:,} linhas. "
+                    f"Como a aplicação Agent-BI está em fase de protótipo e operando em infraestrutura compartilhada, "
+                    f"apenas as primeiras {target_limit:,} linhas foram ingeridas para análise. "
+                    "Para ingerir volumes maiores, entre em contato com o administrador da plataforma."
+                ).replace(",", ".")
+                logger.info("[DatasetTask] Truncamento de governança detectado e registrado.")
+            # ---------------------------------------------
+
             # --- NORMALIZAÇÃO CRÍTICA DE COLUNAS ---
-            # Remove espaços acidentais no início/fim dos nomes (ex: " id_cliente" -> "id_cliente")
             df_full.columns = [str(c).strip() for c in df_full.columns]
-            # ----------------------------------------
             
             # 2. Conversão e Schema
             parquet_bytes, schema_info = parquet_svc.convert_df_to_parquet(df_full)
             schema_info = _to_json_compatible(schema_info)
+            dataset.governance_warning = dataset.governance_warning # Força salvamento posterior
             
         except Exception as conv_err:
             logger.error(f"[DatasetTask] Falha crítica de leitura: {conv_err}")
@@ -136,24 +165,24 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
 
         trace.end_step("Conversão para Parquet")
 
-        dataset.processing_step = "Gerando Perfil Estatístico (Amostra 10k)..."
+        dataset.processing_step = "Gerando Perfil Estatístico (Smart Sampling)..."
         dataset.save(update_fields=["processing_step"])
         trace.start_step("Data Profiling")
-        # Gerar perfil estatístico compacto (substitui sample bruto para a LLM)
+        # Gerar perfil estatístico compacto (respeitando o limite de governança)
         try:
-            # 1. Buscar políticas de governança do tenant (Novo Modelo GlobalAIConfig)
-            from apps.governance.models import GlobalAIConfig
-            policy = GlobalAIConfig.objects.filter(tenant=dataset.project.tenant, is_active=True).first()
-            
-            # 2. Perfil Básico (Sempre gerado - agora com Smart Sampling de 10k)
-            data_profile = parquet_svc.build_data_profile(df_full, sample_size=10000)
+            # O sample do profile não deve exceder o que foi efetivamente ingerido
+            profile_sample_limit = min(10000, target_limit)
+            temporal_sample_limit = min(20000, target_limit)
+
+            # 2. Perfil Básico
+            data_profile = parquet_svc.build_data_profile(df_full, sample_size=profile_sample_limit)
             
             # 3. Perfil Temporal (Condicional via Governança)
             enable_temporal = policy.enable_temporal_profile if (policy and hasattr(policy, 'enable_temporal_profile')) else True
             
             if enable_temporal:
-                logger.info("[DatasetTask] Gerando perfil temporal (ativado na governanca)")
-                temporal_data = parquet_svc.build_temporal_profile(df_full, sample_size=20000)
+                logger.info("[DatasetTask] Gerando perfil temporal (ativado na governança com limite %d)", temporal_sample_limit)
+                temporal_data = parquet_svc.build_temporal_profile(df_full, sample_size=temporal_sample_limit)
                 data_profile["temporal"] = temporal_data
             
             dataset.data_profile_json = _to_json_compatible(data_profile)
@@ -233,7 +262,7 @@ def process_dataset_task(self, dataset_id: str, trace_id: str | None = None):
         dataset.save(update_fields=[
             "s3_parquet_path", "glue_table", "glue_database",
             "schema_json", "row_count", "column_count", "parquet_size_bytes",
-            "updated_at",
+            "governance_warning", "updated_at",
         ])
         trace.end_step("Persistência do Dataset")
 

@@ -173,7 +173,9 @@ class DataInterpreterAgent:
                 "type": col.get("type")
             })
 
-        # 4. Amostragem Inteligente (Smart Sampling)
+        # 4. Amostragem Inteligente (Smart Sampling) + Anonimização de Segurança (Layer 1)
+        from apps.ai_engine.services.security_service import SecurityAnonymizerService
+        
         # Limitamos a 5 linhas e truncamos strings longas para economizar tokens
         optimized_sample = []
         for row in sample_data[:5]:
@@ -184,6 +186,9 @@ class DataInterpreterAgent:
                 else:
                     clean_row[k] = v
             optimized_sample.append(clean_row)
+            
+        # Aplica Blindagem de PII antes de enviar para a nuvem
+        optimized_sample = SecurityAnonymizerService.anonymize_sample(optimized_sample)
 
         # 2. Invocação Bedrock
         prompt = f"""

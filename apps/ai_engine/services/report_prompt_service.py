@@ -132,7 +132,20 @@ class ReportPromptService:
         
         datasets = []
         dataset_ids = []
-        for ds in project.datasets.filter(is_deleted=False):
+        
+        # Filtra para pegar apenas o dataset mais recente de cada nome (evita duplicatas de upload)
+        all_ds = project.datasets.filter(is_deleted=False).order_by("name", "-created_at")
+        unique_ds = []
+        seen_names = set()
+        
+        for ds in all_ds:
+            if ds.name not in seen_names:
+                unique_ds.append(ds)
+                seen_names.add(ds.name)
+        
+        logger.info(f"[ReportPrompt] 📊 Processando {len(unique_ds)} datasets únicos (de {all_ds.count()} totais).")
+
+        for ds in unique_ds:
              dataset_ids.append(str(ds.id))
              sanitized_name = store._sanitize_identifier(ds.name)
              datasets.append({
@@ -198,6 +211,10 @@ class ReportPromptService:
                     system_prompt_override=nl2sql_sys_prompt
                 )
                 
+                logger.info(f"[ReportPrompt] ✅ [Thread] Geração concluída para: {w_id}")
+                
+                logger.info(f"[ReportPrompt] ✅ [Thread] Geração concluída para: {w_id}")
+                
                 visual_type = widget.get("subType") if widget.get("type", "") == "CHART" else widget.get("type", "BIGNUMBER")
                 
                 # Extraindo tokens da resposta do especialista
@@ -229,9 +246,11 @@ class ReportPromptService:
                     "prompt": prompt
                 }
 
-        # Execução Paralela da Rede (IA)
-        with ThreadPoolExecutor(max_workers=min(len(widget_prompts), 10)) as executor:
-            batch_results = list(executor.map(process_widget, enumerate(widget_prompts)))
+        # Execução SEQUENCIAL (Modo de Estabilidade para Windows/Runserver)
+        # Evita ECONNRESET e Socket Hang Up ao processar um widget por vez.
+        batch_results = []
+        for idx_tuple in enumerate(widget_prompts):
+            batch_results.append(process_widget(idx_tuple))
             
         results = []
         for r in batch_results:

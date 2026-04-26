@@ -172,20 +172,20 @@ class AthenaService:
                     ]
                     rows.append(row)
 
-                if len(rows) >= max_rows:
-                    return {
-                        "columns": columns,
-                        "rows": rows[:max_rows],
-                        "row_count": len(rows),
-                        "truncated": True,
-                    }
-
-            return {
+            results_dict = {
                 "columns": columns,
-                "rows": rows,
+                "rows": rows[:max_rows] if len(rows) >= max_rows else rows,
                 "row_count": len(rows),
-                "truncated": False,
+                "truncated": len(rows) >= max_rows,
             }
+
+            # Aplicar Anonimização (Layer 2)
+            from apps.ai_engine.services.security_service import SecurityAnonymizerService
+            results_dict["rows"] = SecurityAnonymizerService.anonymize_dataframe_results(
+                results_dict["columns"], results_dict["rows"]
+            )
+            
+            return results_dict
 
         except ClientError as e:
             logger.error(f"Erro ao obter resultados Athena: {e}")

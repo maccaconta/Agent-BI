@@ -70,7 +70,28 @@ class DatasetViewSet(viewsets.ModelViewSet):
         )
 
     def perform_destroy(self, instance):
-        """Realiza exclusão lógica (soft-delete)."""
+        """
+        Realiza exclusão lógica (soft-delete).
+        Impede exclusão se o dataset estiver atrelado a um projeto BLUEPRINT 
+        (Relatório Corporativo) ou possuir dashboards.
+        """
+        # Se o projeto vinculado já foi deletado, permite a exclusão do dataset sem travas.
+        if not instance.project.is_deleted:
+            # Verifica se o projeto do dataset é um Blueprint Ativo
+            if instance.project.status == "BLUEPRINT":
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError(
+                    "Este dataset faz parte de um Relatório Corporativo (Blueprint) ativo "
+                    "e não pode ser excluído para garantir a integridade do portfólio."
+                )
+
+            # Verifica se o projeto possui dashboards ativos
+            if instance.project.dashboards.filter(is_deleted=False).exists():
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError(
+                    "Este dataset possui Dashboards ativos vinculados e não pode ser excluído."
+                )
+
         instance.soft_delete()
         audit_event.send(
             sender=self.__class__,

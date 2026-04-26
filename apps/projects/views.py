@@ -9,6 +9,7 @@ from apps.audit.signals import audit_event
 from apps.users.permissions import IsTenantAnalyst, IsTenantMember, TenantObjectPermission
 
 from .models import DataDomain, DataSubDomain, Project
+from .permissions import IsProjectOwnerOrAdmin
 from .serializers import (
     DataDomainSerializer,
     DataSubDomainSerializer,
@@ -85,9 +86,14 @@ class ProjectViewSet(viewsets.ModelViewSet):
         return ProjectSerializer
 
     def get_permissions(self):
-        if self.action in ["create", "update", "partial_update", "destroy"]:
-            return [IsTenantAnalyst(), TenantObjectPermission()]
+        if self.action in ["create"]:
+             return [IsTenantAnalyst(), TenantObjectPermission()]
+        if self.action in ["update", "partial_update", "destroy"]:
+            return [IsTenantAnalyst(), TenantObjectPermission(), IsProjectOwnerOrAdmin()]
         return [IsTenantMember(), TenantObjectPermission()]
+
+    def perform_destroy(self, instance):
+        instance.soft_delete()
 
     def create(self, request, *args, **kwargs):
         try:

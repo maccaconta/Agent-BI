@@ -40,6 +40,7 @@ class ParquetService:
         csv_bytes: bytes,
         encoding: str = "utf-8",
         delimiter: str | None = None,
+        max_rows: int | None = None,
     ) -> tuple[bytes, dict]:
         """
         Converte CSV para Parquet com suporte a múltiplas encodings e delimitadores.
@@ -59,7 +60,7 @@ class ParquetService:
                     engine="python",
                     na_values=["NULL", "null", "NaN", "nan", "N/A"],
                     keep_default_na=True,
-                    nrows=self.MAX_ROWS,
+                    nrows=max_rows or self.MAX_ROWS,
                 )
                 return self._dataframe_to_parquet(df)
             except (UnicodeDecodeError, Exception) as e:
@@ -73,6 +74,7 @@ class ParquetService:
         self,
         xlsx_bytes: bytes,
         sheet_name: Optional[str] = None,
+        max_rows: int | None = None,
     ) -> tuple[bytes, dict]:
         """
         Converte XLSX para Parquet.
@@ -82,7 +84,7 @@ class ParquetService:
             df = pd.read_excel(
                 io.BytesIO(xlsx_bytes),
                 sheet_name=sheet,
-                nrows=self.MAX_ROWS,
+                nrows=max_rows or self.MAX_ROWS,
             )
             return self.convert_df_to_parquet(df)
         except Exception as e:

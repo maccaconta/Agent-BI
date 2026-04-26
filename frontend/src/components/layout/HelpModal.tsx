@@ -1,33 +1,26 @@
+"use client";
+
 import React, { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { 
   X, 
-  BookOpen, 
-  BrainCircuit, 
-  DatabaseZap, 
-  Shield, 
-  Zap, 
-  Sparkles, 
-  ShieldCheck, 
-  Coins, 
+  ChevronRight, 
+  ChevronLeft, 
+  Database, 
   Layers,
-  Globe,
-  Activity,
-  Lock,
-  ShieldAlert,
-  UserCheck,
-  ChevronRight,
-  ChevronLeft,
-  Server,
-  Network,
-  Eye,
-  ArrowRightLeft,
-  Cpu,
-  Fingerprint,
+  Cloud,
+  Share2,
+  CheckCircle2,
+  LayoutGrid,
+  Search,
+  Monitor,
   Terminal,
-  Unplug,
+  BrainCircuit,
+  Zap,
+  Globe,
+  ArrowRightLeft,
   Workflow
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface HelpModalProps {
   isOpen: boolean;
@@ -37,270 +30,299 @@ interface HelpModalProps {
 export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
   const [currentSlide, setCurrentSlide] = useState(0);
 
+  // Pantone Gold: #D4AF37
+  const gold = "#D4AF37";
+
   const slides = [
     {
-      id: "vision",
-      icon: <Sparkles size={24} />,
-      title: "Manifesto Tecnológico",
-      subtitle: "A Nova Era da Inteligência de Dados",
+      title: "Agent-BI",
+      subtitle: "A Fronteira da Cognição Corporativa",
+      icon: <BrainCircuit style={{ color: gold }} size={40} />,
+      isIntro: true,
       content: (
-        <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4">
-          <header className="space-y-6">
-            <h3 className="text-5xl font-serif font-black text-gray-900 tracking-tight leading-tight">
-              A Convergência entre <span className="text-[#D4AF37]">Raciocínio</span> e <span className="text-[#D4AF37]">Escala</span>
-            </h3>
-            <p className="text-lg text-gray-500 font-medium max-w-4xl leading-relaxed">
-              O Agent-BI não é apenas um dashboard de IA; é um ecossistema de **Agentes Cognitivos** que operam sob um paradigma de **Soberania de Dados**. Ao contrário de arquiteturas RAG convencionais que "leem" dados, nós "pensamos" sobre a estrutura e executamos em código, garantindo 100% de precisão numérica.
-            </p>
-          </header>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              { icon: <Cpu />, title: "Dual-Engine", desc: "Orquestração híbrida entre LLM para semântica e DuckDB para execução vetorial.", color: "text-blue-600" },
-              { icon: <ShieldCheck />, title: "Zero-Trust", desc: "Isolamento total de threads. Nenhum dado bruto jamais deixa seu perímetro de segurança.", color: "text-emerald-600" },
-              { icon: <Workflow />, title: "Multi-Agent", desc: "Pipeline federado: Supervisor, Especialista SQL e Designer de UX operando em paralelo.", color: "text-[#D4AF37]" },
-              { icon: <Terminal />, title: "Code-First", desc: "A IA gera código executável (Python/SQL) em vez de apenas prever texto narrativo.", color: "text-purple-600" }
-            ].map((item, i) => (
-              <div key={i} className="bg-white border border-[#EAE5D9] p-8 rounded-3xl space-y-4 shadow-sm hover:shadow-xl transition-all">
-                <div className={`w-12 h-12 bg-gray-50 ${item.color} rounded-2xl flex items-center justify-center`}>{item.icon}</div>
-                <h4 className="text-sm font-black uppercase tracking-widest text-gray-900">{item.title}</h4>
-                <p className="text-xs text-gray-500 leading-relaxed font-medium">{item.desc}</p>
+        <div className="flex flex-col items-center justify-center text-center space-y-10 py-10">
+           <motion.div 
+             initial={{ scale: 0.8, opacity: 0 }}
+             animate={{ scale: 1, opacity: 1 }}
+             className="relative"
+           >
+              <div className="absolute inset-0 bg-[#D4AF37]/20 blur-[80px] rounded-full" />
+              <div className="relative w-32 h-32 bg-black rounded-[2.5rem] flex items-center justify-center shadow-2xl border-2 border-[#D4AF37]/30">
+                 <Zap style={{ color: gold }} size={56} />
               </div>
-            ))}
-          </div>
+           </motion.div>
+           
+           <div className="space-y-4 max-w-2xl">
+              <h1 className="text-4xl font-black text-black tracking-tighter leading-tight">
+                 Transformando Dados em <span style={{ color: gold }}>Conhecimento Vivo</span>
+              </h1>
+              <p className="text-sm text-gray-500 font-bold uppercase tracking-[0.4em] pt-4">
+                 Democratização de Dados - GenIA - Orquestração de Agentes
+              </p>
+           </div>
+
+           <div className="grid grid-cols-3 gap-12 pt-10">
+              <div className="flex flex-col items-center gap-2">
+                 <span className="text-2xl font-black text-black">90%</span>
+                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Time-to-Insight</span>
+              </div>
+              <div className="flex flex-col items-center gap-2">
+                 <span className="text-2xl font-black text-black">100%</span>
+                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Soberania E2EE</span>
+              </div>
+              <div className="flex flex-col items-center gap-2">
+                 <span className="text-2xl font-black text-black">∞</span>
+                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Escalabilidade Mesh</span>
+              </div>
+           </div>
         </div>
       )
     },
     {
-      id: "architecture",
-      icon: <Network size={24} />,
-      title: "Engenharia de Camadas",
-      subtitle: "Arquitetura Robusta e Desacoplada",
+      title: "Ecossistema Analítico & Stack",
+      subtitle: "Orquestração de Alta Performance em Background",
+      icon: <Cloud style={{ color: gold }} size={32} />,
       content: (
-        <div className="space-y-12 animate-in fade-in slide-in-from-right-4">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-            <div className="lg:col-span-4 space-y-8">
-               <div className="space-y-4">
-                  <h4 className="text-xl font-black text-gray-900 uppercase tracking-tighter">Stack Tecnológica</h4>
-                  <p className="text-xs text-gray-500 leading-relaxed">
-                    Nossa fundação é construída sobre componentes de classe mundial, garantindo que o sistema seja resiliente a falhas e otimizado para latência ultra-baixa.
-                  </p>
-               </div>
-               
-               <div className="space-y-4">
-                  {[
-                    { label: "Interface", val: "Next.js 15 + Framer Motion" },
-                    { label: "Backplane", val: "Django 5.1 (Python 3.12)" },
-                    { label: "Cérebro IA", val: "AWS Bedrock (Claude 3.5)" },
-                    { label: "Analytics", val: "DuckDB / Pandas Engine" },
-                    { label: "Storage", val: "E2EE Datalake (S3 Isolated)" }
-                  ].map((item, i) => (
-                    <div key={i} className="flex items-center justify-between p-4 bg-white border border-[#EAE5D9] rounded-2xl">
-                      <span className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{item.label}</span>
-                      <span className="text-xs font-black text-gray-900">{item.val}</span>
-                    </div>
-                  ))}
-               </div>
-            </div>
-
-            <div className="lg:col-span-8 bg-gray-900 rounded-[3rem] p-12 shadow-2xl relative overflow-hidden">
-               <div className="absolute top-0 right-0 p-12 opacity-5"><Layers size={300} /></div>
-               <div className="relative z-10 space-y-12">
-                  <div className="text-center space-y-2">
-                    <h5 className="text-[#D4AF37] text-xs font-black uppercase tracking-[0.4em]">Visualização do Pipeline</h5>
-                    <div className="text-white text-lg font-serif">Fluxo de Dados & Cognição</div>
-                  </div>
-
-                  <div className="flex flex-col gap-6">
-                    <div className="flex items-center gap-6">
-                      <div className="flex-1 p-6 bg-white/5 border border-white/10 rounded-3xl text-center">
-                        <div className="text-[10px] font-black text-[#D4AF37] uppercase mb-1">Camada de Consumo</div>
-                        <div className="text-white text-xs font-bold">App Client (Port 3000)</div>
-                      </div>
-                      <ArrowRightLeft className="text-white/20" />
-                      <div className="flex-1 p-6 bg-white/10 border border-white/20 rounded-3xl text-center shadow-lg">
-                        <div className="text-[10px] font-black text-[#D4AF37] uppercase mb-1">Cérebro Operacional</div>
-                        <div className="text-white text-xs font-bold">Django API (Port 8000)</div>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-center h-12">
-                      <div className="w-[2px] bg-gradient-to-b from-[#D4AF37] to-transparent"></div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-6">
-                       <div className="p-6 bg-emerald-500/10 border border-emerald-500/20 rounded-3xl">
-                         <div className="flex items-center gap-3 mb-2">
-                            <DatabaseZap size={16} className="text-emerald-400" />
-                            <span className="text-[9px] font-black text-white uppercase tracking-widest">S3 Data Lake</span>
+        <div className="space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-6">
+              <div className="p-8 bg-gray-50 rounded-[3rem] border border-gray-100">
+                 <h4 className="text-[10px] font-black text-black uppercase tracking-widest mb-6 flex items-center gap-2">
+                    <Workflow style={{ color: gold }} size={14} /> Processamento Assíncrono
+                 </h4>
+                 <p className="text-xs text-gray-600 leading-relaxed mb-6">
+                    O Agent-BI utiliza uma camada robusta de **Background Workers** para garantir que a interface nunca trave. Enquanto você navega, processos pesados ocorrem em paralelo:
+                 </p>
+                 <div className="space-y-3">
+                    {[
+                      { l: "Ingestão via Celery", d: "Workers distribuídos para processamento de arquivos massivos." },
+                      { l: "Broker de Mensagens Redis", d: "Sincronização em tempo real entre frontend e análise." },
+                      { l: "Profiling Automático", d: "Descoberta de tipos e anomalias em background." }
+                    ].map((item, i) => (
+                      <div key={i} className="flex gap-4 p-3 bg-white rounded-2xl border border-gray-100">
+                         <div className="w-1 h-auto bg-[#D4AF37] rounded-full" />
+                         <div>
+                            <span className="text-[11px] font-black text-black block">{item.l}</span>
+                            <span className="text-[9px] text-gray-500 uppercase">{item.d}</span>
                          </div>
-                         <p className="text-[10px] text-gray-400 font-medium leading-relaxed">Ambiente isolado para persistência de datasets criptografados.</p>
-                       </div>
-                       <div className="p-6 bg-blue-500/10 border border-blue-500/20 rounded-3xl">
-                         <div className="flex items-center gap-3 mb-2">
-                            <BrainCircuit size={16} className="text-blue-400" />
-                            <span className="text-[9px] font-black text-white uppercase tracking-widest">AWS Bedrock</span>
-                         </div>
-                         <p className="text-[10px] text-gray-400 font-medium leading-relaxed">Infraestrutura LLM privada sem treinamento com seus dados.</p>
-                       </div>
-                    </div>
-                  </div>
-               </div>
-            </div>
-          </div>
-        </div>
-      )
-    },
-    {
-      id: "security",
-      icon: <Shield size={24} />,
-      title: "Segurança & Criptografia",
-      subtitle: "Blindagem de Dados em Nível Militar",
-      content: (
-        <div className="space-y-10 animate-in fade-in slide-in-from-right-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            <div className="space-y-6 lg:col-span-2">
-               <h4 className="text-2xl font-serif font-black text-gray-900 tracking-tight leading-tight">
-                 Proteção Determinística: <br/><span className="text-[#D4AF37]">A IA não é o seu maior risco.</span>
-               </h4>
-               <p className="text-sm text-gray-500 leading-relaxed">
-                 Diferente de interfaces de chat simples, o Agent-BI implementa **Guardrails** em tempo de execução. Todo código gerado pela IA passa por um analisador léxico antes de tocar no banco de dados.
-               </p>
-               
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 <div className="p-8 bg-emerald-50 border border-emerald-100 rounded-[2.5rem]">
-                    <div className="flex items-center gap-3 mb-4">
-                      <Lock className="text-emerald-600" size={20} />
-                      <h5 className="font-black text-sm uppercase text-gray-900 tracking-tight">Criptografia E2EE</h5>
-                    </div>
-                    <ul className="space-y-3">
-                      {[
-                        "AES-256 em repouso para todos os datasets.",
-                        "Chaves KMS gerenciadas pelo cliente.",
-                        "TLS 1.3 obrigatório em trânsito.",
-                        "Tokens de sessão de curta duração (15 min)."
-                      ].map((li, i) => (
-                        <li key={i} className="flex items-start gap-2 text-[10px] font-bold text-emerald-800/70">
-                          <CheckCircle2 size={12} className="mt-0.5" /> {li}
-                        </li>
-                      ))}
-                    </ul>
+                      </div>
+                    ))}
                  </div>
-                 <div className="p-8 bg-red-50 border border-red-100 rounded-[2.5rem]">
-                    <div className="flex items-center gap-3 mb-4">
-                      <ShieldAlert className="text-red-600" size={20} />
-                      <h5 className="font-black text-sm uppercase text-gray-900 tracking-tight">Guardrails Anti-Injeção</h5>
-                    </div>
-                    <ul className="space-y-3">
-                      {[
-                        "Bloqueio de DML (UPDATE, DELETE, INSERT).",
-                        "Prevenção de execução de shell/processos.",
-                        "Whitelisting de funções analíticas permitidas.",
-                        "Timeout de execução forçado (Hard Limit)."
-                      ].map((li, i) => (
-                        <li key={i} className="flex items-start gap-2 text-[10px] font-bold text-red-800/70">
-                          <X size={12} className="mt-0.5" /> {li}
-                        </li>
-                      ))}
-                    </ul>
-                 </div>
-               </div>
-            </div>
-
-            <div className="bg-white border border-[#EAE5D9] p-8 rounded-[3rem] space-y-8 flex flex-col justify-center">
-               <div className="text-center space-y-4">
-                  <div className="w-16 h-16 bg-gray-900 text-[#D4AF37] rounded-3xl flex items-center justify-center mx-auto shadow-xl"><Fingerprint size={32} /></div>
-                  <h5 className="text-lg font-black uppercase text-gray-900 tracking-tighter">Identidade & Auditoria</h5>
-                  <p className="text-[11px] text-gray-500 font-medium">
-                    Cada consulta gerada pela IA é marcada com um **Audit Trace** imutável, permitindo rastreabilidade total de quem perguntou, o que foi gerado e qual foi o custo.
-                  </p>
-               </div>
-               <div className="pt-6 border-t border-[#F1E9DB] space-y-4">
-                  <div className="flex items-center justify-between">
-                     <span className="text-[9px] font-black text-gray-400 uppercase">Compliance</span>
-                     <span className="text-[10px] font-black text-emerald-600">LGPD / GDPR Ready</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                     <span className="text-[9px] font-black text-gray-400 uppercase">Isolation</span>
-                     <span className="text-[10px] font-black text-blue-600">Multi-Tenant VPC</span>
-                  </div>
-               </div>
-            </div>
-          </div>
-        </div>
-      )
-    },
-    {
-      id: "datamesh",
-      icon: <Layers size={24} />,
-      title: "Data Mesh & Inovação",
-      subtitle: "Governança Federada para Escala Global",
-      content: (
-        <div className="space-y-12 animate-in fade-in slide-in-from-right-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-            <div className="space-y-8">
-              <header className="space-y-4">
-                <h4 className="text-3xl font-serif font-black text-gray-900 tracking-tight leading-tight">
-                  Sua empresa não é um monólito. <br/><span className="text-[#D4AF37]">Seus dados também não.</span>
-                </h4>
-                <p className="text-sm text-gray-500 leading-relaxed font-medium">
-                  Implementamos o conceito de **Data Mesh**, onde cada departamento (Domínio) gerencia seus próprios ativos de dados e especialistas de IA. Isso elimina o gargalo da TI centralizada.
-                </p>
-              </header>
-
-              <div className="space-y-4">
-                <div className="p-6 bg-[#FDF9F0] border border-[#F1E9DB] rounded-3xl flex items-center gap-6 group hover:shadow-lg transition-all">
-                   <div className="p-4 bg-white rounded-2xl text-[#D4AF37] shadow-sm group-hover:scale-110 transition-transform"><Globe size={24}/></div>
-                   <div>
-                      <h5 className="text-xs font-black uppercase text-gray-900">Domínios Federados</h5>
-                      <p className="text-[10px] text-gray-500 mt-1">Conhecimento especializado por área de negócio (Finanças, RH, Sales).</p>
-                   </div>
-                </div>
-                <div className="p-6 bg-[#FDF9F0] border border-[#F1E9DB] rounded-3xl flex items-center gap-6 group hover:shadow-lg transition-all">
-                   <div className="p-4 bg-white rounded-2xl text-[#D4AF37] shadow-sm group-hover:scale-110 transition-transform"><Unplug size={24}/></div>
-                   <div>
-                      <h5 className="text-xs font-black uppercase text-gray-900">Desacoplamento de Infra</h5>
-                      <p className="text-[10px] text-gray-500 mt-1">Substitua sua fonte de dados sem quebrar seus dashboards inteligentes.</p>
-                   </div>
-                </div>
               </div>
             </div>
-
-            <div className="bg-gray-900 p-12 rounded-[4rem] text-white space-y-12 shadow-2xl relative overflow-hidden">
-               <div className="absolute top-0 right-0 p-12 opacity-5"><Activity size={200} /></div>
-               <div className="space-y-6">
-                  <h5 className="text-lg font-black uppercase text-[#D4AF37]">Economia de Tokens & Performance</h5>
-                  <p className="text-sm text-gray-400 leading-relaxed">
-                    Nossa tecnologia de **Compressão de Contexto Semântico** reduz a carga de tokens enviada para o Bedrock em até 60%, garantindo que insights complexos custem frações de centavos.
-                  </p>
+            <div className="space-y-6">
+               <div className="grid grid-cols-2 gap-4">
+                  <div className="p-6 bg-white border-2 border-black rounded-[2rem] shadow-sm">
+                     <span className="text-[9px] font-black text-gray-400 block uppercase mb-2">Cognition Engine</span>
+                     <span className="text-xs font-bold text-black block">Amazon Bedrock</span>
+                     <p className="text-[9px] text-gray-500 mt-1">Hospedagem segura de modelos Nova Pro.</p>
+                  </div>
+                  <div className="p-6 bg-[#D4AF37]/5 border border-[#D4AF37]/20 rounded-[2rem]">
+                     <span className="text-[9px] font-black text-[#D4AF37] block uppercase mb-2">Storage Layer</span>
+                     <span className="text-xs font-bold text-black block">Amazon S3 Lakehouse</span>
+                     <p className="text-[9px] text-gray-500 mt-1">Persistência em Parquet de alta performance.</p>
+                  </div>
                </div>
-
-               <div className="grid grid-cols-2 gap-8 pt-10 border-t border-white/10">
-                  <div className="space-y-1 text-center">
-                    <div className="text-3xl font-black text-[#D4AF37]">98.2%</div>
-                    <div className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Acurácia SQL</div>
-                  </div>
-                  <div className="space-y-1 text-center">
-                    <div className="text-3xl font-black text-[#D4AF37]">Zero</div>
-                    <div className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Data Leakage</div>
-                  </div>
-                  <div className="space-y-1 text-center">
-                    <div className="text-3xl font-black text-[#D4AF37]">&lt; 5s</div>
-                    <div className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Warm Start</div>
-                  </div>
-                  <div className="space-y-1 text-center">
-                    <div className="text-3xl font-black text-[#D4AF37]">∞</div>
-                    <div className="text-[10px] font-black uppercase text-gray-500 tracking-widest">Escalabilidade</div>
+               
+               <div className="p-6 border border-gray-100 rounded-[2rem]">
+                  <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Conectividade Híbrida</h4>
+                  <div className="flex flex-wrap gap-2">
+                     {["Snowflake", "Databricks", "BigQuery", "OpenShift", "RDS", "Redshift"].map((db, i) => (
+                        <div key={i} className="px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-[10px] font-black text-black flex items-center gap-2 group hover:border-[#D4AF37] transition-all">
+                           <div className="w-1.5 h-1.5 rounded-full bg-gray-300 group-hover:bg-[#D4AF37]" />
+                           {db}
+                        </div>
+                     ))}
                   </div>
                </div>
             </div>
           </div>
+        </div>
+      )
+    },
+    {
+      title: "Fluxo de Vida do Dado",
+      subtitle: "Da Ingestão Bruta ao Insight Cognitivo",
+      icon: <ArrowRightLeft style={{ color: gold }} size={32} />,
+      content: (
+        <div className="space-y-8">
+           <div className="relative p-12 bg-gray-50 rounded-[4rem] border border-gray-100 overflow-hidden">
+              {/* Novo Diagrama: Life Cycle */}
+              <div className="flex items-center justify-between gap-4">
+                 {[
+                   { n: "Ingestão", i: <Cloud size={20} />, d: "Upload & S3 Land" },
+                   { n: "Orquestração", i: <Terminal size={20} />, d: "Celery Worker" },
+                   { n: "Análise", i: <BrainCircuit size={20} />, d: "Agent Reason" },
+                   { n: "Entrega", i: <Monitor size={20} />, d: "ECharts Viz" }
+                 ].map((step, i, arr) => (
+                    <React.Fragment key={i}>
+                       <div className="flex flex-col items-center gap-4 flex-1">
+                          <div className={`w-16 h-16 rounded-3xl flex items-center justify-center border-2 ${i === 2 ? 'bg-black text-white border-black shadow-2xl' : 'bg-white text-black border-gray-100'}`}>
+                             {step.i}
+                          </div>
+                          <div className="text-center">
+                             <span className="text-[11px] font-black text-black block uppercase tracking-tighter">{step.n}</span>
+                             <span className="text-[9px] text-gray-400 font-bold">{step.d}</span>
+                          </div>
+                       </div>
+                       {i < arr.length - 1 && (
+                          <div className="flex-1 h-px bg-gradient-to-r from-gray-200 via-[#D4AF37] to-gray-200 relative">
+                             <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-[#D4AF37]" />
+                          </div>
+                       )}
+                    </React.Fragment>
+                 ))}
+              </div>
+           </div>
+           
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 px-10">
+              <div className="p-6 border-l-4 border-black space-y-2">
+                 <h4 className="text-sm font-black text-black uppercase">Segurança & Sandbox</h4>
+                 <p className="text-[11px] text-gray-500 leading-relaxed">
+                    Todo código gerado pela camada de **Análise** é validado pelo **Agente Revisor** antes de ser executado em uma **Sandbox Isolada**, garantindo integridade total.
+                 </p>
+              </div>
+              <div className="p-6 border-l-4 border-[#D4AF37] space-y-2">
+                 <h4 className="text-sm font-black text-black uppercase">Inteligência Distribuída</h4>
+                 <p className="text-[11px] text-gray-500 leading-relaxed">
+                    O dado nunca deixa sua rede. Enviamos apenas os metadados (schema) para os modelos de linguagem em Bedrock, mantendo o conteúdo bruto protegido.
+                 </p>
+              </div>
+           </div>
+        </div>
+      )
+    },
+    {
+      title: "Arquitetura Multi-Camadas",
+      subtitle: "Camadas Cognitivas e Funcionais",
+      icon: <Layers style={{ color: gold }} size={32} />,
+      content: (
+        <div className="space-y-6">
+           <div className="relative p-10 bg-gray-50 rounded-[3rem] border border-gray-100 overflow-hidden">
+              <div className="flex flex-col items-center gap-4">
+                 
+                 {/* Layer 1: Frontend */}
+                 <div className="w-full max-w-sm p-4 bg-white border-2 border-black rounded-2xl text-center shadow-lg relative group">
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-black text-white text-[8px] font-black px-3 py-1 rounded-full uppercase">Layer 01: Frontend Interface</div>
+                    <Monitor size={16} className="mx-auto mb-2" />
+                    <span className="text-[11px] font-black text-black">Next.js • ECharts • Tailwind Enterprise</span>
+                 </div>
+
+                 <ChevronRight className="rotate-90 text-gray-300" size={16} />
+
+                 {/* Layer 2: Backend */}
+                 <div className="w-full max-w-sm p-4 bg-white border border-gray-200 rounded-2xl text-center shadow-sm relative">
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gray-200 text-gray-600 text-[8px] font-black px-3 py-1 rounded-full uppercase">Layer 02: Backend Orquestration</div>
+                    <Terminal size={16} className="mx-auto mb-2 text-gray-400" />
+                    <span className="text-[10px] font-bold text-gray-600">Django Python • Celery Queue • Redis Hub</span>
+                 </div>
+
+                 <ChevronRight className="rotate-90 text-gray-300" size={16} />
+
+                 {/* Layer 3: AI Agents - THE CORE */}
+                 <div className="w-full max-w-lg p-6 bg-black text-white rounded-[2.5rem] shadow-2xl relative">
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#D4AF37] text-black text-[9px] font-black px-4 py-1 rounded-full uppercase shadow-lg">Layer 03: Multi-Agent System</div>
+                    <div className="grid grid-cols-3 gap-3">
+                       {[
+                         { n: "Supervisor", d: "Maestro" },
+                         { n: "NL2SQL", d: "Query Gen" },
+                         { n: "Compliance", d: "Segurança" },
+                         { n: "Especialistas", d: "Análise" },
+                         { n: "Revisor", d: "Qualidade" },
+                         { n: "Pandas", d: "Math" }
+                       ].map((a, i) => (
+                         <div key={i} className="p-2 border border-white/10 rounded-xl text-center bg-white/5">
+                            <span className="text-[10px] font-black block" style={{ color: gold }}>{a.n}</span>
+                            <span className="text-[8px] text-gray-400 uppercase">{a.d}</span>
+                         </div>
+                       ))}
+                    </div>
+                 </div>
+
+                 <ChevronRight className="rotate-90 text-gray-300" size={16} />
+
+                 {/* Layer 4: Data Layer */}
+                 <div className="w-full max-w-sm p-4 bg-[#D4AF37]/10 border-2 border-[#D4AF37] rounded-2xl text-center shadow-sm relative">
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#D4AF37] text-black text-[8px] font-black px-3 py-1 rounded-full uppercase">Layer 04: Analytical S3</div>
+                    <Database size={16} className="mx-auto mb-2" style={{ color: gold }} />
+                    <span className="text-[11px] font-black text-black">Parquet Lake • Glue Catalog • Athena</span>
+                 </div>
+              </div>
+           </div>
+        </div>
+      )
+    },
+    {
+      title: "Data Mesh & Governança",
+      subtitle: "Gestão Federada e Soberania de Dados",
+      icon: <Share2 style={{ color: gold }} size={32} />,
+      content: (
+        <div className="space-y-8">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="p-10 bg-gray-50 border border-gray-100 rounded-[3rem]">
+                 <div className="flex items-center gap-3 mb-6">
+                    <LayoutGrid style={{ color: gold }} size={24} />
+                    <h4 className="text-lg font-black text-black uppercase tracking-tight">Domínios de Dados</h4>
+                 </div>
+                 <p className="text-xs text-gray-600 leading-relaxed">
+                    A estrutura de **Data Mesh** permite que a responsabilidade pelos dados seja distribuída entre os domínios de negócio, tratando dados como produtos analíticos.
+                 </p>
+              </div>
+              <div className="p-10 bg-gray-50 border border-gray-100 rounded-[3rem]">
+                 <div className="flex items-center gap-3 mb-6">
+                    <Search style={{ color: gold }} size={24} />
+                    <h4 className="text-lg font-black text-black uppercase tracking-tight">Descoberta & Linhagem</h4>
+                 </div>
+                 <p className="text-xs text-gray-600 leading-relaxed">
+                    Catálogo centralizado para busca semântica de ativos, garantindo que qualquer usuário autorizado possa encontrar e utilizar dados certificados.
+                 </p>
+              </div>
+           </div>
+           <div className="flex gap-4 items-center justify-center py-6">
+              <CheckCircle2 style={{ color: gold }} size={20} />
+              <span className="text-[11px] font-black text-black uppercase tracking-widest">Governança Integrada • Qualidade Certificada • Linhagem Clara</span>
+           </div>
+        </div>
+      )
+    },
+    {
+      title: "Funcionalidades & Inovação",
+      subtitle: "Recursos Corporativos de Alta Performance",
+      icon: <Zap style={{ color: gold }} size={32} />,
+      content: (
+        <div className="space-y-8">
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[
+                { t: "Insights Automáticos", d: "Detecção proativa de anomalias e tendências de mercado." },
+                { t: "Chat Analítico", d: "Conversação fluida com seus dados em linguagem natural." },
+                { t: "Dashboards Dinâmicos", d: "Geração instantânea de visualizações ricas em ECharts." },
+                { t: "Catálogo Mesh", d: "Navegação por ativos de dados organizados por domínios." },
+                { t: "Shadowing IA", d: "Aprendizado contínuo sobre o comportamento analítico." },
+                { t: "Segurança E2EE", d: "Criptografia ponta-a-ponta em todas as camadas." }
+              ].map((func, i) => (
+                <div key={i} className="p-6 bg-white border border-gray-200 rounded-3xl shadow-sm hover:shadow-md transition-shadow">
+                   <h5 className="text-[12px] font-black text-black uppercase mb-3" style={{ color: i % 2 === 0 ? gold : 'black' }}>{func.t}</h5>
+                   <p className="text-[11px] text-gray-500 leading-tight">{func.d}</p>
+                </div>
+              ))}
+           </div>
+           <div className="mt-10 p-10 bg-black rounded-[4rem] text-center border-b-8 border-[#D4AF37] relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-64 h-64 bg-[#D4AF37]/5 blur-[100px] rounded-full" />
+              <h4 className="text-2xl font-black text-white tracking-tighter mb-4 relative">Inovação Orientada a Resultados</h4>
+              <p className="text-xs text-gray-400 max-w-2xl mx-auto mb-10 relative">
+                 O Agent-BI redefine a interação homem-dado, transformando a complexidade técnica em clareza estratégica para toda a organização.
+              </p>
+              <button 
+                onClick={onClose}
+                className="px-16 py-5 bg-[#D4AF37] text-black rounded-2xl text-[13px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-[0_20px_50px_rgba(212,175,55,0.4)] relative"
+              >
+                 Iniciar Experiência
+              </button>
+           </div>
         </div>
       )
     }
   ];
-
-  if (!isOpen) return null;
 
   const handleNext = () => {
     if (currentSlide < slides.length - 1) setCurrentSlide(currentSlide + 1);
@@ -310,153 +332,138 @@ export default function HelpModal({ isOpen, onClose }: HelpModalProps) {
     if (currentSlide > 0) setCurrentSlide(currentSlide - 1);
   };
 
-  const CheckCircle2 = ({ size, className }: { size?: number, className?: string }) => (
-    <svg 
-      xmlns="http://www.w3.org/2000/svg" 
-      width={size || 24} 
-      height={size || 24} 
-      viewBox="0 0 24 24" 
-      fill="none" 
-      stroke="currentColor" 
-      strokeWidth="2" 
-      strokeLinecap="round" 
-      strokeLinejoin="round" 
-      className={className}
-    >
-      <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/>
-      <path d="m9 12 2 2 4-4"/>
-    </svg>
-  );
-
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 md:p-10">
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={onClose}
-          className="absolute inset-0 bg-black/80 backdrop-blur-2xl"
-        />
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9, y: 50 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.9, y: 50 }}
-          className="relative w-full max-w-7xl h-[85vh] bg-[#FDFCF8] rounded-[4rem] shadow-2xl overflow-hidden flex flex-col border border-[#EAE5D9]"
-        >
-          {/* Header Progress Bar */}
-          <div className="absolute top-0 left-0 w-full flex h-2 gap-1.5 p-1.5 z-20">
-            {slides.map((_, i) => (
-              <div 
-                key={i} 
-                className={`flex-1 rounded-full transition-all duration-1000 ${i === currentSlide ? "bg-[#D4AF37]" : i < currentSlide ? "bg-gray-900" : "bg-gray-200"}`} 
-              />
-            ))}
-          </div>
-
-          {/* Close Button */}
-          <button
+      {isOpen && (
+        <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 md:p-10 overflow-hidden font-sans">
+          {/* Backdrop */}
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
             onClick={onClose}
-            className="absolute top-8 right-8 z-30 p-4 text-gray-400 hover:bg-gray-100 hover:text-gray-900 rounded-full transition-all group"
-          >
-            <X size={24} className="group-hover:rotate-90 transition-transform" />
-          </button>
+            className="absolute inset-0 bg-black/60 backdrop-blur-md" 
+          />
 
-          {/* Main Body */}
-          <div className="flex-1 flex overflow-hidden">
-            {/* Nav Sidebar - Now Wider and more technical */}
-            <div className="w-80 border-r border-[#F1E9DB] p-12 bg-[#F9F7F0]/40 hidden lg:flex flex-col gap-10">
-              <div className="space-y-2">
-                <div className="text-[11px] font-black text-[#D4AF37] uppercase tracking-[0.4em]">Engine Specification</div>
-                <h2 className="text-2xl font-black text-gray-900 uppercase tracking-tighter">Guia Técnico</h2>
+          {/* Modal Container */}
+          <motion.div 
+            initial={{ scale: 0.95, opacity: 0, y: 30 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.95, opacity: 0, y: 30 }}
+            className="relative w-full max-w-[95vw] h-full md:h-[85vh] bg-white rounded-[5rem] shadow-[0_80px_150px_rgba(0,0,0,0.3)] flex flex-col md:flex-row overflow-hidden border border-gray-100"
+          >
+            {/* Sidebar Navigation */}
+            <div className="w-full md:w-80 bg-gray-50 border-b md:border-b-0 md:border-r border-gray-100 p-10 flex flex-col">
+              <div className="mb-14 flex flex-col items-center">
+                 <div className="w-16 h-16 bg-black rounded-3xl flex items-center justify-center shadow-2xl mb-6 border-2 border-[#D4AF37]/20">
+                    <Zap style={{ color: gold }} size={32} />
+                 </div>
+                 <div className="text-center">
+                    <h3 className="text-2xl font-black text-black tracking-tighter leading-none mb-2">
+                       AGENT-BI
+                    </h3>
+                    <div className="h-1 w-8 bg-[#D4AF37] rounded-full mx-auto" />
+                 </div>
               </div>
 
-              <div className="flex flex-col gap-3">
-                {slides.map((s, i) => (
+              <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar pr-2">
+                {slides.map((slide, idx) => (
                   <button
-                    key={s.id}
-                    onClick={() => setCurrentSlide(i)}
-                    className={`
-                      flex items-center gap-5 px-6 py-4 rounded-[2rem] transition-all text-left group
-                      ${i === currentSlide 
-                        ? "bg-white text-gray-900 shadow-xl translate-x-3 border border-[#F1E9DB]" 
-                        : "text-gray-400 hover:text-[#D4AF37] hover:bg-white/50"}
-                    `}
+                    key={idx}
+                    onClick={() => setCurrentSlide(idx)}
+                    className={`w-full p-5 rounded-[2rem] text-left transition-all flex items-center gap-4 border ${currentSlide === idx ? 'bg-white border-gray-200 shadow-2xl scale-[1.05] z-10' : 'hover:bg-black/5 border-transparent opacity-60'}`}
                   >
-                    <div className={`${i === currentSlide ? "text-[#D4AF37]" : "text-gray-300 group-hover:text-[#D4AF37] transition-colors"}`}>{s.icon}</div>
-                    <div className="flex flex-col">
-                       <span className="text-[10px] font-black uppercase tracking-widest">{s.title}</span>
-                       <span className="text-[8px] font-bold opacity-40 uppercase tracking-tight">Slide {i + 1}</span>
+                    <div className={`text-[11px] font-black ${currentSlide === idx ? 'text-black' : 'text-gray-300'}`}>
+                      0{idx + 1}
                     </div>
+                    <span className={`text-[10px] font-black uppercase tracking-[0.15em] ${currentSlide === idx ? 'text-black' : 'text-gray-400'}`}>
+                      {slide.title.split(' ')[0]}
+                    </span>
+                    {currentSlide === idx && <div className="ml-auto w-2 h-2 rounded-full" style={{ backgroundColor: gold }} />}
                   </button>
                 ))}
               </div>
 
-              <div className="mt-auto space-y-6 pt-10 border-t border-[#F1E9DB]">
-                 <div className="space-y-4">
-                    <div className="flex items-center gap-3 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">
-                       <ShieldCheck size={14} className="text-[#D4AF37]" /> Enterprise Verified
-                    </div>
-                    <div className="flex items-center gap-3 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">
-                       <Lock size={14} className="text-emerald-500" /> End-to-End Encrypted
-                    </div>
+              <div className="mt-10 pt-8 border-t border-gray-200 flex flex-col items-center">
+                 <div className="flex items-center gap-2 mb-2">
+                    <Globe size={14} className="text-gray-400" />
+                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Enterprise Edition 4.0</span>
                  </div>
-                 <p className="text-[9px] text-gray-400 font-medium leading-relaxed">
-                   Este guia detalha os aspectos fundamentais da arquitetura Agent-BI v2.5.
-                 </p>
               </div>
             </div>
 
-            {/* Content Display Area - More Spaced and Luxurious */}
-            <div className="flex-1 p-16 relative flex flex-col bg-[#FDFCF8]">
-               <div className="mb-14 animate-in fade-in slide-in-from-left-4 duration-700">
-                  <div className="text-[12px] font-black text-[#D4AF37] uppercase tracking-[0.5em] mb-4">{slides[currentSlide].subtitle}</div>
-                  <h2 className="text-5xl font-serif font-black text-gray-900 tracking-tight leading-tight uppercase">{slides[currentSlide].title}</h2>
-               </div>
+            {/* Content Area */}
+            <div className="flex-1 p-8 md:p-16 flex flex-col relative overflow-y-auto custom-scrollbar bg-[radial-gradient(circle_at_top_right,_rgba(212,175,55,0.05),_transparent)]">
+              <button 
+                onClick={onClose}
+                className="absolute top-10 right-10 p-5 text-gray-400 hover:text-black hover:bg-gray-100 rounded-full transition-all z-10"
+              >
+                <X size={28} />
+              </button>
 
-               <div className="flex-1 overflow-y-auto no-scrollbar pb-12">
-                  {slides[currentSlide].content}
-               </div>
+              <div className="flex-1 flex flex-col justify-center max-w-6xl mx-auto w-full">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={currentSlide}
+                    initial={{ y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: -20, opacity: 0 }}
+                    transition={{ duration: 0.4, ease: "easeOut" }}
+                    className="space-y-12"
+                  >
+                    {!slides[currentSlide].isIntro && (
+                       <div className="space-y-3">
+                          <div className="inline-flex items-center gap-3 px-4 py-1.5 bg-[#D4AF37]/10 border border-[#D4AF37]/20 rounded-full">
+                             <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: gold }} />
+                             <span className="text-[10px] font-black uppercase tracking-[0.4em]" style={{ color: gold }}>{slides[currentSlide].subtitle}</span>
+                          </div>
+                          <h2 className="text-4xl md:text-5xl font-black text-black tracking-tighter leading-tight">
+                             {slides[currentSlide].title}
+                          </h2>
+                       </div>
+                    )}
 
-               {/* Modern Sticky Controls at the bottom */}
-               <div className="pt-10 mt-auto border-t border-[#F1E9DB] flex items-center justify-between">
-                  <button
+                    <div className="w-full">
+                       {slides[currentSlide].content}
+                    </div>
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+
+              {/* Navigation Controls */}
+              <div className="mt-auto pt-12 flex items-center justify-between">
+                <div className="flex gap-4">
+                  {slides.map((_, i) => (
+                    <div 
+                      key={i} 
+                      className={`h-2 transition-all duration-700 rounded-full ${currentSlide === i ? 'w-16 shadow-[0_0_15px_rgba(212,175,55,0.5)]' : 'w-3 bg-gray-200'}`} 
+                      style={{ backgroundColor: currentSlide === i ? gold : undefined }}
+                    />
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-6">
+                  <button 
                     onClick={handlePrev}
                     disabled={currentSlide === 0}
-                    className="flex items-center gap-3 px-8 py-4 rounded-3xl text-[11px] font-black uppercase tracking-widest text-gray-400 hover:text-gray-900 disabled:opacity-0 transition-all group"
+                    className="p-6 bg-gray-50 text-gray-400 rounded-3xl hover:bg-gray-200 disabled:opacity-10 transition-all border border-gray-100"
                   >
-                    <ChevronLeft size={20} className="group-hover:-translate-x-1 transition-transform" /> Voltar
+                    <ChevronLeft size={24} />
                   </button>
-
-                  <div className="flex gap-3">
-                    {slides.map((_, i) => (
-                      <div 
-                        key={i} 
-                        className={`h-1.5 rounded-full transition-all duration-700 ${i === currentSlide ? "bg-[#D4AF37] w-12" : "bg-gray-200 w-3"}`}
-                      />
-                    ))}
-                  </div>
-
-                  {currentSlide < slides.length - 1 ? (
-                    <button
-                      onClick={handleNext}
-                      className="flex items-center gap-4 px-12 py-5 bg-gray-900 text-white rounded-[2rem] text-[11px] font-black uppercase tracking-widest hover:bg-[#D4AF37] hover:shadow-2xl hover:scale-105 transition-all group"
-                    >
-                      Explorar Mais <ChevronRight size={20} className="group-translate-x-1 transition-transform" />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={onClose}
-                      className="flex items-center gap-4 px-12 py-5 bg-[#D4AF37] text-white rounded-[2rem] text-[11px] font-black uppercase tracking-widest shadow-2xl hover:scale-110 transition-all"
-                    >
-                      Iniciar Dashboard <Sparkles size={20} />
-                    </button>
-                  )}
-               </div>
+                  <button 
+                    onClick={handleNext}
+                    disabled={currentSlide === slides.length - 1}
+                    className="flex items-center gap-6 px-16 py-6 bg-black text-white rounded-[2.5rem] hover:scale-[1.05] transition-all shadow-[0_30px_60px_rgba(0,0,0,0.2)] group border-b-4 border-[#D4AF37]"
+                  >
+                    <span className="text-[12px] font-black uppercase tracking-widest">Próximo</span>
+                    <ChevronRight size={22} style={{ color: gold }} className="group-hover:translate-x-1 transition-transform" />
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </motion.div>
-      </div>
+          </motion.div>
+        </div>
+      )}
     </AnimatePresence>
   );
 }

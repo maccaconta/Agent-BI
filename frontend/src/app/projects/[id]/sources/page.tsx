@@ -19,6 +19,7 @@ import {
   Zap,
   Globe,
   RefreshCw,
+  X,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
@@ -52,6 +53,8 @@ export default function SourcesPage() {
   const [subdomains, setSubdomains] = useState<any[]>([]);
   const [loadingMesh, setLoadingMesh] = useState(false);
   const [piiKeywords, setPiiKeywords] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
   useEffect(() => {
     if (isVisualizador) {
@@ -82,11 +85,43 @@ export default function SourcesPage() {
     };
     initMesh();
     
+    // Polling para datasets em processamento
+    const interval = setInterval(async () => {
+      const processingSources = sources.filter(s => s.status === "PROCESSING");
+      if (processingSources.length === 0) return;
+
+      for (const source of processingSources) {
+        try {
+          const res = await fetch(`/api/v1/datasets/${source.id}/`, {
+            headers: getBackendAuthHeaders(),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.status === "READY" || data.status === "ERROR" || data.governance_warning) {
+              const updatedSources = sources.map(s => 
+                s.id === source.id ? { 
+                  ...s, 
+                  status: data.status,
+                  rows: data.row_count || s.rows,
+                  governanceWarning: data.governance_warning,
+                  aiDescription: data.description,
+                } : s
+              );
+              saveSources(updatedSources);
+            }
+          }
+        } catch (err) {
+          console.error("Erro no polling do dataset:", err);
+        }
+      }
+    }, 3000);
+
     return () => {
+      clearInterval(interval);
       if (timerRef.current) clearInterval(timerRef.current);
       if (pollingRef.current) clearInterval(pollingRef.current);
     };
-  }, [projectId]);
+  }, [projectId, sources.length]); // Re-executa se a quantidade de fontes mudar
 
   async function fetchSecurityKeywords() {
     try {
@@ -179,8 +214,15 @@ export default function SourcesPage() {
       return;
     }
 
-    setUploading(true);
     const isCsv = file.name.toLowerCase().endsWith(".csv");
+    if (!isCsv) {
+      setError("Fase Protótipo: O motor semântico está otimizado exclusivamente para CSV. Outros formatos em breve.");
+      setTimeout(() => setError(null), 5000);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    setUploading(true);
 
     const reader = new FileReader();
     reader.onload = async (loadEvent) => {
@@ -398,22 +440,26 @@ export default function SourcesPage() {
             </AnimatePresence>
 
             <div
-              onClick={() => !uploading && fileInputRef.current?.click()}
-              className={`group relative border-2 border-dashed border-lux-border/30 dark:border-lux-border/50 rounded-[3rem] px-8 py-14 flex flex-col items-center justify-center bg-white/50 dark:bg-white/5 hover:bg-white/80 hover:border-lux-accent transition-all min-h-[320px] shadow-sm overflow-hidden ${uploading ? "cursor-wait" : "cursor-pointer"}`}
+              onClick={() => !uploading && sources.length === 0 && fileInputRef.current?.click()}
+              className={`group relative border-2 border-dashed border-lux-border/30 dark:border-lux-border/50 rounded-[3rem] px-8 py-14 flex flex-col items-center justify-center bg-white/50 dark:bg-white/5 hover:bg-white/80 hover:border-lux-accent transition-all min-h-[320px] shadow-sm overflow-hidden ${uploading || sources.length > 0 ? "cursor-not-allowed opacity-80" : "cursor-pointer"}`}
             >
               <div className="absolute inset-0 bg-gradient-to-br from-lux-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
 
-              <div className="w-20 h-20 rounded-full bg-lux-text dark:bg-lux-accent text-white dark:text-black flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-2xl">
+              <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform shadow-2xl ${sources.length > 0 ? 'bg-gray-100 text-gray-400' : 'bg-lux-text dark:bg-lux-accent text-white dark:text-black'}`}>
                 {uploading ? (
                   <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}>
                     <Zap size={32} />
                   </motion.div>
+                ) : sources.length > 0 ? (
+                  <Database size={32} />
                 ) : (
                   <UploadCloud size={32} />
                 )}
               </div>
 
-              <h2 className="text-2xl md:text-3xl font-serif font-black text-lux-text dark:text-lux-accent mb-2 text-center">Mapear Nova Fonte</h2>
+              <h2 className="text-2xl md:text-3xl font-serif font-black text-lux-text dark:text-lux-accent mb-2 text-center">
+                {sources.length > 0 ? "Fonte Única Ativa" : "Mapear Nova Fonte"}
+              </h2>
               
               <AnimatePresence>
                 {isAnalyzing && (
@@ -431,7 +477,9 @@ export default function SourcesPage() {
                 )}
               </AnimatePresence>
               <p className="text-lux-muted dark:text-lux-muted/80 text-center max-w-md mb-8 leading-relaxed text-md font-light italic">
-                Selecione arquivos CSV ou Excel para iniciar a análise estatística local em tempo real.
+                {sources.length > 0 
+                  ? "Fase Protótipo: Limite de um arquivo por relatório atingido. Remova o atual para subir uma nova versão."
+                  : "Selecione um arquivo CSV para iniciar a análise estatística local em tempo real."}
               </p>
 
               <input
@@ -439,7 +487,7 @@ export default function SourcesPage() {
                 ref={fileInputRef}
                 onChange={handleFileChange}
                 className="hidden"
-                accept=".csv,.xlsx,.xls"
+                accept=".csv"
               />
 
               <button className="bg-lux-text dark:bg-lux-accent text-white dark:text-black px-10 py-4 rounded-2xl font-black text-sm shadow-xl hover:scale-105 transition-all flex items-center gap-3">
@@ -518,6 +566,21 @@ export default function SourcesPage() {
                           )}
                           <span className="text-[10px] font-black text-lux-muted tracking-tighter">{formatBytes(source.size)}</span>
                         </div>
+
+                        {source.governanceWarning && (
+                          <motion.div 
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            className="mt-3 p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200/50 dark:border-amber-800/50 rounded-xl"
+                          >
+                            <div className="flex gap-2">
+                              <ShieldCheck size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                              <p className="text-[10px] text-amber-800 dark:text-amber-200 font-medium leading-relaxed">
+                                {source.governanceWarning}
+                              </p>
+                            </div>
+                          </motion.div>
+                        )}
                       </div>
                     </motion.div>
                   ))
@@ -537,6 +600,28 @@ export default function SourcesPage() {
         </div>
       </div>
 
+      {/* Notificação de Erro Premium */}
+      <AnimatePresence>
+        {error && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[500] bg-white border border-[#F1E9DB] p-6 rounded-[2rem] shadow-[0_30px_100px_rgba(0,0,0,0.15)] flex items-center gap-5 min-w-[400px]"
+          >
+            <div className="w-12 h-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center flex-shrink-0">
+               <Info size={24} />
+            </div>
+            <div className="flex-1">
+               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#8C8C8C] mb-1">Atenção ao Formato</p>
+               <p className="text-sm font-bold text-[#1A1A1A] leading-tight">{error}</p>
+            </div>
+            <button onClick={() => setError(null)} className="ml-4 p-2 hover:bg-black/5 rounded-full transition-all">
+               <X size={16} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

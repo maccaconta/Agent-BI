@@ -45,6 +45,8 @@ class LocalSQLiteAnalyticsStoreService:
         self._ensure_db_parent()
         connection = sqlite3.connect(self.db_path)
         try:
+            # Ativa modo WAL para suportar concorrência leitura/escrita
+            connection.execute("PRAGMA journal_mode=WAL")
             self._ensure_registry_table(connection)
             self._drop_table(connection, table_name)
             
@@ -97,6 +99,7 @@ class LocalSQLiteAnalyticsStoreService:
 
         connection = sqlite3.connect(self.db_path)
         try:
+            connection.execute("PRAGMA journal_mode=WAL")
             self._ensure_registry_table(connection)
             row = connection.execute(
                 'SELECT table_name FROM "__dataset_registry" WHERE dataset_id = ?',
@@ -125,6 +128,7 @@ class LocalSQLiteAnalyticsStoreService:
 
         connection = sqlite3.connect(self.db_path)
         try:
+            connection.execute("PRAGMA journal_mode=WAL")
             existing = {
                 row[0]
                 for row in connection.execute(
