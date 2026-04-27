@@ -175,7 +175,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                   className="w-full mt-2 flex items-center gap-3 p-4 rounded-2xl transition-all text-lux-muted hover:bg-[#FDF9F0] hover:text-[#D4AF37]"
                 >
                   <BookOpen size={18} />
-                  <span className="text-sm font-bold tracking-tight text-left">Ajuda de Arquitetura RAG</span>
+                  <span className="text-sm font-bold tracking-tight text-left">Sobre a Aplicação</span>
                 </button>
               </div>
 

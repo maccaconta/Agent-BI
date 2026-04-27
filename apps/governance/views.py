@@ -276,38 +276,62 @@ class CostGovernanceViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['post'])
     def invite_user(self, request):
-        """Convida um novo usuário (criação via convite) com senha temporária."""
+        """Convida um novo usuário com senha customizável (padrão: Admin@123)."""
         email = request.data.get("email")
         role = request.data.get("role", "Visualizador")
-        
+        # Aceita senha enviada pelo frontend ou usa padrão
+        custom_password = request.data.get("password", "Admin@123")
+
         if not email:
             return Response({"error": "E-mail é obrigatório"}, status=400)
-            
-        temp_password = "AgentBI@2024" # Senha padrão temporária
-        
+
+        # Mapeia label → código de role
+        role_map = {
+            "Administrador": "ADMIN", "Analista": "ANALYST",
+            "Criador": "ANALYST", "Visualizador": "VIEWER",
+            "ADMIN": "ADMIN", "ANALYST": "ANALYST",
+            "VIEWER": "VIEWER", "OWNER": "OWNER", "APPROVER": "APPROVER",
+        }
+        backend_role = role_map.get(role, "VIEWER")
+
+        # Criar ou recuperar usuário
         user, created = User.objects.get_or_create(
             email=email,
             defaults={
                 "username": email.split("@")[0],
-                "is_active": True
+                "is_active": True,
+                "full_name": email.split("@")[0].replace(".", " ").title(),
             }
         )
-        
+
         if created:
-            user.set_password(temp_password)
+            user.set_password(custom_password)
             user.save()
-        
+
         # Garantir Quota
         UsageQuota.objects.get_or_create(user=user)
-        
-        # Definir Role
-        self.update_user_role(request=request) # Reaproveita a lógica de role
-        
+
+        # Associar ao tenant e definir role via ORM (sem recursão bugada)
+        tenant = getattr(request, 'tenant', None) or getattr(user, 'primary_tenant', None)
+        if not tenant:
+            from apps.users.models import Tenant
+            tenant = Tenant.objects.first()
+
+        if tenant:
+            member, _ = TenantMember.objects.get_or_create(user=user, tenant=tenant)
+            member.role = backend_role
+            member.save()
+            if not user.primary_tenant:
+                user.primary_tenant = tenant
+                user.save(update_fields=["primary_tenant"])
+
         return Response({
             "status": "success",
-            "message": "Usuário convidado e configurado com sucesso.",
+            "message": "Usuário criado e configurado com sucesso.",
             "user_id": str(user.id),
-            "temp_password": temp_password if created else "Já possuía conta",
+            "email": user.email,
+            "role": backend_role,
+            "password": custom_password if created else "Usuário já existia — senha não alterada",
             "created": created
         })
 

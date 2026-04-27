@@ -18,26 +18,34 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
 
-    try {
-      const response = await fetch("/api/v1/auth/token/", {
+    const attemptLogin = async (): Promise<Response> => {
+      return fetch("/api/v1/auth/token/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
+    };
+
+    try {
+      let response = await attemptLogin();
+
+      // Retry automático: 401 às vezes é o worker do gunicorn ainda aquecendo
+      if (response.status === 401) {
+        await new Promise(r => setTimeout(r, 900));
+        response = await attemptLogin();
+      }
 
       let data;
       const contentType = response.headers.get("content-type");
       if (contentType && contentType.includes("application/json")) {
         data = await response.json();
       } else {
-        // Se não for JSON (ex: erro 500 retornando HTML), pegamos o texto puro ou damos erro padrão
         const text = await response.text();
         console.error("Erro não-JSON recebido:", text);
         throw new Error("Erro interno do servidor. Favor verificar os logs do sistema.");
       }
 
       if (!response.ok) {
-        // Lida com erros estruturados do DRF (detail) ou erros de campo
         const errorMessage = data.detail || (data.non_field_errors && data.non_field_errors[0]) || "Falha na autenticação. Verifique suas credenciais.";
         throw new Error(errorMessage);
       }
